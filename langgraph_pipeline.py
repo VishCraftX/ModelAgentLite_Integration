@@ -63,6 +63,11 @@ class MultiAgentMLPipeline:
         # User session management
         self.user_sessions = {}  # Store per-user-thread sessions
         
+        # Store references to global toolbox components
+        self.slack_manager = slack_manager
+        self.progress_tracker = progress_tracker
+        self.user_directory_manager = user_directory_manager
+        
         print("🚀 Multi-Agent ML Pipeline initialized")
         print(f"   LangGraph: {'✅ Full Pipeline' if LANGGRAPH_AVAILABLE else '⚠️ Simplified Pipeline'}")
         print(f"   Persistence: ✅ User Directory + Session State")
