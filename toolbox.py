@@ -61,6 +61,12 @@ class SlackManager:
         self.session_threads = {}  # Maps session_id to thread_ts
         self.session_channels = {}  # Maps session_id to channel_id
     
+    def register_session(self, session_id: str, channel: str, thread_ts: str = None):
+        """Register a new session with channel and thread information"""
+        self.session_channels[session_id] = channel
+        if thread_ts:
+            self.session_threads[session_id] = thread_ts
+    
     def send_message(self, session_id: str, text: str, channel: str = None, thread_ts: str = None):
         """Send message to specific session"""
         if not self.client:
@@ -73,6 +79,18 @@ class SlackManager:
                 channel = self.session_channels.get(session_id)
             if not thread_ts:
                 thread_ts = self.session_threads.get(session_id)
+            
+            # If still no channel, extract from session_id (format: user_threadts)
+            if not channel and "_" in session_id:
+                # This is a fallback - ideally channel should be set properly
+                print(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
+                print(f"[Slack:{session_id}] {text}")
+                return
+            
+            if not channel:
+                print(f"❌ No channel available for session {session_id}")
+                print(f"[Slack:{session_id}] {text}")
+                return
             
             response = self.client.chat_postMessage(
                 channel=channel,
@@ -269,6 +287,79 @@ class ProgressTracker:
         timestamp = datetime.now().strftime("%H:%M:%S")
         agent_info = f" [{state.current_agent}]" if state.current_agent else ""
         print(f"[{timestamp}]{agent_info} {message}")
+
+
+class UserDirectoryManager:
+    """Manages user directory structure like in ModelBuildingAgent"""
+    
+    def __init__(self, base_data_dir: str = "user_data"):
+        self.base_data_dir = base_data_dir
+        self._ensure_base_directory()
+    
+    def _ensure_base_directory(self):
+        """Ensure base user data directory exists"""
+        if not os.path.exists(self.base_data_dir):
+            os.makedirs(self.base_data_dir)
+            print(f"📁 Created base directory: {self.base_data_dir}")
+    
+    def _get_thread_id(self, user_id: str) -> tuple[str, str]:
+        """Extract user and thread from user_id format: user_threadts"""
+        if "_" in user_id:
+            parts = user_id.split("_", 1)  # Split only on first underscore
+            return parts[0], parts[1]  # user, thread_ts
+        return user_id, "main"  # fallback to main thread
+    
+    def _get_user_thread_dir(self, user_id: str) -> str:
+        """Get directory path for specific user thread"""
+        user, thread_ts = self._get_thread_id(user_id)
+        return os.path.join(self.base_data_dir, user, thread_ts)
+    
+    def ensure_user_directory(self, user_id: str) -> str:
+        """Ensure user thread directory exists and return path"""
+        user_dir = self._get_user_thread_dir(user_id)
+        if not os.path.exists(user_dir):
+            os.makedirs(user_dir)
+            print(f"📁 Created user directory: {user_dir}")
+        return user_dir
+    
+    def get_artifacts_dir(self, user_id: str) -> str:
+        """Get artifacts directory for user"""
+        user_dir = self.ensure_user_directory(user_id)
+        artifacts_dir = os.path.join(user_dir, "artifacts")
+        if not os.path.exists(artifacts_dir):
+            os.makedirs(artifacts_dir)
+        return artifacts_dir
+    
+    def get_data_dir(self, user_id: str) -> str:
+        """Get data directory for user"""
+        user_dir = self.ensure_user_directory(user_id)
+        data_dir = os.path.join(user_dir, "data")
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        return data_dir
+    
+    def get_models_dir(self, user_id: str) -> str:
+        """Get models directory for user"""
+        user_dir = self.ensure_user_directory(user_id)
+        models_dir = os.path.join(user_dir, "models")
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+        return models_dir
+    
+    def cleanup_user_session(self, user_id: str, keep_artifacts: bool = True):
+        """Clean up user session data"""
+        user_dir = self._get_user_thread_dir(user_id)
+        if os.path.exists(user_dir):
+            if keep_artifacts:
+                # Only clean temp files, keep artifacts and models
+                temp_files = [f for f in os.listdir(user_dir) if f.startswith('temp_')]
+                for temp_file in temp_files:
+                    os.remove(os.path.join(user_dir, temp_file))
+            else:
+                # Remove entire user directory
+                import shutil
+                shutil.rmtree(user_dir)
+                print(f"🗑️ Cleaned up user directory: {user_dir}")
 
 
 class ExecutionAgent:
@@ -474,11 +565,12 @@ slack_manager = SlackManager()
 artifact_manager = ArtifactManager()
 progress_tracker = ProgressTracker(slack_manager)
 execution_agent = ExecutionAgent()
+user_directory_manager = UserDirectoryManager()
 
 
-def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None):
+def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None):
     """Initialize global toolbox with custom configuration"""
-    global slack_manager, artifact_manager, progress_tracker, execution_agent
+    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager
     
     if slack_token:
         slack_manager = SlackManager(slack_token)
@@ -487,7 +579,11 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None):
     if artifacts_dir:
         artifact_manager = ArtifactManager(artifacts_dir)
     
+    if user_data_dir:
+        user_directory_manager = UserDirectoryManager(user_data_dir)
+    
     print("🧰 Global toolbox initialized")
     print(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
     print(f"   Artifacts: {artifact_manager.base_dir}")
+    print(f"   User Data: {user_directory_manager.base_data_dir}")
     print(f"   Execution: ✅ Ready with fallback support")

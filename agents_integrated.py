@@ -14,7 +14,7 @@ import tempfile
 import json
 
 from pipeline_state import PipelineState
-from toolbox import progress_tracker, artifact_manager
+from toolbox import progress_tracker, artifact_manager, user_directory_manager
 
 # Import actual agent implementations
 try:
@@ -23,11 +23,26 @@ try:
         PreprocessingPhase,
         get_llm_from_state,
         analyze_column_comprehensive,
-        handle_missing_values_comprehensive,
-        detect_and_handle_outliers_comprehensive,
-        encode_categorical_comprehensive,
-        apply_transformations_comprehensive,
-        apply_scaling_comprehensive
+        analyze_missing_values_with_llm,
+        apply_missing_values_treatment,
+        analyze_outliers_with_llm,
+        apply_outliers_treatment,
+        analyze_encoding_with_llm,
+        apply_encoding_treatment,
+        analyze_transformations_with_llm,
+        apply_transformations_treatment,
+        detect_and_handle_extreme_outliers,
+        get_current_data_state,
+        initialize_dataset_analysis,
+        run_sequential_agent,
+        create_sequential_preprocessing_agent,
+        export_cleaned_dataset,
+        process_user_input_with_llm,
+        classify_user_intent_with_llm,
+        generate_overview_summary,
+        get_available_actions,
+        get_next_phase,
+        apply_preprocessing_pipeline
     )
     PREPROCESSING_AVAILABLE = True
 except ImportError as e:
@@ -39,6 +54,9 @@ try:
         UserSession as FeatureSelectionSession,
         AnalysisStep,
         LLMManager,
+        DataProcessor,
+        AnalysisEngine,
+        MenuGenerator,
         AgenticFeatureSelectionBot as FeatureSelectionBot
     )
     FEATURE_SELECTION_AVAILABLE = True
@@ -83,6 +101,9 @@ class IntegratedPreprocessingAgent(BaseAgent):
     def __init__(self):
         super().__init__("PreprocessingAgent")
         self.preprocessing_available = PREPROCESSING_AVAILABLE
+        self.langgraph_workflow = None
+        if PREPROCESSING_AVAILABLE:
+            self.langgraph_workflow = create_sequential_preprocessing_agent()
     
     def run(self, state: PipelineState) -> PipelineState:
         """Execute preprocessing using actual implementation"""
@@ -196,6 +217,9 @@ class IntegratedPreprocessingAgent(BaseAgent):
             self._update_progress(pipeline_state, "Analyzing dataset structure", "Analysis")
             preprocessing_state.current_phase = PreprocessingPhase.OVERVIEW
             
+            # Initialize dataset analysis
+            preprocessing_state = initialize_dataset_analysis(preprocessing_state)
+            
             # Analyze all columns
             for col in df.columns:
                 if col != preprocessing_state.target_column:
@@ -208,42 +232,51 @@ class IntegratedPreprocessingAgent(BaseAgent):
             self._update_progress(pipeline_state, "Handling missing values", "Missing Values")
             preprocessing_state.current_phase = PreprocessingPhase.MISSING_VALUES
             
-            df = handle_missing_values_comprehensive(df, preprocessing_state)
-            preprocessing_state.df = df
+            missing_results = analyze_missing_values_with_llm(preprocessing_state)
+            if missing_results and 'llm_recommendations' in missing_results:
+                df = apply_missing_values_treatment(df, missing_results['llm_recommendations'])
+                preprocessing_state.df = df
+                preprocessing_state.phase_results['missing_values'] = missing_results
+            
             preprocessing_state.completed_phases.append(PreprocessingPhase.MISSING_VALUES)
             
             # Phase 3: Handle Outliers
             self._update_progress(pipeline_state, "Detecting and handling outliers", "Outliers")
             preprocessing_state.current_phase = PreprocessingPhase.OUTLIERS
             
-            df = detect_and_handle_outliers_comprehensive(df, preprocessing_state)
-            preprocessing_state.df = df
+            outlier_results = analyze_outliers_with_llm(preprocessing_state)
+            if outlier_results and 'llm_recommendations' in outlier_results:
+                df = apply_outliers_treatment(df, outlier_results['llm_recommendations'])
+                preprocessing_state.df = df
+                preprocessing_state.phase_results['outliers'] = outlier_results
+            
             preprocessing_state.completed_phases.append(PreprocessingPhase.OUTLIERS)
             
             # Phase 4: Encode Categorical Variables
             self._update_progress(pipeline_state, "Encoding categorical variables", "Encoding")
             preprocessing_state.current_phase = PreprocessingPhase.ENCODING
             
-            df = encode_categorical_comprehensive(df, preprocessing_state)
-            preprocessing_state.df = df
+            encoding_results = analyze_encoding_with_llm(preprocessing_state)
+            if encoding_results and 'llm_recommendations' in encoding_results:
+                df = apply_encoding_treatment(df, encoding_results['llm_recommendations'])
+                preprocessing_state.df = df
+                preprocessing_state.phase_results['encoding'] = encoding_results
+            
             preprocessing_state.completed_phases.append(PreprocessingPhase.ENCODING)
             
             # Phase 5: Apply Transformations
             self._update_progress(pipeline_state, "Applying transformations", "Transformations")
             preprocessing_state.current_phase = PreprocessingPhase.TRANSFORMATIONS
             
-            df = apply_transformations_comprehensive(df, preprocessing_state)
-            preprocessing_state.df = df
+            transformation_results = analyze_transformations_with_llm(preprocessing_state)
+            if transformation_results and 'llm_recommendations' in transformation_results:
+                df = apply_transformations_treatment(df, transformation_results['llm_recommendations'])
+                preprocessing_state.df = df
+                preprocessing_state.phase_results['transformations'] = transformation_results
+            
             preprocessing_state.completed_phases.append(PreprocessingPhase.TRANSFORMATIONS)
             
-            # Phase 6: Apply Scaling
-            self._update_progress(pipeline_state, "Applying scaling", "Scaling")
-            preprocessing_state.current_phase = PreprocessingPhase.SCALING
-            
-            df = apply_scaling_comprehensive(df, preprocessing_state)
-            preprocessing_state.df = df
-            preprocessing_state.completed_phases.append(PreprocessingPhase.SCALING)
-            
+            # Final phase completion
             preprocessing_state.current_phase = PreprocessingPhase.COMPLETION
             
             return df
@@ -251,6 +284,72 @@ class IntegratedPreprocessingAgent(BaseAgent):
         except Exception as e:
             print(f"[{self.agent_name}] Comprehensive preprocessing failed: {e}")
             return self._run_basic_preprocessing(pipeline_state)
+    
+    def run_interactive_workflow(self, state: PipelineState, user_input: str = None) -> PipelineState:
+        """Run the interactive LangGraph preprocessing workflow"""
+        if not PREPROCESSING_AVAILABLE or not self.langgraph_workflow:
+            return self._run_basic_preprocessing_fallback(state)
+        
+        try:
+            # Create preprocessing state from pipeline state
+            preprocessing_state = self._create_preprocessing_state(state)
+            
+            # If user input provided, process it
+            if user_input:
+                preprocessing_state = process_user_input_with_llm(preprocessing_state, user_input)
+            
+            # Run the LangGraph workflow
+            result = self.langgraph_workflow.invoke(preprocessing_state)
+            
+            # Update pipeline state with results
+            if hasattr(result, 'df') and result.df is not None:
+                state.processed_data = result.df
+                state.preprocessing_state = {
+                    "completed": True,
+                    "timestamp": datetime.now().isoformat(),
+                    "original_shape": state.raw_data.shape if state.raw_data is not None else None,
+                    "processed_shape": result.df.shape,
+                    "method": "interactive_langgraph",
+                    "phases_completed": result.completed_phases,
+                    "phase_results": result.phase_results
+                }
+            
+            # Store any response for user
+            if hasattr(result, 'query_response') and result.query_response:
+                state.last_response = result.query_response
+            
+            return state
+            
+        except Exception as e:
+            print(f"[{self.agent_name}] Interactive workflow failed: {e}")
+            return self._run_basic_preprocessing_fallback(state)
+    
+    def _run_basic_preprocessing_fallback(self, state: PipelineState) -> PipelineState:
+        """Fallback to basic preprocessing"""
+        processed_data = self._run_basic_preprocessing(state)
+        state.processed_data = processed_data
+        return state
+    
+    def export_dataset(self, state: PipelineState, output_path: str = None) -> str:
+        """Export cleaned dataset using preprocessing agent functionality"""
+        if not PREPROCESSING_AVAILABLE:
+            # Fallback export
+            if state.processed_data is not None:
+                if output_path is None:
+                    output_path = f"cleaned_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                state.processed_data.to_csv(output_path, index=False)
+                return output_path
+            return None
+        
+        try:
+            # Create preprocessing state
+            preprocessing_state = self._create_preprocessing_state(state)
+            if hasattr(preprocessing_state, 'df') and preprocessing_state.df is not None:
+                return export_cleaned_dataset(preprocessing_state, output_path)
+            return None
+        except Exception as e:
+            print(f"[{self.agent_name}] Export failed: {e}")
+            return None
     
     def _run_basic_preprocessing(self, state: PipelineState) -> pd.DataFrame:
         """Fallback basic preprocessing"""
@@ -296,11 +395,21 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
         super().__init__("FeatureSelectionAgent")
         self.feature_selection_available = FEATURE_SELECTION_AVAILABLE
         self.bot = None
+        self.llm_manager = None
+        self.data_processor = None
+        self.analysis_engine = None
+        self.menu_generator = None
+        
         if FEATURE_SELECTION_AVAILABLE:
             try:
-                self.bot = FeatureSelectionBot()
+                # Initialize core components (adapted for unified pipeline)
+                self.llm_manager = LLMManager()
+                self.data_processor = DataProcessor()
+                self.analysis_engine = AnalysisEngine()
+                self.menu_generator = MenuGenerator()
+                # Note: Not initializing full bot as per your instruction
             except Exception as e:
-                print(f"[{self.agent_name}] Failed to initialize FeatureSelectionBot: {e}")
+                print(f"[{self.agent_name}] Failed to initialize components: {e}")
                 self.feature_selection_available = False
     
     def run(self, state: PipelineState) -> PipelineState:
@@ -353,7 +462,7 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
         return state
     
     def _run_comprehensive_feature_selection(self, state: PipelineState) -> List[str]:
-        """Run comprehensive feature selection using actual implementation"""
+        """Run comprehensive feature selection using actual implementation with all components"""
         try:
             # Create feature selection session
             temp_file = os.path.join(tempfile.gettempdir(), f"temp_data_{state.session_id}.csv")
@@ -368,6 +477,12 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
                 current_features=list(state.cleaned_data.columns)
             )
             
+            # Use DataProcessor to enhance data processing
+            if self.data_processor:
+                self._update_progress(state, "Processing data with DataProcessor", "Data Processing")
+                processed_df = self.data_processor.process_dataframe(session.current_df)
+                session.current_df = processed_df
+            
             # Determine target column
             target_candidates = ['target', 'label', 'y', 'class', 'outcome', 'default']
             target_column = None
@@ -380,21 +495,50 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
                 session.target_column = target_column
                 session.phase = "analyzing"
             
-            # Run IV analysis if target is available
+            # Run comprehensive analysis if target is available
             if target_column:
-                self._update_progress(state, "Running IV analysis", "IV Analysis")
-                iv_result = self.bot.run_iv_analysis(session)
+                # Use AnalysisEngine for sophisticated feature analysis
+                if self.analysis_engine:
+                    self._update_progress(state, "Running AnalysisEngine feature analysis", "Advanced Analysis")
+                    try:
+                        analysis_results = self.analysis_engine.analyze_features(session)
+                        session.analysis_results = analysis_results
+                        
+                        # Use LLMManager for intelligent recommendations
+                        if self.llm_manager:
+                            self._update_progress(state, "Generating LLM-based recommendations", "AI Recommendations")
+                            recommendations = self.llm_manager.get_feature_recommendations(session)
+                            session.recommendations = recommendations
+                            
+                            # Apply recommendations to select features
+                            selected_features = []
+                            for feature, recommendation in recommendations.items():
+                                if recommendation.get('include', True) and feature != target_column:
+                                    selected_features.append(feature)
+                            
+                            if selected_features:
+                                return selected_features
+                    except Exception as e:
+                        print(f"[{self.agent_name}] AnalysisEngine failed: {e}")
                 
-                if iv_result and "iv_scores" in iv_result:
-                    # Select features with IV > 0.02 (common threshold)
-                    iv_threshold = 0.02
-                    selected_features = []
-                    for feature, iv_score in iv_result["iv_scores"].items():
-                        if iv_score > iv_threshold and feature != target_column:
-                            selected_features.append(feature)
-                    
-                    if selected_features:
-                        return selected_features
+                # Fallback: Run IV analysis using bot if available
+                if hasattr(self, 'bot') and self.bot:
+                    self._update_progress(state, "Running IV analysis", "IV Analysis")
+                    try:
+                        iv_result = self.bot.run_iv_analysis(session)
+                        
+                        if iv_result and "iv_scores" in iv_result:
+                            # Select features with IV > 0.02 (common threshold)
+                            iv_threshold = 0.02
+                            selected_features = []
+                            for feature, iv_score in iv_result["iv_scores"].items():
+                                if iv_score > iv_threshold and feature != target_column:
+                                    selected_features.append(feature)
+                            
+                            if selected_features:
+                                return selected_features
+                    except Exception as e:
+                        print(f"[{self.agent_name}] IV analysis failed: {e}")
             
             # Fallback to correlation analysis
             self._update_progress(state, "Running correlation analysis", "Correlation Analysis")
