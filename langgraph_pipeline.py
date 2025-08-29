@@ -11,15 +11,27 @@ from datetime import datetime
 
 try:
     from langgraph.graph import StateGraph, END
-    from langgraph.checkpoint.sqlite import SqliteSaver
-    import sqlite3
     LANGGRAPH_AVAILABLE = True
-except ImportError:
+    
+    # Try to import SqliteSaver separately (optional for persistence)
+    try:
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        import sqlite3
+        SQLITE_AVAILABLE = True
+    except ImportError:
+        SqliteSaver = None
+        sqlite3 = None
+        SQLITE_AVAILABLE = False
+        print("⚠️ SQLite checkpointer not available, persistence will be limited")
+        
+except ImportError as e:
+    print(f"⚠️ LangGraph import failed: {e}")
     StateGraph = None
     END = "END"
     SqliteSaver = None
     sqlite3 = None
     LANGGRAPH_AVAILABLE = False
+    SQLITE_AVAILABLE = False
 
 from pipeline_state import PipelineState, state_manager
 from orchestrator import orchestrator, AgentType
@@ -38,6 +50,9 @@ class MultiAgentMLPipeline:
                  user_data_dir: str = None,
                  enable_persistence: bool = True):
         
+        # Always initialize toolbox (needed for both LangGraph and simplified pipeline)
+        initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
+        
         if not LANGGRAPH_AVAILABLE:
             print("⚠️ LangGraph not available, using simplified pipeline")
             self.app = None
@@ -45,14 +60,14 @@ class MultiAgentMLPipeline:
             self.checkpointer = None
             self.enable_persistence = False
         else:
-            # Initialize toolbox with user directory support
-            initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
             
             # Set up persistence
-            self.enable_persistence = enable_persistence
+            self.enable_persistence = enable_persistence and SQLITE_AVAILABLE
             self.checkpointer = None
-            if enable_persistence:
+            if self.enable_persistence:
                 self._setup_persistence()
+            elif enable_persistence and not SQLITE_AVAILABLE:
+                print("⚠️ Persistence requested but SQLite not available, using memory-only mode")
             
             # Build the graph
             self.graph = self._build_graph()
@@ -68,6 +83,12 @@ class MultiAgentMLPipeline:
     
     def _setup_persistence(self):
         """Set up SQLite-based persistence for LangGraph"""
+        if not SQLITE_AVAILABLE:
+            print("⚠️ SQLite not available, cannot set up persistence")
+            self.enable_persistence = False
+            self.checkpointer = None
+            return
+            
         try:
             # Create a persistent database file
             db_path = os.path.join(tempfile.gettempdir(), "mal_integration_checkpoints.db")
@@ -78,11 +99,11 @@ class MultiAgentMLPipeline:
             
             # Create checkpointer
             self.checkpointer = SqliteSaver.from_conn_string(f"sqlite:///{db_path}")
-            print(f"📁 Persistence enabled: {db_path}")
+            print(f"📁 LangGraph persistence enabled: {db_path}")
             
         except Exception as e:
-            print(f"⚠️ Failed to set up persistence: {e}")
-            print("   Continuing without persistence...")
+            print(f"⚠️ Failed to set up LangGraph persistence: {e}")
+            print("   Continuing without LangGraph persistence...")
             self.enable_persistence = False
             self.checkpointer = None
     
@@ -400,8 +421,14 @@ class MultiAgentMLPipeline:
             import time
             session_id = f"session_{int(time.time())}"
         
+        # Ensure user directory exists
+        user_dir = self._get_user_session_dir(session_id)
+        print(f"📁 User session directory: {user_dir}")
+        
         # Load conversation history
         conversation_history = self._load_conversation_history(session_id)
+        if conversation_history:
+            print(f"📚 Loaded {len(conversation_history)} previous conversations")
         
         # Load or create state
         state = state_manager.load_state(session_id)

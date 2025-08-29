@@ -103,7 +103,15 @@ class IntegratedPreprocessingAgent(BaseAgent):
         self.preprocessing_available = PREPROCESSING_AVAILABLE
         self.langgraph_workflow = None
         if PREPROCESSING_AVAILABLE:
-            self.langgraph_workflow = create_sequential_preprocessing_agent()
+            try:
+                self.langgraph_workflow = create_sequential_preprocessing_agent()
+                if self.langgraph_workflow:
+                    print(f"✅ {self.agent_name} LangGraph workflow initialized")
+                else:
+                    print(f"⚠️ {self.agent_name} LangGraph workflow not available")
+            except Exception as e:
+                print(f"⚠️ {self.agent_name} LangGraph workflow failed to initialize: {e}")
+                self.langgraph_workflow = None
     
     def run(self, state: PipelineState) -> PipelineState:
         """Execute preprocessing using actual implementation"""
