@@ -209,7 +209,13 @@ class MultiAgentMLPipeline:
             else:
                 state.last_response = "✅ Code executed successfully! Check the results above."
             
-            return result
+            return state
+            
+        except Exception as e:
+            print(f"❌ Code execution error: {e}")
+            state.last_error = str(e)
+            state.last_response = f"❌ Code execution failed: {str(e)}"
+            return state
     
     def _get_user_session_dir(self, session_id: str) -> str:
         """Get user session directory for conversation history"""
