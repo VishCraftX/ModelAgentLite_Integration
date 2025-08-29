@@ -90,6 +90,7 @@ class MultiAgentMLPipeline:
         graph.add_node("preprocessing", self._preprocessing_node)
         graph.add_node("feature_selection", self._feature_selection_node)
         graph.add_node("model_building", self._model_building_node)
+        graph.add_node("code_execution", self._code_execution_node)
         
         # Add edges from orchestrator to agents
         graph.add_conditional_edges(
@@ -99,6 +100,7 @@ class MultiAgentMLPipeline:
                 AgentType.PREPROCESSING.value: "preprocessing",
                 AgentType.FEATURE_SELECTION.value: "feature_selection",
                 AgentType.MODEL_BUILDING.value: "model_building",
+                "code_execution": "code_execution",
                 AgentType.END.value: END
             }
         )
@@ -136,6 +138,9 @@ class MultiAgentMLPipeline:
                 END: END
             }
         )
+        
+        # Code execution always ends after completion
+        graph.add_edge("code_execution", END)
         
         # Set entry point
         graph.set_entry_point("orchestrator")
@@ -178,6 +183,49 @@ class MultiAgentMLPipeline:
         """Model building node"""
         print(f"\n🤖 [Model Building] Starting model building")
         return model_building_agent.run(state)
+    
+    def _code_execution_node(self, state: PipelineState) -> PipelineState:
+        """Code execution node - handles general code execution requests"""
+        print(f"\n💻 [Code Execution] Processing code execution request")
+        
+        # Use the ExecutionAgent from toolbox for code execution
+        try:
+            # Generate code using LLM (similar to ModelBuildingAgent approach)
+            from toolbox import execution_agent
+            
+            # For now, we'll use a simple approach - the user query is treated as code
+            # In a more sophisticated implementation, we'd use LLM to generate code
+            user_code = state.user_query
+            
+            # If the query doesn't look like code, generate a response
+            if not any(keyword in user_code.lower() for keyword in ['print', 'plot', 'calculate', 'import', '=', 'def']):
+                # This looks like a request for code generation, not direct code
+                state.last_response = f"I can help you execute code! Please provide Python code or be more specific about what you'd like me to calculate or analyze. For example:\n- 'print(sample_data.describe())'\n- 'plot correlation matrix'\n- 'calculate mean of numeric columns'"
+                return state
+            
+            # Execute the code
+            context = {
+                "raw_data": state.raw_data,
+                "cleaned_data": state.cleaned_data,
+                "selected_features": state.selected_features,
+                "trained_model": state.trained_model
+            }
+            
+            result_state = execution_agent.run_code(state, user_code, context)
+            
+            # Update response
+            if result_state.last_error:
+                state.last_response = f"❌ Code execution failed: {result_state.last_error}"
+            else:
+                state.last_response = "✅ Code executed successfully! Check the results above."
+            
+            return result_state
+            
+        except Exception as e:
+            print(f"❌ Code execution error: {e}")
+            state.last_error = str(e)
+            state.last_response = f"❌ Code execution failed: {str(e)}"
+            return state
     
     def _route_to_agent(self, state: PipelineState) -> str:
         """Conditional edge function for routing from orchestrator"""

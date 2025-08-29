@@ -240,9 +240,18 @@ class ProgressTracker:
     
     def __init__(self, slack_manager: SlackManager = None):
         self.slack_manager = slack_manager
+        self._last_message = None  # Simple debounce mechanism
     
     def update(self, state: PipelineState, message: str, stage: str = None, send_to_slack: bool = True):
         """Update progress in state and optionally send to Slack"""
+        # Create full message for deduplication
+        full_message = f"{stage}: {message}" if stage else message
+        
+        # Skip if this is the same message as last time (simple debounce)
+        if full_message == self._last_message:
+            return
+        self._last_message = full_message
+        
         # Update state
         if stage:
             state.update_progress(f"{stage}: {message}", state.current_agent)

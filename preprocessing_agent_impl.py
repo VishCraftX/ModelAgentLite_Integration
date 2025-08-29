@@ -1821,13 +1821,22 @@ def get_next_phase(current_phase: str) -> str:
 
 # Part 6: LangGraph Agent Implementation
 
-from langgraph.graph import StateGraph
-from langgraph.graph.graph import CompiledGraph
+try:
+    from langgraph.graph import StateGraph, END
+    LANGGRAPH_AVAILABLE = True
+except ImportError:
+    StateGraph = None
+    END = None
+    LANGGRAPH_AVAILABLE = False
 
-def create_sequential_preprocessing_agent() -> CompiledGraph:
+def create_sequential_preprocessing_agent():
     """
     Create the LangGraph agent for sequential preprocessing
+    Returns compiled StateGraph if available, None otherwise
     """
+    if not LANGGRAPH_AVAILABLE:
+        print("⚠️ LangGraph not available, cannot create preprocessing agent")
+        return None
     
     def overview_node(state: SequentialState) -> SequentialState:
         """Generate overview and wait for user input"""

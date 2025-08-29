@@ -39,7 +39,7 @@ try:
         UserSession as FeatureSelectionSession,
         AnalysisStep,
         LLMManager,
-        FeatureSelectionBot
+        AgenticFeatureSelectionBot as FeatureSelectionBot
     )
     FEATURE_SELECTION_AVAILABLE = True
 except ImportError as e:
@@ -96,7 +96,7 @@ class IntegratedPreprocessingAgent(BaseAgent):
                     state.preprocessing_state = {
                         "completed": True,
                         "timestamp": datetime.now().isoformat(),
-                        "original_shape": state.raw_data.shape,
+                        "original_shape": state.raw_data.shape if state.raw_data is not None else None,
                         "cleaned_shape": cleaned_data.shape,
                         "method": "basic"
                     }
@@ -127,7 +127,7 @@ class IntegratedPreprocessingAgent(BaseAgent):
             state.preprocessing_state = {
                 "completed": True,
                 "timestamp": datetime.now().isoformat(),
-                "original_shape": state.raw_data.shape,
+                "original_shape": state.raw_data.shape if state.raw_data is not None else None,
                 "cleaned_shape": cleaned_data.shape if cleaned_data is not None else None,
                 "phases_completed": preprocessing_state.completed_phases if hasattr(preprocessing_state, 'completed_phases') else []
             }

@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import tool
 
 # Import utilities
-from agent.utils import extract_first_code_block, safe_joblib_dump, safe_plt_savefig, diagnose_io_error
+from model_agent_utils import extract_first_code_block, safe_joblib_dump, safe_plt_savefig, diagnose_io_error
 
 # Global model states registry
 global_model_states = {}

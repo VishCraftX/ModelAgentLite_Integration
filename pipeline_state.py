@@ -34,6 +34,7 @@ class PipelineState(BaseModel):
     user_query: Optional[str] = None
     last_code: Optional[str] = None
     last_error: Optional[str] = None
+    last_response: Optional[str] = None
     
     # Agent-specific state extensions
     preprocessing_state: Optional[Dict] = Field(default_factory=dict)

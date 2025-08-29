@@ -452,7 +452,10 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             return "code_execution"
         
         elif intent == "general_query":
-            return "general_response"
+            # Handle general queries directly and end
+            response = self.generate_general_response(state.user_query, state)
+            state.last_response = response
+            return AgentType.END.value
         
         else:
             # Fallback to data-driven routing
