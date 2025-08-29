@@ -768,12 +768,10 @@ def prompt_understanding_agent(state: AgentState) -> AgentState:
     
     context_info = f"CONVERSATION CONTEXT: {context}" if context else "CONVERSATION CONTEXT: None"
     
-    classification_prompt = f"""You are an intent classifier for a machine learning agent. Your job is to classify user queries into exactly one of these categories:
+    classification_prompt = f"""You are an intent classifier for a machine learning model building agent. Your job is to classify user queries into exactly one of these categories:
 
 1. "new_model" - User wants to build/create/train a NEW model from scratch
 2. "use_existing" - User wants to use/modify/visualize an EXISTING model that was previously built
-3. "general_query" - General questions, data exploration, or unclear intent
-4. "code_execution" - General Python code that needs to be executed (data analysis, calculations, plotting, etc.)
 
 {context_info}
 
@@ -787,36 +785,27 @@ PRIORITY CLASSIFICATION RULES (check in this order):
 HIGHEST PRIORITY - "use_existing" if query contains:
 - "use this model", "use the model", "with this model", "for this model" (explicit model reference)
 - "use this tree", "use the tree", "with this tree", "for this tree" (tree model reference)
-
-SECOND PRIORITY - "new_model" if:
-- Context shows recent data upload/mention AND current query says "use this"
-- Query contains "build [model_type]", "create [model_type]", "train [model_type]" where model_type is: model, classifier, regressor, tree, forest, lgbm, xgboost
-- "use this data", "use this file", "with this data"
-
-MEDIUM PRIORITY - "use_existing" if query contains:
 - "existing model", "current model", "built model", "trained model"
 - "show plot", "visualize tree", "display tree" (when model exists)
 - "build segments", "build deciles", "build buckets", "build rankings" (these use existing models)
 - "rank ordering", "score", "predict", "classify" with existing model context
 
-LOW PRIORITY - "code_execution" if query contains:
-- "calculate", "compute", "analyze", "plot", "graph", "chart", "visualize" (but NOT model-related)
-- "show me", "create plot", "data analysis", "statistics", "correlation", "distribution"
-- "write code", "python code", "code to", "script to"
-- Any request that involves data manipulation, calculations, or non-model visualizations
-
-LOWEST PRIORITY - "general_query" for conversational questions without code execution
+DEFAULT PRIORITY - "new_model" for all other model-related queries:
+- Context shows recent data upload/mention AND current query says "use this"
+- Query contains "build [model_type]", "create [model_type]", "train [model_type]" where model_type is: model, classifier, regressor, tree, forest, lgbm, xgboost
+- "use this data", "use this file", "with this data"
+- Any other model building, training, or creation requests
 
 EXAMPLES:
 - Context: "uploaded data" + Query: "use this" → new_model (use this data to build model)
 - Context: "built lgbm model" + Query: "use this model for segments" → use_existing
 - "build lgbm model" → new_model (creating new model)
 - "show plot for the model" → use_existing (visualizing existing model)
-- "calculate correlation between features" → code_execution (data analysis code needed)
+- "train random forest" → new_model (creating new model)
 
 USER QUERY: "{query}"
 
-Respond with ONLY one word: new_model, use_existing, code_execution, or general_query"""
+Respond with ONLY one word: new_model or use_existing"""
 
     try:
         response = ollama.chat(
@@ -828,7 +817,7 @@ Respond with ONLY one word: new_model, use_existing, code_execution, or general_
         intent = response["message"]["content"].strip().lower()
         
         # Validate response
-        if intent not in ["new_model", "use_existing", "general_query", "code_execution"]:
+        if intent not in ["new_model", "use_existing"]:
             # Fallback classification
             intent = fallback_classify_intent(query)
         
@@ -851,10 +840,10 @@ Respond with ONLY one word: new_model, use_existing, code_execution, or general_
         return state
 
 def fallback_classify_intent(query: str) -> str:
-    """Fallback classification logic"""
+    """Fallback classification logic - only handles model-specific intents"""
     query_lower = query.lower()
     
-    # Use existing patterns
+    # Use existing patterns for existing models
     use_existing_patterns = [
         "use this model", "use the model", "with this model", "for this model",
         "use this tree", "use the tree", "with this tree", "for this tree",
@@ -867,16 +856,8 @@ def fallback_classify_intent(query: str) -> str:
     if any(pattern in query_lower for pattern in use_existing_patterns):
         return "use_existing"
     
-    model_creation_words = ["build", "create", "train", "make", "develop"]
-    model_types = ["model", "classifier", "regressor", "tree", "forest", "lgbm", "xgboost"]
-    
-    has_creation_word = any(word in query_lower for word in model_creation_words)
-    has_model_type = any(model_type in query_lower for model_type in model_types)
-    
-    if has_creation_word and has_model_type:
-        return "new_model"
-    
-    return "general_query"
+    # Default to new_model for all other cases since we're in ModelBuildingAgent
+    return "new_model"
 
 # =============================================================================
 # AGENT 2: CONTROLLER AGENT (ROUTER)

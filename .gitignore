@@ -16,89 +16,12 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# poetry
-poetry.lock
-
-# pdm
-.pdm.toml
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# Virtual environments
 .env
 .venv
 env/
@@ -107,37 +30,14 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-.idea/
-
-# VS Code
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# System files
+# OS
 .DS_Store
 .DS_Store?
 ._*
@@ -147,39 +47,26 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
+*.log
+*.tmp
+temp/
 artifacts/
-sessions/
+models/
+data/
 *.pkl
 *.joblib
-*.csv
-*.xlsx
-*.json
-!requirements*.txt
-!*.json
 
-# LangGraph checkpoints
-checkpoints/
+# Environment variables
+.env.local
+.env.development
+.env.production
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# NLTK data (downloaded automatically)
+nltk_data/
 
 # Slack tokens and secrets
-.env.local
-.env.production
 slack_tokens.txt
-
-# Model files
-models/
-*.model
-*.bin
-
-# Logs
-logs/
-*.log
-
-# Temporary files
-temp/
-tmp/
-*.tmp
-*.temp
-
-# Session data
-session_*/
-user_*/
+*.token

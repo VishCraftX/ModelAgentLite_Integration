@@ -91,15 +91,24 @@ class IntegratedPreprocessingAgent(BaseAgent):
         try:
             if not self.preprocessing_available:
                 cleaned_data = self._run_basic_preprocessing(state)
-                state.cleaned_data = cleaned_data
-                state.preprocessing_state = {
-                    "completed": True,
-                    "timestamp": datetime.now().isoformat(),
-                    "original_shape": state.raw_data.shape,
-                    "cleaned_shape": cleaned_data.shape if cleaned_data is not None else None,
-                    "method": "basic"
-                }
-                self._update_progress(state, f"Basic preprocessing completed. Shape: {cleaned_data.shape if cleaned_data is not None else 'None'}")
+                if cleaned_data is not None:
+                    state.cleaned_data = cleaned_data
+                    state.preprocessing_state = {
+                        "completed": True,
+                        "timestamp": datetime.now().isoformat(),
+                        "original_shape": state.raw_data.shape,
+                        "cleaned_shape": cleaned_data.shape,
+                        "method": "basic"
+                    }
+                    self._update_progress(state, f"Basic preprocessing completed. Shape: {cleaned_data.shape}")
+                else:
+                    state.preprocessing_state = {
+                        "completed": False,
+                        "timestamp": datetime.now().isoformat(),
+                        "error": "No raw data available for preprocessing",
+                        "method": "basic"
+                    }
+                    self._update_progress(state, "❌ No raw data available for preprocessing")
                 return state
             
             # Check if we have raw data
