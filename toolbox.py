@@ -270,12 +270,6 @@ class ProgressTracker:
             return
         self._last_message = full_message
         
-        # Update state
-        if stage:
-            state.update_progress(f"{stage}: {message}", state.current_agent)
-        else:
-            state.update_progress(message, state.current_agent)
-        
         # Send to Slack if enabled and manager available
         if send_to_slack and self.slack_manager and state.chat_session:
             if stage:
@@ -283,10 +277,16 @@ class ProgressTracker:
             else:
                 self.slack_manager.send_message(state.chat_session, f"⏳ {message}")
         
-        # Console logging
+        # Console logging (single source of truth)
         timestamp = datetime.now().strftime("%H:%M:%S")
         agent_info = f" [{state.current_agent}]" if state.current_agent else ""
         print(f"[{timestamp}]{agent_info} {message}")
+        
+        # Update state (after logging to avoid duplicate console output)
+        if stage:
+            state.update_progress(f"{stage}: {message}", state.current_agent)
+        else:
+            state.update_progress(message, state.current_agent)
 
 
 class UserDirectoryManager:

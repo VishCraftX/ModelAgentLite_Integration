@@ -2178,8 +2178,8 @@ class LangGraphModelAgent:
         
         print(f"✅ COMPLETED [{user_id}] Response ready")
         
-        # Save conversation history after each interaction
-        self._save_conversation_history(user_id)
+        # Conversation history is now handled by the main pipeline
+        # self._save_conversation_history(user_id)  # Disabled to avoid duplicates
         
         return {
             "response": final_state["response"],

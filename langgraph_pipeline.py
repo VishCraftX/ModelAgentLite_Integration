@@ -232,12 +232,15 @@ class MultiAgentMLPipeline:
             user_dir = self._get_user_session_dir(session_id)
             history_file = os.path.join(user_dir, "conversation_history.json")
             
+            print(f"💾 Saving conversation history to: {history_file}")
+            
             # Load existing history
             history = []
             if os.path.exists(history_file):
                 import json
                 with open(history_file, 'r') as f:
                     history = json.load(f)
+                print(f"📚 Loaded {len(history)} existing conversations")
             
             # Add new conversation
             conversation = {
@@ -252,9 +255,13 @@ class MultiAgentMLPipeline:
             import json
             with open(history_file, 'w') as f:
                 json.dump(history, f, indent=2)
+            
+            print(f"✅ Conversation history saved ({len(history)} total conversations)")
                 
         except Exception as e:
             print(f"⚠️ Failed to save conversation history: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _load_conversation_history(self, session_id: str) -> List[Dict]:
         """Load conversation history from user directory"""
@@ -524,12 +531,19 @@ class MultiAgentMLPipeline:
             state.last_error = error_msg
             state_manager.save_state(state)
             
-            return {
+            # Prepare error response and save conversation history
+            error_response = {
                 "success": False,
                 "error": error_msg,
                 "session_id": session_id,
                 "response": f"❌ Sorry, I encountered an error: {error_msg}"
             }
+            
+            # Save session state and conversation history for errors (single point)
+            self._save_session_state(session_id, state)
+            self._save_conversation_history(session_id, state.user_query, error_response["response"])
+            
+            return error_response
     
     def _prepare_response(self, state: PipelineState) -> Dict[str, Any]:
         """Prepare response from final state"""
@@ -546,9 +560,9 @@ class MultiAgentMLPipeline:
         if state.last_error:
             response["error"] = state.last_error
         
-        # Save conversation history and session state
-        self._save_conversation_history(state.session_id, state.user_query, response["response"])
+        # Save session state and conversation history (single point of truth)
         self._save_session_state(state.session_id, state)
+        self._save_conversation_history(state.session_id, state.user_query, response["response"])
         
         return response
     
