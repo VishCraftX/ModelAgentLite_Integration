@@ -355,12 +355,20 @@ class MultiAgentMLPipeline:
         query = (state.user_query or "").lower()
         
         # Single-step requests should end after completion
+        # NOTE: "build model" is NOT a single-step - it requires preprocessing + feature selection + model building
         single_step_patterns = [
-            "clean data", "preprocess", "select features", "train model",
-            "build model", "analyze features", "show", "display"
+            "clean data", "preprocess data", "select features only", "analyze features",
+            "show", "display", "export", "save"
         ]
         
-        if any(pattern in query for pattern in single_step_patterns):
+        # Check for truly single-step patterns (not model building which is multi-step)
+        is_single_step = False
+        for pattern in single_step_patterns:
+            if pattern in query and not any(multi in query for multi in ["model", "train", "pipeline", "complete"]):
+                is_single_step = True
+                break
+        
+        if is_single_step:
             print("✅ Single-step request completed")
             return END
         
@@ -369,22 +377,25 @@ class MultiAgentMLPipeline:
         
         if current_agent == "PreprocessingAgent":
             if state.cleaned_data is not None:
-                # Check if user wants full pipeline
-                if any(word in query for word in ["train", "model", "pipeline", "complete"]):
+                # For model building requests, always continue to feature selection
+                if any(word in query for word in ["train", "model", "build", "pipeline", "complete", "lgbm", "classifier", "regressor"]):
+                    print("🔄 Continuing to feature selection for model building request")
                     return "feature_selection"
                 else:
                     return END
         
         elif current_agent == "FeatureSelectionAgent":
-            if state.selected_features:
-                # Check if user wants to build model
-                if any(word in query for word in ["train", "model", "build", "pipeline"]):
+            if state.selected_features is not None:
+                # For model building requests, always continue to model building
+                if any(word in query for word in ["train", "model", "build", "pipeline", "complete", "lgbm", "classifier", "regressor"]):
+                    print("🔄 Continuing to model building")
                     return "model_building"
                 else:
                     return END
         
         elif current_agent == "ModelBuildingAgent":
             # Model building is typically the end
+            print("✅ Model building completed - pipeline finished")
             return END
         
         return END
@@ -393,18 +404,67 @@ class MultiAgentMLPipeline:
         """Run simplified pipeline without LangGraph"""
         print("🔄 Running simplified pipeline (LangGraph not available)")
         
-        # Route the query
-        selected_agent = orchestrator.route(state)
+        # Store the original user intent
+        original_query = state.user_query
+        original_intent = orchestrator._classify_with_keyword_scoring(original_query)[0]
+        print(f"[SimplifiedPipeline] Original intent: {original_intent}")
         
-        # Execute the appropriate agent
-        if selected_agent == AgentType.PREPROCESSING.value:
-            state = preprocessing_agent.run(state)
-        elif selected_agent == AgentType.FEATURE_SELECTION.value:
-            state = feature_selection_agent.run(state)
-        elif selected_agent == AgentType.MODEL_BUILDING.value:
-            state = model_building_agent.run(state)
+        # Execute pipeline steps sequentially based on original intent
+        if original_intent in ["model_building", "full_pipeline"]:
+            # For model building, run full pipeline if needed
+            state = self._run_sequential_pipeline_steps(state, target_intent="model_building")
+        elif original_intent == "feature_selection":
+            # For feature selection, run preprocessing + feature selection if needed
+            state = self._run_sequential_pipeline_steps(state, target_intent="feature_selection")
+        else:
+            # For single-step intents, route normally
+            selected_agent = orchestrator.route(state)
+            state = self._execute_single_agent(state, selected_agent)
         
         return state
+    
+    def _run_sequential_pipeline_steps(self, state: PipelineState, target_intent: str) -> PipelineState:
+        """Run pipeline steps sequentially until target is reached"""
+        max_steps = 5  # Prevent infinite loops
+        step_count = 0
+        
+        while step_count < max_steps:
+            step_count += 1
+            
+            # Route based on current state
+            selected_agent = orchestrator.route(state)
+            print(f"[SimplifiedPipeline] Step {step_count}: Routing to {selected_agent}")
+            
+            # If we've reached the target or end, stop
+            if selected_agent == target_intent or selected_agent == AgentType.END.value:
+                if selected_agent != AgentType.END.value:
+                    state = self._execute_single_agent(state, selected_agent)
+                break
+            
+            # Execute the current step
+            state = self._execute_single_agent(state, selected_agent)
+            
+            # Check if we should continue to next step
+            if selected_agent == AgentType.PREPROCESSING.value and target_intent in ["feature_selection", "model_building"]:
+                continue  # Continue to next step
+            elif selected_agent == AgentType.FEATURE_SELECTION.value and target_intent == "model_building":
+                continue  # Continue to model building
+            else:
+                break  # Stop here
+        
+        return state
+    
+    def _execute_single_agent(self, state: PipelineState, agent_type: str) -> PipelineState:
+        """Execute a single agent"""
+        if agent_type == AgentType.PREPROCESSING.value:
+            return preprocessing_agent.run(state)
+        elif agent_type == AgentType.FEATURE_SELECTION.value:
+            return feature_selection_agent.run(state)
+        elif agent_type == AgentType.MODEL_BUILDING.value:
+            return model_building_agent.run(state)
+        else:
+            print(f"[SimplifiedPipeline] Unknown agent type: {agent_type}")
+            return state
     
     def process_query(self, 
                      query: str, 
