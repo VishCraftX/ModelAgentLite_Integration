@@ -12,26 +12,15 @@ from datetime import datetime
 try:
     from langgraph.graph import StateGraph, END
     LANGGRAPH_AVAILABLE = True
+    print("✅ LangGraph core components imported successfully")
     
-    # Try to import SqliteSaver separately (optional for persistence)
-    try:
-        from langgraph.checkpoint.sqlite import SqliteSaver
-        import sqlite3
-        SQLITE_AVAILABLE = True
-    except ImportError:
-        SqliteSaver = None
-        sqlite3 = None
-        SQLITE_AVAILABLE = False
-        print("⚠️ SQLite checkpointer not available, persistence will be limited")
-        
 except ImportError as e:
-    print(f"⚠️ LangGraph import failed: {e}")
+    print(f"❌ LangGraph core import failed: {e}")
     StateGraph = None
     END = "END"
-    SqliteSaver = None
-    sqlite3 = None
     LANGGRAPH_AVAILABLE = False
-    SQLITE_AVAILABLE = False
+
+# SQLite checkpointer not needed - we use our own persistence system
 
 from pipeline_state import PipelineState, state_manager
 from orchestrator import orchestrator, AgentType
@@ -54,20 +43,18 @@ class MultiAgentMLPipeline:
         initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
         
         if not LANGGRAPH_AVAILABLE:
-            print("⚠️ LangGraph not available, using simplified pipeline")
+            print("❌ LangGraph not available, using simplified pipeline")
             self.app = None
             self.graph = None
             self.checkpointer = None
             self.enable_persistence = False
         else:
+            print("✅ LangGraph available, building full pipeline")
             
-            # Set up persistence
-            self.enable_persistence = enable_persistence and SQLITE_AVAILABLE
+            # LangGraph checkpointing is optional - we use our own persistence
+            self.enable_persistence = False  # Disable LangGraph checkpointing
             self.checkpointer = None
-            if self.enable_persistence:
-                self._setup_persistence()
-            elif enable_persistence and not SQLITE_AVAILABLE:
-                print("⚠️ Persistence requested but SQLite not available, using memory-only mode")
+            print("📁 Using user directory persistence (LangGraph checkpointing disabled)")
             
             # Build the graph
             self.graph = self._build_graph()
@@ -77,35 +64,12 @@ class MultiAgentMLPipeline:
         self.user_sessions = {}  # Store per-user-thread sessions
         
         print("🚀 Multi-Agent ML Pipeline initialized")
-        print(f"   Persistence: {'✅ Enabled' if enable_persistence else '❌ Disabled'}")
+        print(f"   LangGraph: {'✅ Full Pipeline' if LANGGRAPH_AVAILABLE else '⚠️ Simplified Pipeline'}")
+        print(f"   Persistence: ✅ User Directory + Session State")
         print(f"   Agents: Preprocessing, Feature Selection, Model Building")
         print(f"   Orchestrator: ✅ Ready")
     
-    def _setup_persistence(self):
-        """Set up SQLite-based persistence for LangGraph"""
-        if not SQLITE_AVAILABLE:
-            print("⚠️ SQLite not available, cannot set up persistence")
-            self.enable_persistence = False
-            self.checkpointer = None
-            return
-            
-        try:
-            # Create a persistent database file
-            db_path = os.path.join(tempfile.gettempdir(), "mal_integration_checkpoints.db")
-            
-            # Initialize the database
-            conn = sqlite3.connect(db_path)
-            conn.close()
-            
-            # Create checkpointer
-            self.checkpointer = SqliteSaver.from_conn_string(f"sqlite:///{db_path}")
-            print(f"📁 LangGraph persistence enabled: {db_path}")
-            
-        except Exception as e:
-            print(f"⚠️ Failed to set up LangGraph persistence: {e}")
-            print("   Continuing without LangGraph persistence...")
-            self.enable_persistence = False
-            self.checkpointer = None
+
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state graph"""
@@ -526,11 +490,8 @@ class MultiAgentMLPipeline:
         
         try:
             if LANGGRAPH_AVAILABLE and self.app:
-                # Configure for persistence
-                config = {"configurable": {"thread_id": session_id}} if self.enable_persistence else None
-                
-                # Run the pipeline
-                result_state = self.app.invoke(state, config=config)
+                # Run the full LangGraph pipeline
+                result_state = self.app.invoke(state)
             else:
                 # Simplified pipeline without LangGraph
                 result_state = self._run_simplified_pipeline(state)
