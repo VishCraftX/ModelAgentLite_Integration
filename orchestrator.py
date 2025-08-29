@@ -120,6 +120,11 @@ class Orchestrator:
             "predict", "prediction", "forecast", "forecasts",
             "inference", "deploy", "deployment", "evaluate", "evaluation",
             "validate", "validation", "cross-validation", "cv", "test set",
+            
+            # Direct model building
+            "skip preprocessing", "skip feature selection", "raw data", "as-is",
+            "direct", "without preprocessing", "existing features", "all columns",
+            "use current data", "no preprocessing", "train directly", "bypass preprocessing",
 
             # Algorithms (classical)
             "regression", "linear regression", "logistic regression", 
@@ -440,6 +445,27 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             if state.raw_data is None:
                 print("[Orchestrator] No data available for model building")
                 return "general_response"
+            
+            # Check for direct model building keywords
+            query_lower = (state.user_query or "").lower()
+            direct_keywords = [
+                "skip preprocessing", "skip feature selection", "raw data", "as-is", 
+                "direct", "without preprocessing", "existing features", "all columns",
+                "use current data", "no preprocessing", "train directly", "bypass preprocessing"
+            ]
+            
+            if any(keyword in query_lower for keyword in direct_keywords):
+                print("[Orchestrator] 🚀 Direct model building requested - skipping preprocessing and feature selection")
+                # Use raw data as cleaned data for direct model building
+                if state.cleaned_data is None:
+                    state.cleaned_data = state.raw_data.copy()
+                    print("[Orchestrator] Using raw data as cleaned data")
+                if state.selected_features is None:
+                    state.selected_features = state.raw_data.copy()
+                    print("[Orchestrator] Using all columns as selected features")
+                return "model_building"
+            
+            # Normal pipeline flow
             elif state.cleaned_data is None:
                 print("[Orchestrator] Need to preprocess data first")
                 return "preprocessing"

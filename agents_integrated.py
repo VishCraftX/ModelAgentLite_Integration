@@ -118,7 +118,14 @@ class IntegratedPreprocessingAgent(BaseAgent):
         self._update_progress(state, "Starting data preprocessing", "Preprocessing")
         
         try:
-            if not self.preprocessing_available:
+            # For model building requests, use basic preprocessing to avoid LLM delays
+            user_query = (state.user_query or "").lower()
+            use_basic = any(keyword in user_query for keyword in [
+                "model", "train", "build", "lgbm", "classifier", "regressor", "predict"
+            ])
+            
+            if not self.preprocessing_available or use_basic:
+                self._update_progress(state, "Using fast basic preprocessing for model building", "Basic Preprocessing")
                 cleaned_data = self._run_basic_preprocessing(state)
                 if cleaned_data is not None:
                     state.cleaned_data = cleaned_data
@@ -127,9 +134,9 @@ class IntegratedPreprocessingAgent(BaseAgent):
                         "timestamp": datetime.now().isoformat(),
                         "original_shape": state.raw_data.shape if state.raw_data is not None else None,
                         "cleaned_shape": cleaned_data.shape,
-                        "method": "basic"
+                        "method": "basic_fast"
                     }
-                    self._update_progress(state, f"Basic preprocessing completed. Shape: {cleaned_data.shape}")
+                    self._update_progress(state, f"✅ Basic preprocessing completed. Shape: {cleaned_data.shape}")
                 else:
                     state.preprocessing_state = {
                         "completed": False,
