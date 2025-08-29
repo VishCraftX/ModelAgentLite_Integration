@@ -7,6 +7,7 @@ Main orchestration system that coordinates preprocessing, feature selection, and
 from typing import Dict, Any, Optional, Callable, List
 import tempfile
 import os
+from datetime import datetime
 
 try:
     from langgraph.graph import StateGraph, END
@@ -23,7 +24,7 @@ except ImportError:
 from pipeline_state import PipelineState, state_manager
 from orchestrator import orchestrator, AgentType
 from agents_integrated import preprocessing_agent, feature_selection_agent, model_building_agent
-from toolbox import initialize_toolbox, progress_tracker, slack_manager
+from toolbox import initialize_toolbox, progress_tracker, slack_manager, user_directory_manager
 
 
 class MultiAgentMLPipeline:
@@ -34,6 +35,7 @@ class MultiAgentMLPipeline:
     def __init__(self, 
                  slack_token: str = None, 
                  artifacts_dir: str = None,
+                 user_data_dir: str = None,
                  enable_persistence: bool = True):
         
         if not LANGGRAPH_AVAILABLE:
@@ -43,8 +45,8 @@ class MultiAgentMLPipeline:
             self.checkpointer = None
             self.enable_persistence = False
         else:
-            # Initialize toolbox
-            initialize_toolbox(slack_token, artifacts_dir)
+            # Initialize toolbox with user directory support
+            initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
             
             # Set up persistence
             self.enable_persistence = enable_persistence
@@ -55,6 +57,9 @@ class MultiAgentMLPipeline:
             # Build the graph
             self.graph = self._build_graph()
             self.app = self.graph.compile(checkpointer=self.checkpointer)
+        
+        # User session management
+        self.user_sessions = {}  # Store per-user-thread sessions
         
         print("🚀 Multi-Agent ML Pipeline initialized")
         print(f"   Persistence: {'✅ Enabled' if enable_persistence else '❌ Disabled'}")
@@ -219,13 +224,98 @@ class MultiAgentMLPipeline:
             else:
                 state.last_response = "✅ Code executed successfully! Check the results above."
             
-            return result_state
+            return result
+    
+    def _get_user_session_dir(self, session_id: str) -> str:
+        """Get user session directory for conversation history"""
+        return user_directory_manager.ensure_user_directory(session_id)
+    
+    def _save_conversation_history(self, session_id: str, user_query: str, response: str):
+        """Save conversation history to user directory"""
+        try:
+            user_dir = self._get_user_session_dir(session_id)
+            history_file = os.path.join(user_dir, "conversation_history.json")
+            
+            # Load existing history
+            history = []
+            if os.path.exists(history_file):
+                import json
+                with open(history_file, 'r') as f:
+                    history = json.load(f)
+            
+            # Add new conversation
+            conversation = {
+                "timestamp": datetime.now().isoformat(),
+                "user_query": user_query,
+                "response": response,
+                "session_id": session_id
+            }
+            history.append(conversation)
+            
+            # Save updated history
+            import json
+            with open(history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+                
+        except Exception as e:
+            print(f"⚠️ Failed to save conversation history: {e}")
+    
+    def _load_conversation_history(self, session_id: str) -> List[Dict]:
+        """Load conversation history from user directory"""
+        try:
+            user_dir = self._get_user_session_dir(session_id)
+            history_file = os.path.join(user_dir, "conversation_history.json")
+            
+            if os.path.exists(history_file):
+                import json
+                with open(history_file, 'r') as f:
+                    return json.load(f)
+            return []
             
         except Exception as e:
-            print(f"❌ Code execution error: {e}")
-            state.last_error = str(e)
-            state.last_response = f"❌ Code execution failed: {str(e)}"
-            return state
+            print(f"⚠️ Failed to load conversation history: {e}")
+            return []
+    
+    def _save_session_state(self, session_id: str, state: PipelineState):
+        """Save session state to user directory"""
+        try:
+            user_dir = self._get_user_session_dir(session_id)
+            state_file = os.path.join(user_dir, "session_state.json")
+            
+            # Convert state to dict for JSON serialization
+            state_dict = state.dict()
+            # Remove non-serializable data
+            if 'raw_data' in state_dict:
+                state_dict['raw_data'] = f"DataFrame({state.raw_data.shape})" if state.raw_data is not None else None
+            if 'processed_data' in state_dict:
+                state_dict['processed_data'] = f"DataFrame({state.processed_data.shape})" if state.processed_data is not None else None
+            if 'cleaned_data' in state_dict:
+                state_dict['cleaned_data'] = f"DataFrame({state.cleaned_data.shape})" if state.cleaned_data is not None else None
+            if 'selected_features' in state_dict:
+                state_dict['selected_features'] = f"DataFrame({state.selected_features.shape})" if state.selected_features is not None else None
+            
+            import json
+            with open(state_file, 'w') as f:
+                json.dump(state_dict, f, indent=2)
+                
+        except Exception as e:
+            print(f"⚠️ Failed to save session state: {e}")
+    
+    def _load_session_state(self, session_id: str) -> Optional[Dict]:
+        """Load session state from user directory"""
+        try:
+            user_dir = self._get_user_session_dir(session_id)
+            state_file = os.path.join(user_dir, "session_state.json")
+            
+            if os.path.exists(state_file):
+                import json
+                with open(state_file, 'r') as f:
+                    return json.load(f)
+            return None
+            
+        except Exception as e:
+            print(f"⚠️ Failed to load session state: {e}")
+            return None
     
     def _route_to_agent(self, state: PipelineState) -> str:
         """Conditional edge function for routing from orchestrator"""
@@ -310,6 +400,9 @@ class MultiAgentMLPipeline:
             import time
             session_id = f"session_{int(time.time())}"
         
+        # Load conversation history
+        conversation_history = self._load_conversation_history(session_id)
+        
         # Load or create state
         state = state_manager.load_state(session_id)
         if state is None:
@@ -318,6 +411,17 @@ class MultiAgentMLPipeline:
                 chat_session=session_id,
                 user_query=query
             )
+            # Load previous session state if available
+            previous_state = self._load_session_state(session_id)
+            if previous_state:
+                print(f"📂 Loaded previous session state for {session_id}")
+                # Restore relevant state information (but not DataFrames)
+                if 'preprocessing_state' in previous_state:
+                    state.preprocessing_state = previous_state['preprocessing_state']
+                if 'feature_selection_state' in previous_state:
+                    state.feature_selection_state = previous_state['feature_selection_state']
+                if 'model_building_state' in previous_state:
+                    state.model_building_state = previous_state['model_building_state']
         else:
             state.user_query = query
         
@@ -382,6 +486,10 @@ class MultiAgentMLPipeline:
         
         if state.last_error:
             response["error"] = state.last_error
+        
+        # Save conversation history and session state
+        self._save_conversation_history(state.session_id, state.user_query, response["response"])
+        self._save_session_state(state.session_id, state)
         
         return response
     
@@ -450,7 +558,7 @@ class MultiAgentMLPipeline:
 pipeline = None
 
 
-def get_pipeline(slack_token: str = None, artifacts_dir: str = None, enable_persistence: bool = True) -> MultiAgentMLPipeline:
+def get_pipeline(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None, enable_persistence: bool = True) -> MultiAgentMLPipeline:
     """Get or create global pipeline instance"""
     global pipeline
     
@@ -458,18 +566,20 @@ def get_pipeline(slack_token: str = None, artifacts_dir: str = None, enable_pers
         pipeline = MultiAgentMLPipeline(
             slack_token=slack_token,
             artifacts_dir=artifacts_dir,
+            user_data_dir=user_data_dir,
             enable_persistence=enable_persistence
         )
     
     return pipeline
 
 
-def initialize_pipeline(slack_token: str = None, artifacts_dir: str = None, enable_persistence: bool = True):
+def initialize_pipeline(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None, enable_persistence: bool = True):
     """Initialize the global pipeline"""
     global pipeline
     pipeline = MultiAgentMLPipeline(
         slack_token=slack_token,
         artifacts_dir=artifacts_dir,
+        user_data_dir=user_data_dir,
         enable_persistence=enable_persistence
     )
     return pipeline
