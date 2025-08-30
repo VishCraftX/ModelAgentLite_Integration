@@ -644,7 +644,6 @@ class IntegratedModelBuildingAgent(BaseAgent):
                 if model_id and state.models and model_id in state.models:
                     summary = self._format_model_summary(state.models[model_id])
                     self._update_progress(state, summary)
-                    print(f"[{self.agent_name}] {summary}")
             
             state.model_building_state = {
                 "completed": True,
