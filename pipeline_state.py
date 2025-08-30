@@ -23,7 +23,11 @@ class PipelineState(BaseModel):
     raw_data: Optional[pd.DataFrame] = None
     cleaned_data: Optional[pd.DataFrame] = None
     selected_features: Optional[List[str]] = None
-    trained_model: Optional[Any] = None
+    trained_model: Optional[Any] = None  # Keep for backward compatibility
+    
+    # Multi-model storage
+    models: Optional[Dict[str, Dict]] = Field(default_factory=dict)  # Store multiple models with metrics
+    best_model: Optional[str] = None  # Pointer to the best model ID
     
     # Session management
     artifacts: Optional[Dict] = Field(default_factory=dict)

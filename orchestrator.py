@@ -173,6 +173,8 @@ class Orchestrator:
             "summary", "describe", "shape", "head", "tail", "info", "schema",
             "columns", "datatypes"
         ]
+        
+
 
     def normalize_text(self, query: str) -> List[str]:
         """
@@ -441,7 +443,7 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             return "feature_selection"
         
         elif intent == "model_building":
-            # Check prerequisites
+            # Check prerequisites for model building
             if state.raw_data is None:
                 print("[Orchestrator] No data available for model building")
                 return "general_response"
@@ -730,6 +732,8 @@ How can I help you with your ML workflow today?"""
             status_parts.append("\n🎉 **Pipeline Complete!** You can now make predictions or try different models.")
         
         return "\n".join(status_parts)
+
+
 
     def route(self, state: PipelineState) -> str:
         """

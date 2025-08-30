@@ -624,40 +624,34 @@ class IntegratedModelBuildingAgent(BaseAgent):
                 self._update_progress(state, "No features selected for model building")
                 return state
             
+            # Build model and get structured result
             if not self.model_building_available or self.agent is None:
-                trained_model = self._run_basic_model_building(state)
+                model_result = self._run_basic_model_building(state)
             else:
-                trained_model = self._run_comprehensive_model_building(state)
+                model_result = self._run_comprehensive_model_building(state)
             
-            # Update pipeline state
-            state.trained_model = trained_model
+            # Store result in models section with unique ID
+            if model_result:
+                model_id = self._store_model_result(state, model_result)
+                
+                # Update backward compatibility field
+                if isinstance(model_result, dict) and 'model' in model_result:
+                    state.trained_model = model_result['model']
+                else:
+                    state.trained_model = model_result
+                
+                # Generate and send Slack summary
+                if model_id and state.models and model_id in state.models:
+                    summary = self._format_model_summary(state.models[model_id])
+                    self._update_progress(state, summary)
+                    print(f"[{self.agent_name}] {summary}")
+            
             state.model_building_state = {
                 "completed": True,
                 "timestamp": datetime.now().isoformat(),
                 "model_type": "comprehensive" if self.model_building_available else "basic",
                 "features_used": len(state.selected_features)
             }
-            
-            # Save artifact
-            if trained_model and state.chat_session:
-                try:
-                    import joblib
-                    model_filename = f"trained_model_{int(datetime.now().timestamp())}.joblib"
-                    temp_path = os.path.join(tempfile.gettempdir(), model_filename)
-                    joblib.dump(trained_model, temp_path)
-                    
-                    with open(temp_path, 'rb') as f:
-                        artifact_path = self.artifact_manager.save_artifact(
-                            state.chat_session, 
-                            model_filename, 
-                            f.read(), 
-                            "binary"
-                        )
-                    if artifact_path:
-                        state.artifacts = state.artifacts or {}
-                        state.artifacts["trained_model_path"] = artifact_path
-                except Exception as e:
-                    print(f"[{self.agent_name}] Failed to save model artifact: {e}")
             
             self._update_progress(state, "Model building completed successfully")
             
@@ -679,7 +673,11 @@ class IntegratedModelBuildingAgent(BaseAgent):
             # Create model building query
             query = state.user_query or "build lgbm model"
             
-            # Process query through the agent
+            # Check if this is a "use existing" request and we have model data in pipeline state
+            if self._is_use_existing_request(query) and state.models:
+                return self._handle_use_existing_model(state, query)
+            
+            # Process query through the agent for new model building
             self._update_progress(state, "Processing model building request", "Model Training")
             result = self.agent.process_query(query, session_id)
             
@@ -762,11 +760,312 @@ class IntegratedModelBuildingAgent(BaseAgent):
             print(f"  - Train {metric_name}: {train_score:.4f}")
             print(f"  - Test {metric_name}: {test_score:.4f}")
             
-            return model
+            # Return structured result
+            result = {
+                'model': model,
+                'model_type': type(model).__name__,
+                'params': model.get_params() if hasattr(model, 'get_params') else {},
+                'train_score': float(train_score),
+                'test_score': float(test_score),
+                'metric_name': metric_name,
+                'features_used': len(features),
+                'target_column': target_col,
+                'data_split': {
+                    'train_size': len(X_train),
+                    'test_size': len(X_test)
+                }
+            }
+            return result
             
         except Exception as e:
             print(f"[{self.agent_name}] Basic model building failed: {e}")
             return f"Model building failed: {str(e)}"
+    
+    def _store_model_result(self, state: PipelineState, model_result) -> str:
+        """Store model result in state.models with unique ID"""
+        import time
+        
+        # Generate unique model ID
+        timestamp = int(time.time())
+        model_count = len(state.models) + 1
+        model_id = f"model_{model_count:03d}_{timestamp}"
+        
+        # Initialize models dict if needed
+        if state.models is None:
+            state.models = {}
+        
+        # Structure the result according to the design
+        if isinstance(model_result, dict) and 'model' in model_result:
+            # Comprehensive model building result
+            structured_result = {
+                "model_id": model_id,
+                "type": model_result.get('model_type', 'Unknown'),
+                "params": model_result.get('params', {}),
+                "metrics": {
+                    k: v for k, v in model_result.items() 
+                    if k in ['accuracy', 'precision', 'recall', 'f1_score', 'roc_auc', 'log_loss', 'train_score', 'test_score']
+                },
+                "model_path": self._save_model_artifact(state, model_result['model'], model_id),
+                "timestamp": datetime.now().isoformat(),
+                "features_used": len(state.selected_features) if state.selected_features else 0,
+                "data_info": {
+                    "train_size": model_result.get('data_split', {}).get('train_size'),
+                    "test_size": model_result.get('data_split', {}).get('test_size')
+                }
+            }
+        else:
+            # Basic model building or single model object
+            model_obj = model_result if hasattr(model_result, 'predict') else None
+            structured_result = {
+                "model_id": model_id,
+                "type": type(model_obj).__name__ if model_obj else "Unknown",
+                "params": {},
+                "metrics": {},
+                "model_path": self._save_model_artifact(state, model_obj, model_id) if model_obj else None,
+                "timestamp": datetime.now().isoformat(),
+                "features_used": len(state.selected_features) if state.selected_features else 0,
+                "data_info": {}
+            }
+        
+        # Store in state
+        state.models[model_id] = structured_result
+        
+        # Save rank-order results as CSV if available
+        if isinstance(model_result, dict) and 'rank_ordering_table' in model_result:
+            self._save_rank_order_csv(state, model_id, model_result['rank_ordering_table'])
+        
+        # Set as best model if it's the first one or has better metrics
+        if not state.best_model or self._is_better_model(structured_result, state.models.get(state.best_model, {})):
+            state.best_model = model_id
+            print(f"[{self.agent_name}] Set {model_id} as best model")
+        
+        return model_id
+    
+    def _save_model_artifact(self, state: PipelineState, model_obj, model_id: str) -> str:
+        """Save model as artifact in organized directory structure"""
+        if not model_obj or not state.chat_session:
+            return None
+        
+        try:
+            import joblib
+            
+            # Create organized directory structure: /models/model_001/
+            models_dir = user_directory_manager.get_models_dir(state.chat_session)
+            model_dir = os.path.join(models_dir, model_id)
+            os.makedirs(model_dir, exist_ok=True)
+            
+            # Use consistent .joblib format
+            model_filename = "model.joblib"
+            
+            # Save model to organized path
+            model_path = os.path.join(model_dir, model_filename)
+            joblib.dump(model_obj, model_path)
+            
+            # Update artifacts tracking
+            state.artifacts = state.artifacts or {}
+            state.artifacts[f"{model_id}_path"] = model_path
+            
+            print(f"[{self.agent_name}] Saved model to: {model_path}")
+            return model_path
+                
+        except Exception as e:
+            print(f"[{self.agent_name}] Failed to save model artifact for {model_id}: {e}")
+        
+        return None
+    
+    def _save_rank_order_csv(self, state: PipelineState, model_id: str, rank_ordering_table: List[Dict]) -> str:
+        """Save rank-order table as CSV in model directory"""
+        try:
+            # Get model directory
+            models_dir = user_directory_manager.get_models_dir(state.chat_session)
+            model_dir = os.path.join(models_dir, model_id)
+            os.makedirs(model_dir, exist_ok=True)
+            
+            # Convert to DataFrame and save as CSV
+            import pandas as pd
+            rank_df = pd.DataFrame(rank_ordering_table)
+            csv_path = os.path.join(model_dir, "rank_order.csv")
+            rank_df.to_csv(csv_path, index=False)
+            
+            # Update model info in state
+            if model_id in state.models:
+                state.models[model_id]['rank_order'] = {
+                    "artifact": csv_path,
+                    "computed_at": datetime.now().isoformat()
+                }
+            
+            print(f"[{self.agent_name}] Saved rank-order CSV to: {csv_path}")
+            return csv_path
+            
+        except Exception as e:
+            print(f"[{self.agent_name}] Failed to save rank-order CSV for {model_id}: {e}")
+            return None
+    
+    def _is_use_existing_request(self, query: str) -> bool:
+        """Check if query is requesting to use existing model"""
+        if not query:
+            return False
+        
+        query_lower = query.lower()
+        use_existing_patterns = [
+            "use this model", "use the model", "with this model", "for this model",
+            "use existing", "existing model", "current model", "built model", "trained model",
+            "use previous", "previous model", "last model", "latest model",
+            "show plot", "visualize", "display", "rank ordering", "rank order",
+            "build segments", "build deciles", "build buckets", "build rankings",
+            "populate", "score", "predict", "classify"
+        ]
+        
+        return any(pattern in query_lower for pattern in use_existing_patterns)
+    
+    def _handle_use_existing_model(self, state: PipelineState, query: str):
+        """Handle use existing model requests by pulling data from pipeline state"""
+        try:
+            # Find the target model to use
+            target_model = self._get_target_model_from_state(state, query)
+            if not target_model:
+                print(f"[{self.agent_name}] No suitable model found in pipeline state")
+                # Fallback to normal model building agent processing
+                result = self.agent.process_query(query, state.chat_session)
+                return result.get("execution_result") if result else None
+            
+            model_id = target_model['model_id']
+            print(f"[{self.agent_name}] Using existing model from pipeline state: {model_id}")
+            
+            # Check what data is requested and what's available
+            query_lower = query.lower()
+            
+            # If requesting rank-order and it exists, return it
+            if any(keyword in query_lower for keyword in ["rank", "ranking", "rank order", "decile", "segment"]):
+                if 'rank_order' in target_model:
+                    rank_order_info = target_model['rank_order']
+                    # Load rank-order data from CSV if available
+                    csv_path = rank_order_info.get('artifact')
+                    if csv_path and os.path.exists(csv_path):
+                        import pandas as pd
+                        rank_df = pd.read_csv(csv_path)
+                        return {
+                            'model': None,  # Don't return model object for rank-order queries
+                            'rank_ordering_table': rank_df.to_dict('records'),
+                            'model_id': model_id,
+                            'model_type': target_model.get('type', 'Unknown'),
+                            'from_pipeline_state': True
+                        }
+            
+            # If requesting validation metrics, return existing metrics
+            if any(keyword in query_lower for keyword in ["metrics", "validation", "performance", "accuracy"]):
+                metrics = target_model.get('metrics', {})
+                return {
+                    'model': None,  # Don't return model object for metrics queries
+                    'model_id': model_id,
+                    'model_type': target_model.get('type', 'Unknown'),
+                    'from_pipeline_state': True,
+                    **metrics  # Include all existing metrics
+                }
+            
+            # For other requests, might need to load the actual model and generate missing data
+            model_path = target_model.get('model_path')
+            if model_path and os.path.exists(model_path):
+                import joblib
+                model_obj = joblib.load(model_path)
+                
+                # Return the model with existing metadata
+                return {
+                    'model': model_obj,
+                    'model_id': model_id,
+                    'model_type': target_model.get('type', 'Unknown'),
+                    'model_path': model_path,
+                    'from_pipeline_state': True,
+                    **target_model.get('metrics', {})
+                }
+            
+            # If we can't find the model file, fallback to normal processing
+            print(f"[{self.agent_name}] Model file not found: {model_path}, falling back to normal processing")
+            result = self.agent.process_query(query, state.chat_session)
+            return result.get("execution_result") if result else None
+            
+        except Exception as e:
+            print(f"[{self.agent_name}] Error handling existing model: {e}")
+            # Fallback to normal processing
+            result = self.agent.process_query(query, state.chat_session)
+            return result.get("execution_result") if result else None
+    
+    def _get_target_model_from_state(self, state: PipelineState, query: str) -> Optional[Dict]:
+        """Get target model from pipeline state based on query"""
+        if not state.models or len(state.models) == 0:
+            return None
+        
+        query_lower = query.lower()
+        
+        # Check for specific model ID in query
+        for model_id, model_info in state.models.items():
+            if model_id.lower() in query_lower:
+                return model_info
+        
+        # Check for "best" keyword
+        if "best" in query_lower and state.best_model and state.best_model in state.models:
+            return state.models[state.best_model]
+        
+        # Check for "previous", "existing", "last", "latest" keywords
+        if any(keyword in query_lower for keyword in ["previous", "existing", "last", "latest", "current"]):
+            # Get the most recent model (highest timestamp)
+            latest_model = max(state.models.values(), key=lambda x: x.get('timestamp', ''))
+            return latest_model
+        
+        # Default: use best model if available, otherwise latest
+        if state.best_model and state.best_model in state.models:
+            return state.models[state.best_model]
+        else:
+            return list(state.models.values())[-1]  # Most recently added
+    
+    def _is_better_model(self, new_model: dict, current_best: dict) -> bool:
+        """Compare models to determine if new model is better"""
+        if not current_best:
+            return True
+        
+        new_metrics = new_model.get('metrics', {})
+        current_metrics = current_best.get('metrics', {})
+        
+        # Priority order for comparison
+        comparison_metrics = ['roc_auc', 'f1_score', 'accuracy', 'test_score']
+        
+        for metric in comparison_metrics:
+            if metric in new_metrics and metric in current_metrics:
+                return new_metrics[metric] > current_metrics[metric]
+        
+        # If no comparable metrics, newer is better
+        return True
+    
+    def _format_model_summary(self, model_info: dict) -> str:
+        """Format model info for user-friendly Slack summary"""
+        model_id = model_info.get('model_id', 'Unknown')
+        model_type = model_info.get('type', 'Unknown')
+        metrics = model_info.get('metrics', {})
+        
+        summary_parts = [f"✅ Model Built: {model_type} ({model_id})"]
+        
+        # Add key metrics
+        if 'accuracy' in metrics:
+            summary_parts.append(f"- Accuracy: {metrics['accuracy']:.3f}")
+        if 'precision' in metrics:
+            summary_parts.append(f"- Precision: {metrics['precision']:.3f}")
+        if 'recall' in metrics:
+            summary_parts.append(f"- Recall: {metrics['recall']:.3f}")
+        if 'f1_score' in metrics:
+            summary_parts.append(f"- F1 Score: {metrics['f1_score']:.3f}")
+        if 'roc_auc' in metrics:
+            summary_parts.append(f"- ROC-AUC: {metrics['roc_auc']:.3f}")
+        
+        # Add regression metrics if available
+        if 'test_score' in metrics:
+            summary_parts.append(f"- Test Score: {metrics['test_score']:.3f}")
+        
+        # Add model path
+        if model_info.get('model_path'):
+            summary_parts.append(f"📂 Path: {model_info['model_path']}")
+        
+        return "\n".join(summary_parts)
+
 
 
 # Global agent instances

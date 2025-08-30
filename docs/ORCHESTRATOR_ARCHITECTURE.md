@@ -44,7 +44,7 @@ ModelBuildingAgent → Analyzes query → Determines "use_existing" vs "build_ne
 ### **ModelBuildingAgent Level (internal classification):**
 - **`build_new_model`** - Train a new model from scratch
 - **`use_existing_model`** - Operations on existing model
-- **`model_evaluation`** - Evaluate model performance
+
 - **`model_visualization`** - Show plots, trees, etc.
 - **`prediction`** - Make predictions using model
 
@@ -54,7 +54,7 @@ ModelBuildingAgent → Analyzes query → Determines "use_existing" vs "build_ne
 ```python
 "Train a new LightGBM model" → model_building → MBA decides: build_new_model
 "Use existing model for predictions" → model_building → MBA decides: use_existing_model  
-"Show model performance metrics" → model_building → MBA decides: model_evaluation
+"Show model performance metrics" → model_building → MBA handles internally
 "Visualize decision tree" → model_building → MBA decides: model_visualization
 "Score this dataset" → model_building → MBA decides: prediction
 ```
