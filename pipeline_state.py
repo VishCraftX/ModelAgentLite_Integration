@@ -22,6 +22,7 @@ class PipelineState(BaseModel):
     # Core data fields
     raw_data: Optional[pd.DataFrame] = None
     cleaned_data: Optional[pd.DataFrame] = None
+    processed_data: Optional[pd.DataFrame] = None  # Add missing field
     selected_features: Optional[List[str]] = None
     trained_model: Optional[Any] = None  # Keep for backward compatibility
     

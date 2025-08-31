@@ -320,7 +320,7 @@ def run_direct_tests():
     print("\n🧪 Running Direct Agent Tests...")
     
     try:
-        from agents_integrated import preprocessing_agent, feature_selection_agent, model_building_agent
+        from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
         from pipeline_state import PipelineState
         import pandas as pd
         import numpy as np
