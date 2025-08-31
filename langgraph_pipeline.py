@@ -671,28 +671,111 @@ class MultiAgentMLPipeline:
             target_column_patterns = ['target ', 'column ']
             is_target_specification = any(pattern in query_lower for pattern in target_column_patterns)
             
-            # Check for new ML requests that should bypass interactive session
+            # Semantic new request detection
+            def is_semantic_new_request(query_lower: str, current_session: Dict) -> bool:
+                """
+                Use semantic similarity to detect if query is a new ML request
+                that should bypass current interactive session
+                """
+                if not current_session:
+                    return False
+                
+                try:
+                    # Define what constitutes a "new request" vs "session continuation"
+                    new_request_definitions = {
+                        "new_ml_request": "Start new machine learning task, begin different ML workflow, switch to new agent, train new model, build new classifier, create new predictor, analyze different dataset, perform new analysis, start fresh preprocessing, begin new feature selection, initiate model building, commence new ML pipeline",
+                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis"
+                    }
+                    
+                    from orchestrator import Orchestrator
+                    temp_orchestrator = Orchestrator()
+                    temp_orchestrator.intent_definitions = new_request_definitions
+                    temp_orchestrator._initialize_intent_embeddings()
+                    
+                    if temp_orchestrator._intent_embeddings:
+                        intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query_lower)
+                        print(f"[Session] New request semantic analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
+                        
+                        # Use moderate threshold for new request detection
+                        if confidence_info.get("max_score", 0) > 0.25:
+                            is_new = (intent == "new_ml_request")
+                            print(f"[Session] Semantic new request decision: {'NEW REQUEST' if is_new else 'CONTINUATION'}")
+                            return is_new
+                    
+                    print(f"[Session] New request semantic analysis failed, using keyword fallback")
+                    return False
+                    
+                except Exception as e:
+                    print(f"[Session] Semantic new request error: {e}, using keyword fallback")
+                    return False
+            
+            # Check for new ML requests that should bypass interactive session (keyword fallback)
             new_request_patterns = [
                 'clean my data', 'select features', 'train a', 'build a', 'create a', 'analyze my',
                 'skip preprocessing', 'skip feature selection', 'without preprocessing', 'bypass cleaning'
             ]
             
-            # Context-aware continuation detection
+            # Semantic continuation classification system
             def is_context_continuation(query_lower: str, session: Dict) -> bool:
-                """Check if query is a continuation based on current session context"""
+                """
+                Semantic-aware continuation detection with LLM fallback
+                Uses the same sophisticated classification as main orchestrator
+                """
                 if not session:
                     return False
                 
-                # Pure continuation commands (always valid)
-                if any(cmd in query_lower for cmd in pure_continuation_commands):
-                    return True
-                
-                # Context-dependent commands
                 agent_type = session.get('agent_type')
                 current_phase = session.get('phase')
                 
+                # Phase 1: Pure continuation commands (always valid)
+                pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help']
+                if any(cmd in query_lower for cmd in pure_continuation_commands):
+                    return True
+                
+                # Phase 2: Yes/No for confirmation contexts (explicit)
+                if current_phase in ['confirmation', 'approval_needed']:
+                    return query_lower.strip() in ['yes', 'no', 'y', 'n']
+                
+                # Phase 3: Semantic continuation classification
+                try:
+                    continuation_definitions = {
+                        'preprocessing': {
+                            'continue_preprocessing': "Skip current step, proceed to next phase, continue preprocessing workflow, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation",
+                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent"
+                        },
+                        'feature_selection': {
+                            'continue_feature_selection': "Skip current analysis, run information value, execute SHAP analysis, continue feature selection, proceed with variable selection, advance feature engineering, move to next selection step, bypass current feature analysis, select important features, rank features, analyze correlations",
+                            'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing"
+                        }
+                    }
+                    
+                    if agent_type in continuation_definitions:
+                        # Use semantic similarity to classify continuation vs new request
+                        from orchestrator import Orchestrator
+                        temp_orchestrator = Orchestrator()
+                        
+                        # Create temporary intent definitions for this context
+                        context_intents = continuation_definitions[agent_type]
+                        temp_orchestrator.intent_definitions = context_intents
+                        temp_orchestrator._initialize_intent_embeddings()
+                        
+                        if temp_orchestrator._intent_embeddings:
+                            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query_lower)
+                            print(f"[Session] Semantic continuation analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
+                            
+                            # Use lower threshold for continuation detection (more permissive)
+                            if confidence_info.get("max_score", 0) > 0.2:
+                                is_continuation = (intent.startswith('continue_') or intent.endswith('_continuation'))
+                                print(f"[Session] Semantic decision: {'CONTINUATION' if is_continuation else 'NEW REQUEST'}")
+                                return is_continuation
+                        
+                        print(f"[Session] Semantic analysis failed, falling back to keyword matching")
+                
+                except Exception as e:
+                    print(f"[Session] Semantic continuation error: {e}, using keyword fallback")
+                
+                # Phase 4: Keyword fallback (original logic)
                 if agent_type == 'preprocessing':
-                    # In preprocessing context, these are continuations:
                     preprocessing_continuations = [
                         'skip outliers', 'skip missing', 'skip encoding', 'skip transformations',
                         'skip this phase', 'skip current', 'target ', 'column '
@@ -700,21 +783,29 @@ class MultiAgentMLPipeline:
                     return any(cmd in query_lower for cmd in preprocessing_continuations)
                 
                 elif agent_type == 'feature_selection':
-                    # In feature selection context:
                     fs_continuations = [
                         'skip analysis', 'run iv', 'run shap', 'select features'
                     ]
                     return any(cmd in query_lower for cmd in fs_continuations)
                 
-                # Yes/No only valid for confirmation contexts
-                if current_phase in ['confirmation', 'approval_needed']:
-                    return query_lower.strip() in ['yes', 'no', 'y', 'n']
-                
                 return False
             
-            # Detect new requests and context-aware continuations
-            is_new_request = any(pattern in query_lower for pattern in new_request_patterns)
-            is_continuation = is_context_continuation(query_lower, state.interactive_session)
+            # Phase 1: Semantic analysis for session management
+            semantic_new_request = is_semantic_new_request(query_lower, state.interactive_session)
+            semantic_continuation = is_context_continuation(query_lower, state.interactive_session)
+            
+            # Phase 2: Keyword fallback analysis
+            keyword_new_request = any(pattern in query_lower for pattern in new_request_patterns)
+            
+            # Phase 3: Combine semantic and keyword results (semantic takes priority)
+            is_new_request = semantic_new_request or (not semantic_continuation and keyword_new_request)
+            is_continuation = semantic_continuation
+            
+            print(f"[Session] Analysis results:")
+            print(f"  Semantic new request: {semantic_new_request}")
+            print(f"  Semantic continuation: {semantic_continuation}")
+            print(f"  Keyword new request: {keyword_new_request}")
+            print(f"  Final decision - New request: {is_new_request}, Continuation: {is_continuation}")
             
             # Handle conflicts: if both detected, prioritize based on context
             if is_new_request and is_continuation:
