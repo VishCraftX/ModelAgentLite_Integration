@@ -334,17 +334,36 @@ class ModelBuildingAgentWrapper:
             return state
             
         try:
-            if state.cleaned_data is None:
-                print("❌ No cleaned data available for model building")
-                return state
+            # Determine which data to use (cleaned > raw > None)
+            data_to_use = None
+            if state.cleaned_data is not None:
+                data_to_use = state.cleaned_data
+                print(f"🚀 Using cleaned data for model building")
+            elif state.raw_data is not None:
+                data_to_use = state.raw_data
+                print(f"🚀 Using raw data for model building (preprocessing skipped)")
+            else:
+                print("❌ No data available - letting model building agent handle this")
+                # Let the actual agent handle "no data" case with proper messaging
                 
-            if not state.selected_features:
-                print("❌ No features selected for model building")
-                return state
-                
+            # Determine features to use (selected > all columns)
+            features_to_use = None
+            if state.selected_features:
+                features_to_use = state.selected_features
+                print(f"🎯 Using selected features: {len(state.selected_features)}")
+            elif data_to_use is not None:
+                # Use all columns except target as features
+                all_cols = list(data_to_use.columns)
+                if state.target_column and state.target_column in all_cols:
+                    features_to_use = [col for col in all_cols if col != state.target_column]
+                else:
+                    features_to_use = all_cols
+                print(f"🎯 Using all available features: {len(features_to_use)} (feature selection skipped)")
+            
+            if data_to_use is not None:
+                print(f"📊 Data shape: {data_to_use.shape}")
+            
             print(f"🚀 Launching actual model building agent")
-            print(f"📊 Data shape: {state.cleaned_data.shape}")
-            print(f"🎯 Selected features: {len(state.selected_features)}")
             
             # The working agent will handle all the model building process
             # including LLM interactions, Slack updates, etc.
@@ -354,9 +373,9 @@ class ModelBuildingAgentWrapper:
             result = self.agent.run_agent(
                 user_query=state.user_query,
                 user_id=state.chat_session,
-                data=state.cleaned_data,
+                data=data_to_use,
                 target_column=state.target_column,
-                selected_features=state.selected_features
+                selected_features=features_to_use
             )
             
             # Extract results

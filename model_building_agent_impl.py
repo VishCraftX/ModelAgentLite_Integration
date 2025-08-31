@@ -1665,6 +1665,16 @@ else:
             return state
         
     else:  # build_new_model
+        # Check if data is available for model building
+        if data is None:
+            # For model building requests without data, ask for data upload
+            state["response"] = """📊 I need data to work with! Please upload a data file first.
+
+**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+
+Once you upload your data, I can help you build models and analyze it! 🎯"""
+            return state
+        
         # Check if plot/visualization is requested using semantic classification
         should_generate_plot = semantic_detect_plot_request(query)
         

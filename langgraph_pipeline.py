@@ -180,6 +180,10 @@ class MultiAgentMLPipeline:
     def _model_building_node(self, state: PipelineState) -> PipelineState:
         """Model building node"""
         print(f"\n🤖 [Model Building] Starting model building")
+        print(f"🔍 [Model Building] Query: '{state.user_query}'")
+        print(f"🔍 [Model Building] Raw data: {'✅' if state.raw_data is not None else '❌'}")
+        print(f"🔍 [Model Building] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
+        print(f"🔍 [Model Building] Selected features: {'✅' if state.selected_features is not None else '❌'}")
         return model_building_agent.run(state)
     
     def _general_response_node(self, state: PipelineState) -> PipelineState:
