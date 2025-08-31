@@ -571,21 +571,226 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         
         return best_intent, confidence_info
 
+    def _classify_skip_patterns(self, query: str) -> str:
+        """
+        Classify skip/bypass patterns using Semantic → LLM → Keyword hierarchy
+        Returns: routing destination or None if no skip patterns detected
+        """
+        if not query:
+            return None
+            
+        # Step 1: Semantic Classification
+        try:
+            if EMBEDDINGS_AVAILABLE and self._intent_embeddings:
+                skip_intent_definitions = {
+                    "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build model, immediate model training, direct model building, bypass data preparation entirely",
+                    "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features",
+                    "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for model building, skip data cleaning and train model, model building without preprocessing, train model with raw data, build classifier without cleaning, direct model training",
+                    "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation"
+                }
+                
+                # Create temporary embeddings for skip patterns
+                skip_embeddings = {}
+                for skip_type, definition in skip_intent_definitions.items():
+                    embedding = self._get_embedding(definition)
+                    if embedding is not None:
+                        skip_embeddings[skip_type] = embedding
+                
+                if skip_embeddings:
+                    query_embedding = self._get_embedding(query)
+                    if query_embedding is not None:
+                        # Calculate similarities
+                        similarities = {}
+                        for skip_type, skip_embedding in skip_embeddings.items():
+                            similarity = cosine_similarity(
+                                query_embedding.reshape(1, -1),
+                                skip_embedding.reshape(1, -1)
+                            )[0][0]
+                            similarities[skip_type] = float(similarity)
+                        
+                        # Find best match
+                        best_skip_type = max(similarities, key=similarities.get)
+                        max_similarity = similarities[best_skip_type]
+                        
+                        # Calculate confidence
+                        sorted_similarities = sorted(similarities.values(), reverse=True)
+                        second_best = sorted_similarities[1] if len(sorted_similarities) > 1 else 0
+                        similarity_diff = max_similarity - second_best
+                        
+                        print(f"[Orchestrator] Skip pattern semantic: {best_skip_type} (score: {max_similarity:.3f}, diff: {similarity_diff:.3f})")
+                        
+                        # Use moderate threshold for skip pattern detection
+                        if max_similarity > 0.4 and similarity_diff > 0.08:
+                            print(f"[Orchestrator] 🧠 Semantic skip pattern accepted: {best_skip_type}")
+                            return self._route_skip_pattern(best_skip_type, query)
+                        else:
+                            print(f"[Orchestrator] 🤔 Semantic skip pattern below threshold, trying LLM")
+        
+        except Exception as e:
+            print(f"[Orchestrator] Semantic skip pattern error: {e}, trying LLM")
+        
+        # Step 2: LLM Classification
+        try:
+            print(f"[Orchestrator] 🤖 Using LLM for skip pattern classification")
+            llm_skip_result = self._llm_classify_skip_patterns(query)
+            if llm_skip_result:
+                print(f"[Orchestrator] LLM skip pattern: {llm_skip_result}")
+                return self._route_skip_pattern(llm_skip_result, query)
+            else:
+                print(f"[Orchestrator] LLM skip pattern failed, using keyword fallback")
+        except Exception as e:
+            print(f"[Orchestrator] LLM skip pattern error: {e}, using keyword fallback")
+        
+        # Step 3: Keyword Fallback
+        print(f"[Orchestrator] ⚡ Using keyword fallback for skip pattern")
+        keyword_skip_result = self._keyword_classify_skip_patterns(query)
+        if keyword_skip_result:
+            return self._route_skip_pattern(keyword_skip_result, query)
+        
+        return None
+
+    def _llm_classify_skip_patterns(self, query: str) -> str:
+        """LLM-based skip pattern classification"""
+        try:
+            import requests
+            
+            prompt = f"""
+            Classify this query's skip/bypass intent:
+            
+            Options:
+            - "skip_to_modeling": Skip everything and go directly to model building
+            - "skip_preprocessing_to_features": Skip preprocessing but do feature selection  
+            - "skip_preprocessing_to_modeling": Skip preprocessing and go to model building
+            - "no_skip": Normal pipeline, no skipping
+            
+            Query: "{query}"
+            
+            Respond with ONLY the option name.
+            """
+            
+            # Try Ollama first
+            try:
+                response = requests.post(
+                    "http://localhost:11434/api/generate",
+                    json={
+                        "model": "qwen2.5-coder:32b-instruct-q4_K_M",
+                        "prompt": prompt,
+                        "stream": False
+                    },
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    skip_type = result.get("response", "").strip().lower()
+                    
+                    valid_types = ["skip_to_modeling", "skip_preprocessing_to_features", 
+                                 "skip_preprocessing_to_modeling", "no_skip"]
+                    
+                    for valid_type in valid_types:
+                        if valid_type in skip_type:
+                            return valid_type
+                            
+            except Exception as ollama_error:
+                print(f"[Orchestrator] Ollama LLM error: {ollama_error}")
+                
+            # Fallback to OpenAI if available
+            try:
+                import openai
+                client = openai.OpenAI()
+                
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=20,
+                    temperature=0
+                )
+                
+                skip_type = response.choices[0].message.content.strip().lower()
+                
+                valid_types = ["skip_to_modeling", "skip_preprocessing_to_features", 
+                             "skip_preprocessing_to_modeling", "no_skip"]
+                
+                for valid_type in valid_types:
+                    if valid_type in skip_type:
+                        return valid_type
+                        
+            except Exception as openai_error:
+                print(f"[Orchestrator] OpenAI LLM error: {openai_error}")
+                
+        except Exception as e:
+            print(f"[Orchestrator] LLM skip pattern classification failed: {e}")
+        
+        return None
+
+    def _keyword_classify_skip_patterns(self, query: str) -> str:
+        """Keyword-based skip pattern classification (fallback)"""
+        query_lower = query.lower()
+        
+        # Different skip patterns with different implications
+        skip_to_modeling_patterns = [
+            "skip to modeling", "go straight to modeling", "skip preprocessing and feature selection",
+            "bypass preprocessing and feature selection", "direct to modeling"
+        ]
+        
+        skip_preprocessing_patterns = [
+            "skip preprocessing", "bypass preprocessing", "skip data cleaning", 
+            "bypass data cleaning", "bypass preprocessing and"
+        ]
+        
+        # Check for explicit "skip to modeling" first
+        if any(pattern in query_lower for pattern in skip_to_modeling_patterns):
+            return "skip_to_modeling"
+        
+        # Check for "skip preprocessing" - need to decide next step intelligently
+        if any(pattern in query_lower for pattern in skip_preprocessing_patterns):
+            # Analyze what the user wants to do after skipping preprocessing
+            feature_keywords = ["feature", "select", "selection", "engineering", "importance", "correlation"]
+            model_keywords = ["model", "train", "build", "classifier", "regressor", "predict", "algorithm", 
+                             "random forest", "decision tree", "lgbm", "xgboost", "neural network"]
+            
+            has_feature_intent = any(keyword in query_lower for keyword in feature_keywords)
+            has_model_intent = any(keyword in query_lower for keyword in model_keywords)
+            
+            if has_model_intent and not has_feature_intent:
+                return "skip_preprocessing_to_modeling"
+            elif has_feature_intent and not has_model_intent:
+                return "skip_preprocessing_to_features"
+            elif has_model_intent and has_feature_intent:
+                # Both mentioned - default to feature selection first (normal pipeline order)
+                return "skip_preprocessing_to_features"
+            else:
+                # Ambiguous - default to feature selection (safer pipeline progression)
+                return "skip_preprocessing_to_features"
+        
+        return None
+
+    def _route_skip_pattern(self, skip_type: str, query: str) -> str:
+        """Route based on classified skip pattern"""
+        if skip_type == "skip_to_modeling":
+            print(f"[Orchestrator] Skip to modeling detected - routing to model_building agent")
+            return "model_building"
+        elif skip_type == "skip_preprocessing_to_modeling":
+            print(f"[Orchestrator] Skip preprocessing + model intent detected - routing to model_building agent")
+            return "model_building"
+        elif skip_type == "skip_preprocessing_to_features":
+            print(f"[Orchestrator] Skip preprocessing + feature intent detected - routing to feature_selection agent")
+            return "feature_selection"
+        elif skip_type == "no_skip":
+            print(f"[Orchestrator] No skip pattern detected - continuing with normal routing")
+            return None
+        else:
+            print(f"[Orchestrator] Unknown skip pattern: {skip_type} - continuing with normal routing")
+            return None
+
     def _route_by_intent(self, state: PipelineState, intent: str) -> str:
         """
         Route based on classified intent and current state
         """
-        # Handle skip/bypass requests - route to the agent being skipped
-        query_lower = (state.user_query or "").lower()
-        skip_patterns = [
-            "skip preprocessing", "bypass preprocessing", "skip data cleaning", 
-            "bypass data cleaning", "skip to modeling", "go straight to modeling",
-            "bypass preprocessing and", "skip preprocessing and"
-        ]
-        
-        if any(pattern in query_lower for pattern in skip_patterns):
-            print(f"[Orchestrator] Skip preprocessing detected - routing to preprocessing agent to handle")
-            return "preprocessing"
+        # Handle skip/bypass requests with semantic classification
+        skip_routing = self._classify_skip_patterns(state.user_query)
+        if skip_routing:
+            return skip_routing
         
         if intent == "full_pipeline":
             # Start from the beginning or continue from current state
