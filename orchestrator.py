@@ -225,11 +225,40 @@ class Orchestrator:
             return self._embedding_cache[text]
         
         try:
-            # Use Ollama's embedding endpoint
-            response = ollama.embeddings(
-                model="nomic-embed-text",  # Ollama's default embedding model
-                prompt=text
-            )
+            # Try embedding models in order of preference (best to fallback)
+            embedding_models = [
+                "bge-large",           # Best accuracy for intent classification
+                "mxbai-embed-large",   # Good balance of accuracy and speed
+                "nomic-embed-text",    # Fast and lightweight
+                "all-minilm"           # Universal fallback
+            ]
+            
+            response = None
+            successful_model = None
+            
+            for model in embedding_models:
+                try:
+                    response = ollama.embeddings(
+                        model=model,
+                        prompt=text
+                    )
+                    successful_model = model
+                    break  # Success, use this model
+                except Exception as model_error:
+                    if "not found" in str(model_error).lower():
+                        continue  # Try next model
+                    else:
+                        print(f"⚠️ Error with {model}: {model_error}")
+                        continue
+            
+            if response is None:
+                print("❌ No embedding models available. Try: ollama pull bge-large")
+                return None
+            
+            # Cache successful model for future reference
+            if not hasattr(self, '_active_embedding_model'):
+                self._active_embedding_model = successful_model
+                print(f"✅ Using embedding model: {successful_model}")
             
             if 'embedding' in response:
                 embedding = np.array(response['embedding'])
