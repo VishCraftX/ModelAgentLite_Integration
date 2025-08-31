@@ -645,21 +645,32 @@ class MultiAgentMLPipeline:
             state.user_query = query
         
         # Check if we have an active interactive session that needs to continue
+        # BUT only if the query is a continuation command, not a new request
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session is not None and 
-            state.interactive_session.get('active', False)):
+            state.interactive_session.get('session_active', False)):
             
-            print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
+            # Check if this is a continuation command vs a new request
+            query_lower = query.lower().strip()
+            continuation_commands = ['proceed', 'yes', 'skip', 'no', 'continue', 'next', 'back', 'summary', 'explain']
             
-            # Route to the appropriate agent to continue the interactive session
-            agent_type = state.interactive_session['agent_type']
-            if agent_type == "preprocessing":
-                from agents_wrapper import preprocessing_agent
-                return self._prepare_response(preprocessing_agent.run(state))
-            elif agent_type == "feature_selection":
-                from agents_wrapper import feature_selection_agent
-                return self._prepare_response(feature_selection_agent.run(state))
-            # Add other interactive agents as needed
+            # If it's a continuation command, route directly to the interactive agent
+            if any(cmd in query_lower for cmd in continuation_commands):
+                print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
+                
+                # Route to the appropriate agent to continue the interactive session
+                agent_type = state.interactive_session['agent_type']
+                if agent_type == "preprocessing":
+                    from agents_wrapper import preprocessing_agent
+                    return self._prepare_response(preprocessing_agent.run(state))
+                elif agent_type == "feature_selection":
+                    from agents_wrapper import feature_selection_agent
+                    return self._prepare_response(feature_selection_agent.run(state))
+                # Add other interactive agents as needed
+            else:
+                # New request - clear interactive session and go through orchestrator
+                print(f"🆕 New request detected - clearing interactive session and routing through orchestrator")
+                state.interactive_session = None
         
         # Add raw data if provided
         if raw_data is not None:

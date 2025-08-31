@@ -24,6 +24,7 @@ class PipelineState(BaseModel):
     cleaned_data: Optional[pd.DataFrame] = None
     processed_data: Optional[pd.DataFrame] = None  # Add missing field
     selected_features: Optional[List[str]] = None
+    target_column: Optional[str] = None  # Add missing target column field
     trained_model: Optional[Any] = None  # Keep for backward compatibility
     
     # Multi-model storage
