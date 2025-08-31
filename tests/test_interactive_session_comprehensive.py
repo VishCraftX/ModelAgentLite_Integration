@@ -326,9 +326,9 @@ def test_real_interactive_session(pipeline, query, initial_session, test_data):
         # Save initial state to simulate existing session
         pipeline._save_session_state(session_id, initial_state)
         
-        # Now test the actual query
+        # Now test the actual query (correct method signature)
         response = pipeline.process_query(
-            user_query=query,
+            query=query,
             session_id=session_id,
             raw_data=None
         )

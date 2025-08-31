@@ -144,44 +144,44 @@ def get_improvement_suggestions(failure_reasons):
     return suggestions
 
 def analyze_actual_method_used(query, orchestrator_instance):
-    """Analyze which method was actually used for the final decision"""
+    """Analyze which method was actually used by capturing orchestrator output"""
     
-    # We need to trace through the orchestrator logic to see what actually happened
-    # This is a simplified analysis based on the orchestrator's decision flow
+    import io
+    import contextlib
     
     try:
-        # Get the semantic classification result
-        if hasattr(orchestrator_instance, '_intent_embeddings') and orchestrator_instance._intent_embeddings:
-            semantic_intent, semantic_confidence = orchestrator_instance._classify_with_semantic_similarity(query)
-            
-            # Check if semantic classification was confident enough (matches orchestrator logic)
-            semantic_confident = semantic_confidence.get("threshold_met", False)
-            # Note: Removed "confident" requirement to match optimized orchestrator
-            
-            if semantic_confident:
-                return "semantic"
+        # Capture orchestrator output to see which method was actually used
+        output_buffer = io.StringIO()
         
-        # If semantic wasn't confident, orchestrator tries LLM next (not keyword)
-        # We can't easily simulate LLM calls in the test, so we assume LLM was tried
-        # and check if it would have fallen back to keyword
+        with contextlib.redirect_stdout(output_buffer):
+            # Create a test state and run the orchestrator
+            from pipeline_state import PipelineState
+            test_state = PipelineState(user_query=query)
+            orchestrator_instance.route(test_state)
         
-        # The orchestrator only falls back to keyword if LLM fails/errors
-        # For test purposes, we'll assume LLM was attempted and return "llm"
-        # unless there are clear keyword patterns that would indicate keyword fallback
+        # Get the captured output
+        orchestrator_output = output_buffer.getvalue()
         
-        keyword_intent, keyword_confidence = orchestrator_instance._classify_with_keyword_scoring(query)
-        
-        # Only return "keyword" if this looks like a clear keyword-only case
-        # (i.e., very high keyword confidence that would suggest LLM wasn't needed)
-        if keyword_confidence["max_score"] >= 0.8:
+        # Analyze the output to determine which method was used
+        if "🧠 Semantic classification accepted" in orchestrator_output:
+            return "semantic"
+        elif "🤖 Using LLM for ambiguous/complex query" in orchestrator_output:
+            return "llm"
+        elif "⚡ Using keyword fallback as last resort" in orchestrator_output:
             return "keyword"
-        
-        # Otherwise, assume LLM was used (matches new Semantic → LLM → Keyword flow)
-        return "llm"
+        else:
+            # Fallback analysis based on output patterns
+            if "Semantic classification:" in orchestrator_output and "accepted" in orchestrator_output:
+                return "semantic"
+            elif "LLM classification:" in orchestrator_output:
+                return "llm"
+            elif "Keyword classification:" in orchestrator_output:
+                return "keyword"
+            else:
+                return "unknown"
         
     except Exception as e:
-        # If we can't determine the method, return unknown
-        return f"unknown_error_{str(e)[:20]}"
+        return f"error_{str(e)[:20]}"
 
 def test_semantic_classification():
     """Test the new semantic classification system"""
