@@ -154,28 +154,29 @@ def analyze_actual_method_used(query, orchestrator_instance):
         if hasattr(orchestrator_instance, '_intent_embeddings') and orchestrator_instance._intent_embeddings:
             semantic_intent, semantic_confidence = orchestrator_instance._classify_with_semantic_similarity(query)
             
-            # Check if semantic classification was confident enough
-            semantic_confident = (
-                semantic_confidence.get("threshold_met", False) and 
-                semantic_confidence.get("confident", False)
-            )
+            # Check if semantic classification was confident enough (matches orchestrator logic)
+            semantic_confident = semantic_confidence.get("threshold_met", False)
+            # Note: Removed "confident" requirement to match optimized orchestrator
             
             if semantic_confident:
                 return "semantic"
         
-        # If semantic wasn't confident, check keyword classification
+        # If semantic wasn't confident, orchestrator tries LLM next (not keyword)
+        # We can't easily simulate LLM calls in the test, so we assume LLM was tried
+        # and check if it would have fallen back to keyword
+        
+        # The orchestrator only falls back to keyword if LLM fails/errors
+        # For test purposes, we'll assume LLM was attempted and return "llm"
+        # unless there are clear keyword patterns that would indicate keyword fallback
+        
         keyword_intent, keyword_confidence = orchestrator_instance._classify_with_keyword_scoring(query)
         
-        # Check if keyword classification was confident enough
-        keyword_confident = (
-            keyword_confidence["max_score"] >= 0.25 and 
-            keyword_confidence["score_diff"] >= 0.1
-        )
-        
-        if keyword_confident:
+        # Only return "keyword" if this looks like a clear keyword-only case
+        # (i.e., very high keyword confidence that would suggest LLM wasn't needed)
+        if keyword_confidence["max_score"] >= 0.8:
             return "keyword"
         
-        # If neither semantic nor keyword was confident, it used LLM fallback
+        # Otherwise, assume LLM was used (matches new Semantic → LLM → Keyword flow)
         return "llm"
         
     except Exception as e:
