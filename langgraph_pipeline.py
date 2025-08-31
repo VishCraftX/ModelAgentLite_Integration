@@ -661,10 +661,8 @@ class MultiAgentMLPipeline:
                 # Route to the appropriate agent to continue the interactive session
                 agent_type = state.interactive_session['agent_type']
                 if agent_type == "preprocessing":
-                    # For preprocessing, we need to handle the continuation differently
-                    # since it uses a separate Slack bot for interaction
-                    print(f"🔄 Preprocessing session continuation - user should interact via Slack")
-                    return self._prepare_response(state, "Please continue the preprocessing workflow in Slack by responding to the menu options.")
+                    # Handle preprocessing commands directly
+                    return self._handle_preprocessing_interaction(state, query)
                 elif agent_type == "feature_selection":
                     from agents_wrapper import feature_selection_agent
                     return self._prepare_response(feature_selection_agent.run(state))
@@ -756,6 +754,119 @@ class MultiAgentMLPipeline:
         self._save_conversation_history(state.session_id, state.user_query, response["response"])
         
         return response
+    
+    def _handle_preprocessing_interaction(self, state: PipelineState, query: str):
+        """Handle interactive preprocessing commands"""
+        try:
+            from toolbox import slack_manager
+            query_lower = query.lower().strip()
+            
+            # Handle target column specification
+            if state.interactive_session.get('phase') == 'need_target':
+                if query_lower.startswith('target '):
+                    target_col = query[7:].strip()
+                else:
+                    target_col = query.strip()
+                
+                # Validate target column
+                if target_col in state.raw_data.columns:
+                    state.target_column = target_col
+                    state.interactive_session['target_column'] = target_col
+                    state.interactive_session['phase'] = 'waiting_input'
+                    
+                    response_msg = f"""✅ **Target column set:** `{target_col}`
+
+🧹 **Sequential Preprocessing Agent**
+
+📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target Column:** {target_col}
+
+**🔄 Preprocessing Phases:**
+• `Overview` - Dataset analysis and summary
+• `Outliers` - Detect and handle outliers  
+• `Missing Values` - Handle missing data
+• `Encoding` - Categorical variable encoding
+• `Transformations` - Feature transformations
+
+**💬 Your Options:**
+• `proceed` - Start preprocessing workflow
+• `skip overview` - Skip to outlier detection
+• `explain outliers` - Learn about outlier handling
+• `summary` - Show current status
+
+💬 **What would you like to do?**"""
+                    
+                    slack_manager.send_message(state.chat_session, response_msg)
+                    return self._prepare_response(state, f"Target column set to '{target_col}'. Ready for preprocessing!")
+                else:
+                    available_cols = list(state.raw_data.columns)
+                    error_msg = f"""❌ **Column '{target_col}' not found.**
+
+**Available columns:** {', '.join(available_cols[:10])}{'...' if len(available_cols) > 10 else ''}
+
+Please specify a valid column name."""
+                    
+                    slack_manager.send_message(state.chat_session, error_msg)
+                    return self._prepare_response(state, f"Column '{target_col}' not found. Please try again.")
+            
+            # Handle preprocessing commands
+            elif 'proceed' in query_lower:
+                # Run basic preprocessing and show results
+                from agents_wrapper import preprocessing_agent
+                processed_state = preprocessing_agent._run_basic_preprocessing_fallback(state)
+                
+                result_msg = f"""✅ **Preprocessing Completed!**
+
+📊 **Results:**
+• Original: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+• Processed: {processed_state.cleaned_data.shape[0]:,} rows × {processed_state.cleaned_data.shape[1]} columns
+• Target column: {processed_state.target_column}
+
+**✅ Your data is now ready for feature selection and model building!**
+
+**Next steps:**
+• `select features` - Choose important features
+• `build model` - Train a machine learning model
+• `analyze data` - Get data insights"""
+                
+                slack_manager.send_message(state.chat_session, result_msg)
+                
+                # Clear interactive session
+                state.interactive_session = None
+                
+                return self._prepare_response(processed_state, "Preprocessing completed successfully!")
+            
+            elif 'summary' in query_lower:
+                summary_msg = f"""📋 **Preprocessing Status**
+
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target:** {state.target_column or 'Not set'}
+🔄 **Phase:** {state.interactive_session.get('current_phase', 'Overview')}
+
+**Available Commands:**
+• `proceed` - Start preprocessing
+• `explain [phase]` - Learn about phases
+• `summary` - This status"""
+                
+                slack_manager.send_message(state.chat_session, summary_msg)
+                return self._prepare_response(state, "Status summary sent.")
+            
+            else:
+                # Default help message
+                help_msg = """💬 **Available Commands:**
+• `proceed` - Start preprocessing workflow
+• `summary` - Show current status
+• `explain outliers` - Learn about outlier handling
+• `target column_name` - Set target column (if not set)
+
+What would you like to do?"""
+                
+                slack_manager.send_message(state.chat_session, help_msg)
+                return self._prepare_response(state, "Help message sent.")
+                
+        except Exception as e:
+            print(f"❌ Error in preprocessing interaction: {e}")
+            return self._prepare_response(state, f"Error processing command: {str(e)}")
     
     def _generate_response_text(self, state: PipelineState) -> str:
         """Generate human-readable response text"""
