@@ -234,18 +234,22 @@ class MultiAgentMLPipeline:
             
             print(f"💾 Saving conversation history to: {history_file}")
             
-            # Load existing history
+            # Load existing history with robust error handling
             history = []
             if os.path.exists(history_file):
-                import json
-                with open(history_file, 'r') as f:
-                    loaded_data = json.load(f)
-                    if isinstance(loaded_data, list):
-                        history = loaded_data
-                    else:
-                        print(f"⚠️ Invalid conversation history format, starting fresh")
-                        history = []
-                print(f"📚 Loaded {len(history)} existing conversations")
+                try:
+                    import json
+                    with open(history_file, 'r') as f:
+                        loaded_data = json.load(f)
+                        if isinstance(loaded_data, list):
+                            history = loaded_data
+                        else:
+                            print(f"⚠️ Invalid conversation history format (not a list), starting fresh")
+                            history = []
+                    print(f"📚 Loaded {len(history)} existing conversations")
+                except (json.JSONDecodeError, Exception) as e:
+                    print(f"⚠️ Corrupted conversation history file, starting fresh: {e}")
+                    history = []
             
             # Add new conversation
             conversation = {
@@ -303,8 +307,17 @@ class MultiAgentMLPipeline:
                 state_dict['selected_features'] = f"DataFrame({state.selected_features.shape})" if state.selected_features is not None else None
             
             import json
+            from datetime import datetime
+            
+            # Custom JSON encoder for datetime objects
+            class DateTimeEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, datetime):
+                        return obj.isoformat()
+                    return super().default(obj)
+            
             with open(state_file, 'w') as f:
-                json.dump(state_dict, f, indent=2)
+                json.dump(state_dict, f, indent=2, cls=DateTimeEncoder)
                 
         except Exception as e:
             print(f"⚠️ Failed to save session state: {e}")
@@ -503,31 +516,29 @@ class MultiAgentMLPipeline:
         if raw_data is not None:
             state.raw_data = raw_data
         
-        # Set up progress callback
-        if progress_callback:
-            original_update = progress_tracker.update
-            def enhanced_update(state, message, stage=None, send_to_slack=True):
-                original_update(state, message, stage, send_to_slack)
-                progress_callback(message, stage or "")
-            progress_tracker.update = enhanced_update
+        # Progress callback is handled by ProgressTracker internally via SlackManager
+        # No need for enhanced_update wrapper that causes duplicates
         
         try:
             if LANGGRAPH_AVAILABLE and self.app:
                 # Run the full LangGraph pipeline
                 result_state = self.app.invoke(state)
+                
+                # LangGraph returns dict when ending at END node - convert back to PipelineState
+                if isinstance(result_state, dict):
+                    # Update original state with dict values
+                    for key, value in result_state.items():
+                        if hasattr(state, key):
+                            setattr(state, key, value)
+                    result_state = state
+                elif not isinstance(result_state, PipelineState):
+                    # Fallback to original state for any other type
+                    result_state = state
             else:
                 # Simplified pipeline without LangGraph
                 result_state = self._run_simplified_pipeline(state)
             
-            # Debug: Check result_state type
-            print(f"🔍 DEBUG: result_state type = {type(result_state)}")
-            if not isinstance(result_state, PipelineState):
-                print(f"⚠️ WARNING: result_state is {type(result_state)}, expected PipelineState")
-                if isinstance(result_state, dict):
-                    print(f"🔧 Using original state instead of dict result")
-                    result_state = state  # Fallback to original state
-            
-            # Save state
+            # Save state (now guaranteed to be PipelineState)
             state_manager.save_state(result_state)
             
             # Prepare response
