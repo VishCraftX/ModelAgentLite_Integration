@@ -443,7 +443,18 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             return "feature_selection"
         
         elif intent == "model_building":
-            # Check prerequisites for model building
+            # Check if this is actually an educational/explanatory query about ML concepts
+            query_lower = (state.user_query or "").lower()
+            educational_patterns = [
+                "tell me about", "tell me how", "explain", "what is", "how does", "how do",
+                "describe", "definition of", "meaning of", "concept of"
+            ]
+            
+            if any(pattern in query_lower for pattern in educational_patterns):
+                print("[Orchestrator] Educational query detected - routing to general response")
+                return "general_response"
+            
+            # Check prerequisites for actual model building
             if state.raw_data is None:
                 print("[Orchestrator] No data available for model building")
                 return "general_response"
