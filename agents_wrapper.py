@@ -365,17 +365,26 @@ class ModelBuildingAgentWrapper:
             
             print(f"🚀 Launching actual model building agent")
             
+            # Load data into the agent if available
+            if data_to_use is not None:
+                print(f"📊 Loading data into model building agent")
+                self.agent.load_data(data_to_use, state.chat_session)
+                
+                # Set target column if available
+                if state.target_column:
+                    if state.chat_session not in self.agent.user_states:
+                        self.agent.user_states[state.chat_session] = {}
+                    self.agent.user_states[state.chat_session]["target_column"] = state.target_column
+                    print(f"🎯 Set target column: {state.target_column}")
+            
             # The working agent will handle all the model building process
             # including LLM interactions, Slack updates, etc.
             
-            # Call the working agent's run method
-            # This will handle the entire model building workflow
-            result = self.agent.run_agent(
-                user_query=state.user_query,
+            # Call the working agent's process_query method
+            result = self.agent.process_query(
+                query=state.user_query,
                 user_id=state.chat_session,
-                data=data_to_use,
-                target_column=state.target_column,
-                selected_features=features_to_use
+                progress_callback=None  # Could add progress callback here
             )
             
             # Extract results
