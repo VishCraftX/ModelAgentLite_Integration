@@ -956,7 +956,7 @@ class IntegratedModelBuildingAgent(BaseAgent):
             
             # Use LLM for conversational response
             response = ollama.chat(
-                model="llama3.2:3b",  # Use available model
+                model="qwen2.5-coder:32b-instruct-q4_K_M",  # Same model as ModelBuildingAgent
                 messages=[
                     {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users understand ML concepts, build models, analyze data, and work with datasets. When explaining algorithms like LightGBM, Random Forest, etc., be clear and educational. Keep responses conversational but informative."},
                     {"role": "user", "content": context_prompt}
