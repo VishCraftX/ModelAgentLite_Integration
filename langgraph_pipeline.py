@@ -595,6 +595,10 @@ class MultiAgentMLPipeline:
         if state.last_error:
             return f"❌ Operation failed: {state.last_error}"
         
+        # Check if orchestrator generated a specific response (e.g., for general queries)
+        if state.last_response:
+            return state.last_response
+        
         # Generate response based on what was accomplished
         accomplishments = []
         
