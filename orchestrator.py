@@ -611,8 +611,8 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             
             # Check prerequisites for actual model building
             if state.raw_data is None:
-                print("[Orchestrator] No data available for model building")
-                return "general_response"
+                print("[Orchestrator] No data available for model building - routing to model_building agent to handle")
+                return "model_building"  # Let model building agent handle the "no data" case
             
             # Check for direct model building keywords
             query_lower = (state.user_query or "").lower()
@@ -646,10 +646,10 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             return "code_execution"
         
         elif intent == "general_query":
-            # Handle general queries directly and end
+            # Handle general queries - route to general_response node
             response = self.generate_general_response(state.user_query, state)
             state.last_response = response
-            return AgentType.END.value
+            return "general_response"
         
         else:
             # Fallback to data-driven routing

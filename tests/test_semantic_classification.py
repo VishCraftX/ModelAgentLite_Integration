@@ -11,6 +11,138 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from orchestrator import Orchestrator
 from pipeline_state import PipelineState
 
+def analyze_classification_failure(query, expected_intent, actual_intent, method_used):
+    """Analyze why a classification failed and provide detailed reasoning"""
+    
+    query_lower = query.lower()
+    
+    # Common failure patterns and their explanations
+    failure_patterns = {
+        # Semantic embedding issues
+        "ambiguous_semantics": "Query semantics are ambiguous - could legitimately belong to multiple categories",
+        "embedding_similarity": "Embedding vectors are too similar between intents - needs better model",
+        "context_missing": "Query lacks sufficient context for accurate semantic classification",
+        "domain_mismatch": "Query uses domain-specific terms not well represented in embeddings",
+        
+        # Keyword fallback issues  
+        "keyword_overlap": "Keywords appear in multiple intent categories causing confusion",
+        "missing_keywords": "Expected keywords not present in keyword lists",
+        "weak_keywords": "Query contains weak/generic keywords that match multiple intents",
+        "keyword_priority": "Keyword scoring prioritized wrong intent due to frequency",
+        
+        # Intent boundary issues
+        "intent_boundary": "Query sits on boundary between two valid intents",
+        "multi_intent": "Query contains multiple intents - system chose different primary intent",
+        "implicit_intent": "Intent is implicit rather than explicit in the query",
+        "negative_phrasing": "Negative phrasing (don't, avoid, skip) confused the classifier",
+        
+        # Model/system issues
+        "model_unavailable": "Embedding model not available, fell back to less accurate method",
+        "confidence_threshold": "Classification confidence below threshold, triggered fallback",
+        "preprocessing_bias": "System has bias toward preprocessing due to keyword frequency",
+        "general_fallback": "Unclear query defaulted to general_query classification"
+    }
+    
+    # Analyze specific failure case
+    if method_used == "keyword":
+        # Keyword-based classification failure
+        if expected_intent == "preprocessing" and actual_intent in ["feature_selection", "model_building"]:
+            if any(word in query_lower for word in ["select", "feature", "variable", "attribute"]):
+                return "keyword_overlap - Query contains feature selection keywords"
+            elif any(word in query_lower for word in ["model", "train", "build", "predict"]):
+                return "keyword_overlap - Query contains model building keywords"
+            else:
+                return "missing_keywords - Preprocessing keywords not detected"
+                
+        elif expected_intent == "feature_selection" and actual_intent == "preprocessing":
+            if any(word in query_lower for word in ["clean", "prepare", "process"]):
+                return "keyword_overlap - Query contains preprocessing keywords"
+            else:
+                return "missing_keywords - Feature selection keywords not detected"
+                
+        elif expected_intent == "model_building" and actual_intent == "preprocessing":
+            if any(word in query_lower for word in ["clean", "prepare", "data"]):
+                return "keyword_overlap - Query contains preprocessing keywords"
+            else:
+                return "missing_keywords - Model building keywords not detected"
+                
+        elif actual_intent == "general_query":
+            return "general_fallback - No strong keywords detected, defaulted to general"
+            
+        else:
+            return "keyword_priority - Wrong intent had higher keyword score"
+    
+    else:  # Semantic classification failure
+        if expected_intent == "preprocessing" and actual_intent == "feature_selection":
+            if "engineer" in query_lower or "create" in query_lower or "generate" in query_lower:
+                return "intent_boundary - Engineering/creation could be preprocessing or feature work"
+            else:
+                return "embedding_similarity - Preprocessing and feature selection embeddings too similar"
+                
+        elif expected_intent == "feature_selection" and actual_intent == "model_building":
+            if "model" in query_lower or "algorithm" in query_lower:
+                return "multi_intent - Query mentions both feature work and modeling"
+            else:
+                return "embedding_similarity - Feature selection and model building embeddings confused"
+                
+        elif expected_intent == "model_building" and actual_intent == "code_execution":
+            if "analyze" in query_lower or "calculate" in query_lower or "compute" in query_lower:
+                return "intent_boundary - Analysis could be model evaluation or general computation"
+            else:
+                return "ambiguous_semantics - Model building vs analysis semantics unclear"
+                
+        elif "don't" in query_lower or "avoid" in query_lower or "skip" in query_lower:
+            return "negative_phrasing - Negative language confused semantic understanding"
+            
+        elif actual_intent == "general_query":
+            return "context_missing - Query too vague for semantic classification"
+            
+        else:
+            return "embedding_similarity - Intent embeddings not sufficiently distinct"
+    
+    # Default analysis
+    return f"classification_error - {expected_intent} misclassified as {actual_intent} via {method_used}"
+
+def get_improvement_suggestions(failure_reasons):
+    """Provide specific improvement suggestions based on failure patterns"""
+    
+    suggestions = []
+    
+    for reason, count in failure_reasons.items():
+        if "keyword_overlap" in reason and count > 2:
+            suggestions.append({
+                "priority": "HIGH",
+                "issue": "Keyword Overlap",
+                "suggestion": "Replace keyword matching with semantic classification for overlapping terms",
+                "action": "Prioritize semantic embeddings over keyword scoring"
+            })
+        
+        elif "embedding_similarity" in reason and count > 2:
+            suggestions.append({
+                "priority": "MEDIUM", 
+                "issue": "Intent Definitions Too Similar",
+                "suggestion": "Refine intent definitions to be more distinct",
+                "action": "Update intent_definitions in orchestrator.py with more specific descriptions"
+            })
+        
+        elif "missing_keywords" in reason and count > 3:
+            suggestions.append({
+                "priority": "LOW",
+                "issue": "Incomplete Keyword Lists", 
+                "suggestion": "Add missing keywords to keyword lists",
+                "action": "Update keyword lists in orchestrator.py or rely more on semantic classification"
+            })
+        
+        elif "model_unavailable" in reason and count > 0:
+            suggestions.append({
+                "priority": "CRITICAL",
+                "issue": "Embedding Model Missing",
+                "suggestion": "Install required embedding model",
+                "action": "Run: ollama pull bge-large"
+            })
+    
+    return suggestions
+
 def test_semantic_classification():
     """Test the new semantic classification system"""
     
@@ -254,8 +386,22 @@ def test_semantic_classification():
             if expected_intent in ["preprocessing", "feature_selection", "model_building", "code_execution", "general_query"]:
                 stats["by_intent"][expected_intent]["total"] += 1
                 
-                # Map result to intent (remove _node suffix)
-                result_intent = result.replace("_node", "").replace("preprocessing", "preprocessing").replace("feature_selection", "feature_selection").replace("model_building", "model_building").replace("code_execution", "code_execution").replace("general_response", "general_query")
+                # Map result to intent (remove _node suffix and normalize)
+                result_intent = result.replace("_node", "")
+                
+                # Normalize routing results to intent names
+                if result_intent == "preprocessing":
+                    result_intent = "preprocessing"
+                elif result_intent == "feature_selection":
+                    result_intent = "feature_selection"
+                elif result_intent == "model_building":
+                    result_intent = "model_building"
+                elif result_intent == "code_execution":
+                    result_intent = "code_execution"
+                elif result_intent == "general_response":
+                    result_intent = "general_query"
+                elif result_intent == "END":
+                    result_intent = "general_query"  # END was used for general queries before fix
                 
                 if result_intent == expected_intent:
                     stats["correct_classifications"] += 1
@@ -266,6 +412,17 @@ def test_semantic_classification():
                         stats["by_intent"][expected_intent]["semantic"] += 1
                 else:
                     print(f"❌ Expected: {expected_intent}, Got: {result_intent}")
+                    
+                    # Analyze WHY it failed
+                    failure_reason = analyze_classification_failure(query, expected_intent, result_intent, method_used)
+                    print(f"🔍 Failure Analysis: {failure_reason}")
+                    
+                    # Track failure reasons
+                    if "failure_reasons" not in stats:
+                        stats["failure_reasons"] = {}
+                    if failure_reason not in stats["failure_reasons"]:
+                        stats["failure_reasons"][failure_reason] = 0
+                    stats["failure_reasons"][failure_reason] += 1
             else:
                 print(f"🤔 Complex case - manual analysis needed")
                 
@@ -303,6 +460,43 @@ def test_semantic_classification():
             print(f"   {intent.upper()}:")
             print(f"     Accuracy: {data['correct']}/{data['total']} = {accuracy:.1f}%")
             print(f"     Semantic Rate: {data['semantic']}/{data['total']} = {semantic_rate:.1f}%")
+    
+    # Failure reason analysis
+    if "failure_reasons" in stats and stats["failure_reasons"]:
+        print(f"\n🔍 FAILURE ANALYSIS:")
+        print("   Top failure reasons:")
+        sorted_failures = sorted(stats["failure_reasons"].items(), key=lambda x: x[1], reverse=True)
+        for reason, count in sorted_failures[:5]:  # Top 5 failure reasons
+            percentage = count / sum(stats["failure_reasons"].values()) * 100
+            print(f"     • {reason}: {count} cases ({percentage:.1f}%)")
+        
+        # Provide actionable recommendations based on failure patterns
+        print(f"\n💡 ACTIONABLE INSIGHTS:")
+        for reason, count in sorted_failures[:3]:  # Top 3 for recommendations
+            if "keyword_overlap" in reason:
+                print("     ⚠️  Keyword lists have overlapping terms - consider semantic-first approach")
+            elif "embedding_similarity" in reason:
+                print("     ⚠️  Intent definitions too similar - refine semantic definitions")
+            elif "missing_keywords" in reason:
+                print("     ⚠️  Keyword lists incomplete - add missing terms or use semantic")
+            elif "intent_boundary" in reason:
+                print("     ℹ️  Some queries legitimately span multiple intents - expected behavior")
+            elif "model_unavailable" in reason:
+                print("     🚨 Embedding model not available - run 'ollama pull bge-large'")
+            elif "general_fallback" in reason:
+                print("     ⚠️  Queries too vague - may need better intent definitions")
+        
+        # Detailed improvement suggestions
+        suggestions = get_improvement_suggestions(stats["failure_reasons"])
+        if suggestions:
+            print(f"\n🛠️  SPECIFIC IMPROVEMENT ACTIONS:")
+            for suggestion in suggestions:
+                priority_icon = {"CRITICAL": "🚨", "HIGH": "⚠️", "MEDIUM": "💡", "LOW": "ℹ️"}
+                icon = priority_icon.get(suggestion["priority"], "•")
+                print(f"     {icon} {suggestion['priority']}: {suggestion['issue']}")
+                print(f"        Solution: {suggestion['suggestion']}")
+                print(f"        Action: {suggestion['action']}")
+                print()
     
     # Recommendations
     print(f"\n💡 RECOMMENDATIONS:")
