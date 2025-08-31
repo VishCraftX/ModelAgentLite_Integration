@@ -152,38 +152,42 @@ class IntegratedPreprocessingAgent(BaseAgent):
                 self._update_progress(state, "No raw data available for preprocessing")
                 return state
             
-            # Create preprocessing state from pipeline state
-            preprocessing_state = self._create_preprocessing_state(state)
-            
-            # Run comprehensive preprocessing
-            cleaned_data = self._run_comprehensive_preprocessing(preprocessing_state, state)
-            
-            # Update pipeline state
-            state.cleaned_data = cleaned_data
-            state.preprocessing_state = {
-                "completed": True,
-                "timestamp": datetime.now().isoformat(),
-                "original_shape": state.raw_data.shape if state.raw_data is not None else None,
-                "cleaned_shape": cleaned_data.shape if cleaned_data is not None else None,
-                "phases_completed": preprocessing_state.completed_phases if hasattr(preprocessing_state, 'completed_phases') else []
-            }
-            
-            # Save artifact
-            if cleaned_data is not None and state.chat_session:
-                try:
-                    artifact_path = self.artifact_manager.save_artifact(
-                        state.chat_session, 
-                        "cleaned_data.csv", 
-                        cleaned_data, 
-                        "dataframe"
-                    )
-                    if artifact_path:
-                        state.artifacts = state.artifacts or {}
-                        state.artifacts["cleaned_data_path"] = artifact_path
-                except Exception as e:
-                    print(f"[{self.agent_name}] Failed to save artifact: {e}")
-            
-            self._update_progress(state, f"Preprocessing completed. Shape: {cleaned_data.shape if cleaned_data is not None else 'None'}")
+            # Launch full interactive preprocessing workflow (exactly like original agent)
+            if self.preprocessing_available and self.langgraph_workflow:
+                self._update_progress(state, "Launching interactive preprocessing workflow", "Interactive Mode")
+                return self.run_interactive_workflow(state)
+            else:
+                # Fallback to comprehensive preprocessing without interactivity
+                self._update_progress(state, "Running comprehensive preprocessing", "Comprehensive Mode")
+                preprocessing_state = self._create_preprocessing_state(state)
+                cleaned_data = self._run_comprehensive_preprocessing(preprocessing_state, state)
+                
+                # Update pipeline state
+                state.cleaned_data = cleaned_data
+                state.preprocessing_state = {
+                    "completed": True,
+                    "timestamp": datetime.now().isoformat(),
+                    "original_shape": state.raw_data.shape if state.raw_data is not None else None,
+                    "cleaned_shape": cleaned_data.shape if cleaned_data is not None else None,
+                    "phases_completed": preprocessing_state.completed_phases if hasattr(preprocessing_state, 'completed_phases') else []
+                }
+                
+                # Save artifact
+                if cleaned_data is not None and state.chat_session:
+                    try:
+                        artifact_path = self.artifact_manager.save_artifact(
+                            state.chat_session, 
+                            "cleaned_data.csv", 
+                            cleaned_data, 
+                            "dataframe"
+                        )
+                        if artifact_path:
+                            state.artifacts = state.artifacts or {}
+                            state.artifacts["cleaned_data_path"] = artifact_path
+                    except Exception as e:
+                        print(f"[{self.agent_name}] Failed to save artifact: {e}")
+                
+                self._update_progress(state, f"Preprocessing completed. Shape: {cleaned_data.shape if cleaned_data is not None else 'None'}")
             
         except Exception as e:
             error_msg = f"Preprocessing failed: {str(e)}"
@@ -301,43 +305,137 @@ class IntegratedPreprocessingAgent(BaseAgent):
             return self._run_basic_preprocessing(pipeline_state)
     
     def run_interactive_workflow(self, state: PipelineState, user_input: str = None) -> PipelineState:
-        """Run the interactive LangGraph preprocessing workflow"""
+        """Run the full interactive preprocessing workflow exactly like the original agent"""
         if not PREPROCESSING_AVAILABLE or not self.langgraph_workflow:
             return self._run_basic_preprocessing_fallback(state)
         
         try:
-            # Create preprocessing state from pipeline state
-            preprocessing_state = self._create_preprocessing_state(state)
-            
-            # If user input provided, process it
-            if user_input:
-                preprocessing_state = process_user_input_with_llm(preprocessing_state, user_input)
-            
-            # Run the LangGraph workflow
-            result = self.langgraph_workflow.invoke(preprocessing_state)
-            
-            # Update pipeline state with results
-            if hasattr(result, 'df') and result.df is not None:
-                state.processed_data = result.df
-                state.preprocessing_state = {
-                    "completed": True,
-                    "timestamp": datetime.now().isoformat(),
-                    "original_shape": state.raw_data.shape if state.raw_data is not None else None,
-                    "processed_shape": result.df.shape,
-                    "method": "interactive_langgraph",
-                    "phases_completed": result.completed_phases,
-                    "phase_results": result.phase_results
+            # Initialize or continue interactive session
+            if not hasattr(state, 'interactive_session') or state.interactive_session is None:
+                # Start new interactive session
+                self._update_progress(state, "🚀 Starting Interactive Preprocessing Session", "Interactive Mode")
+                
+                # Create initial preprocessing state
+                preprocessing_state = self._create_preprocessing_state(state)
+                
+                # Run initial overview
+                result = self.langgraph_workflow.invoke(preprocessing_state)
+                
+                # Store interactive session state
+                state.interactive_session = {
+                    "agent_type": "preprocessing",
+                    "current_state": result,
+                    "active": True,
+                    "session_id": state.chat_session
                 }
+                
+                # Send initial response to user
+                if hasattr(result, 'query_response') and result.query_response:
+                    self._send_interactive_message(state, result.query_response)
+                    state.last_response = result.query_response
+                
+                # If waiting for input, prompt user
+                if hasattr(result, 'current_step') and result.current_step == "awaiting_user_input":
+                    prompt = self._generate_input_prompt(result)
+                    self._send_interactive_message(state, prompt)
+                    state.last_response += f"\n\n{prompt}"
+                
+                return state
             
-            # Store any response for user
-            if hasattr(result, 'query_response') and result.query_response:
-                state.last_response = result.query_response
-            
-            return state
+            else:
+                # Continue existing interactive session
+                current_preprocessing_state = state.interactive_session["current_state"]
+                
+                # Process user input if provided
+                if user_input:
+                    # Use the original agent's input processing
+                    from preprocessing_agent_impl import process_user_input_with_llm
+                    updated_state = process_user_input_with_llm(current_preprocessing_state, user_input)
+                    
+                    # Continue workflow
+                    result = self.langgraph_workflow.invoke(updated_state)
+                    
+                    # Update session state
+                    state.interactive_session["current_state"] = result
+                    
+                    # Send response to user
+                    if hasattr(result, 'query_response') and result.query_response:
+                        self._send_interactive_message(state, result.query_response)
+                        state.last_response = result.query_response
+                    
+                    # Check if session is complete
+                    if (hasattr(result, 'current_phase') and 
+                        str(result.current_phase) == "PreprocessingPhase.COMPLETION"):
+                        
+                        # Session completed - extract final results
+                        if hasattr(result, 'df') and result.df is not None:
+                            state.cleaned_data = result.df
+                            state.preprocessing_state = {
+                                "completed": True,
+                                "timestamp": datetime.now().isoformat(),
+                                "original_shape": state.raw_data.shape if state.raw_data is not None else None,
+                                "cleaned_shape": result.df.shape,
+                                "method": "interactive_langgraph",
+                                "phases_completed": getattr(result, 'completed_phases', [])
+                            }
+                            
+                            completion_msg = f"🎉 Interactive preprocessing completed!\n\n" \
+                                           f"📊 **Final Results:**\n" \
+                                           f"• Original shape: {state.raw_data.shape if state.raw_data is not None else 'Unknown'}\n" \
+                                           f"• Final shape: {result.df.shape}\n" \
+                                           f"• Phases completed: {len(getattr(result, 'completed_phases', []))}"
+                            
+                            self._send_interactive_message(state, completion_msg)
+                            state.last_response = completion_msg
+                        
+                        # Clear interactive session
+                        state.interactive_session = None
+                    
+                    elif (hasattr(result, 'current_step') and 
+                          result.current_step == "awaiting_user_input"):
+                        # Still waiting for more input
+                        prompt = self._generate_input_prompt(result)
+                        self._send_interactive_message(state, prompt)
+                        if state.last_response:
+                            state.last_response += f"\n\n{prompt}"
+                        else:
+                            state.last_response = prompt
+                
+                return state
             
         except Exception as e:
             print(f"[{self.agent_name}] Interactive workflow failed: {e}")
+            # Clear interactive session on error
+            state.interactive_session = None
             return self._run_basic_preprocessing_fallback(state)
+    
+    def _send_interactive_message(self, state: PipelineState, message: str):
+        """Send interactive message via Slack"""
+        try:
+            from toolbox import slack_manager
+            if slack_manager and state.chat_session:
+                slack_manager.send_message(message, state.chat_session)
+        except Exception as e:
+            print(f"[{self.agent_name}] Failed to send interactive message: {e}")
+            print(f"📤 Interactive Message: {message}")
+    
+    def _generate_input_prompt(self, preprocessing_state) -> str:
+        """Generate appropriate input prompt based on current phase"""
+        try:
+            phase_name = str(preprocessing_state.current_phase).split('.')[-1].title()
+        except:
+            phase_name = "Processing"
+        
+        prompt = f"🔄 **{phase_name} Phase**\n\n"
+        prompt += "💬 **Your options:**\n" \
+                 "• `proceed` or `yes` - Continue with recommended approach\n" \
+                 "• `skip` - Skip this phase\n" \
+                 "• `modify [details]` - Change the approach\n" \
+                 "• `explain` or `what` - Get more information\n" \
+                 "• `summary` - Show current strategies\n\n" \
+                 "**What would you like to do?**"
+        
+        return prompt
     
     def _run_basic_preprocessing_fallback(self, state: PipelineState) -> PipelineState:
         """Fallback to basic preprocessing"""
@@ -428,7 +526,7 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
                 self.feature_selection_available = False
     
     def run(self, state: PipelineState) -> PipelineState:
-        """Execute feature selection using actual implementation"""
+        """Execute feature selection using actual implementation with full interactivity"""
         self._update_progress(state, "Starting feature selection", "Feature Selection")
         
         try:
@@ -436,37 +534,45 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
                 self._update_progress(state, "No cleaned data available for feature selection")
                 return state
             
-            if not self.feature_selection_available or self.bot is None:
-                selected_features = self._run_basic_feature_selection(state)
+            # Check if this is actually a general query that got routed here
+            if self._is_general_query(state.user_query):
+                return self._handle_general_query(state)
+            
+            # Launch full interactive feature selection workflow (exactly like original agent)
+            if self.feature_selection_available:
+                self._update_progress(state, "Launching interactive feature selection workflow", "Interactive Mode")
+                return self.run_interactive_workflow(state)
             else:
-                selected_features = self._run_comprehensive_feature_selection(state)
-            
-            # Update pipeline state
-            state.selected_features = selected_features
-            state.feature_selection_state = {
-                "completed": True,
-                "timestamp": datetime.now().isoformat(),
-                "total_features": len(state.cleaned_data.columns),
-                "selected_features": len(selected_features) if selected_features else 0,
-                "selection_method": "comprehensive" if self.feature_selection_available else "basic"
-            }
-            
-            # Save artifact
-            if selected_features and state.chat_session:
-                try:
-                    artifact_path = self.artifact_manager.save_artifact(
-                        state.chat_session, 
-                        "selected_features.json", 
-                        {"selected_features": selected_features}, 
-                        "json"
-                    )
-                    if artifact_path:
-                        state.artifacts = state.artifacts or {}
-                        state.artifacts["selected_features_path"] = artifact_path
-                except Exception as e:
-                    print(f"[{self.agent_name}] Failed to save artifact: {e}")
-            
-            self._update_progress(state, f"Feature selection completed. Selected {len(selected_features) if selected_features else 0} features")
+                # Fallback to basic feature selection
+                self._update_progress(state, "Running basic feature selection", "Basic Mode")
+                selected_features = self._run_basic_feature_selection(state)
+                
+                # Update pipeline state
+                state.selected_features = selected_features
+                state.feature_selection_state = {
+                    "completed": True,
+                    "timestamp": datetime.now().isoformat(),
+                    "total_features": len(state.cleaned_data.columns),
+                    "selected_features": len(selected_features) if selected_features else 0,
+                    "selection_method": "basic"
+                }
+                
+                # Save artifact
+                if selected_features and state.chat_session:
+                    try:
+                        artifact_path = self.artifact_manager.save_artifact(
+                            state.chat_session, 
+                            "selected_features.json", 
+                            {"selected_features": selected_features}, 
+                            "json"
+                        )
+                        if artifact_path:
+                            state.artifacts = state.artifacts or {}
+                            state.artifacts["selected_features_path"] = artifact_path
+                    except Exception as e:
+                        print(f"[{self.agent_name}] Failed to save artifact: {e}")
+                
+                self._update_progress(state, f"Feature selection completed. Selected {len(selected_features) if selected_features else 0} features")
             
         except Exception as e:
             error_msg = f"Feature selection failed: {str(e)}"
@@ -474,6 +580,233 @@ class IntegratedFeatureSelectionAgent(BaseAgent):
             state.last_error = error_msg
             print(f"[{self.agent_name}] Error: {e}")
         
+        return state
+    
+    def _is_general_query(self, query: str) -> bool:
+        """Check if this is a general query about feature selection concepts"""
+        if not query:
+            return False
+        
+        query_lower = query.lower()
+        general_patterns = [
+            "what is", "what are", "explain", "tell me about", "how does", "how do",
+            "describe", "definition of", "meaning of", "concept of", "different types",
+            "techniques you can", "methods available", "capabilities"
+        ]
+        
+        return any(pattern in query_lower for pattern in general_patterns)
+    
+    def _handle_general_query(self, state: PipelineState) -> PipelineState:
+        """Handle general queries about feature selection concepts"""
+        try:
+            # Use LLM to generate educational response about feature selection
+            import requests
+            import json
+            
+            prompt = f"""You are an expert in feature selection and machine learning. The user asked: "{state.user_query}"
+
+Please provide a comprehensive, educational response about feature selection concepts, techniques, and best practices. 
+
+Include information about:
+- Different feature selection methods (filter, wrapper, embedded)
+- Statistical measures (IV, correlation, VIF, CSI)
+- Advanced techniques (SHAP, LASSO, PCA)
+- When to use each approach
+- Practical considerations
+
+Keep the response informative but accessible, with examples where helpful."""
+
+            try:
+                response = requests.post(
+                    "http://localhost:11434/api/generate",
+                    json={
+                        "model": "qwen2.5-coder:32b-instruct-q4_K_M",
+                        "prompt": prompt,
+                        "stream": False
+                    },
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    llm_response = result.get("response", "")
+                    
+                    if llm_response.strip():
+                        state.last_response = llm_response
+                        return state
+            
+            except Exception as e:
+                print(f"[{self.agent_name}] LLM call failed: {e}")
+            
+            # Fallback response
+            fallback_response = f"""🔍 **Feature Selection Overview**
+
+Feature selection is the process of selecting the most relevant features for your machine learning model. Here are the main approaches I can help you with:
+
+**📊 Statistical Methods:**
+• **IV Analysis** - Measures predictive power of features
+• **Correlation Analysis** - Identifies redundant features  
+• **VIF Analysis** - Detects multicollinearity
+• **CSI Analysis** - Checks feature stability over time
+
+**🤖 Advanced Techniques:**
+• **SHAP Analysis** - Model-agnostic feature importance
+• **LASSO Selection** - Regularized feature selection
+• **PCA Analysis** - Dimensionality reduction
+
+**💡 Interactive Capabilities:**
+• Upload your dataset and I'll guide you through the analysis
+• Ask questions like "run IV analysis" or "show correlation with target"
+• Get recommendations on which techniques to use
+• Understand your data through exploratory analysis
+
+Would you like to upload a dataset to start interactive feature selection, or do you have specific questions about any of these techniques?"""
+            
+            state.last_response = fallback_response
+            return state
+            
+        except Exception as e:
+            print(f"[{self.agent_name}] Error handling general query: {e}")
+            state.last_response = "I can help you with feature selection analysis. Please upload a dataset to get started!"
+            return state
+    
+    def run_interactive_workflow(self, state: PipelineState, user_input: str = None) -> PipelineState:
+        """Run the full interactive feature selection workflow exactly like the original agent"""
+        if not FEATURE_SELECTION_AVAILABLE:
+            return self._run_basic_feature_selection_fallback(state)
+        
+        try:
+            # Initialize or continue interactive session
+            if not hasattr(state, 'interactive_session') or state.interactive_session is None:
+                # Start new interactive feature selection session
+                self._update_progress(state, "🚀 Starting Interactive Feature Selection Session", "Interactive Mode")
+                
+                # Create feature selection session (like original agent)
+                temp_file = os.path.join(tempfile.gettempdir(), f"temp_data_{state.session_id}.csv")
+                state.cleaned_data.to_csv(temp_file, index=False)
+                
+                from feature_selection_agent_impl import UserSession
+                fs_session = UserSession(
+                    file_path=temp_file,
+                    file_name=f"data_{state.session_id}.csv",
+                    user_id=state.chat_session,
+                    original_df=state.cleaned_data.copy(),
+                    current_df=state.cleaned_data.copy(),
+                    current_features=list(state.cleaned_data.columns),
+                    phase="analyzing"  # Start in analyzing phase
+                )
+                
+                # Set target column if available
+                if state.target_column:
+                    fs_session.target_column = state.target_column
+                    fs_session.phase = "waiting_input"
+                else:
+                    fs_session.phase = "need_target"
+                
+                # Store interactive session state
+                state.interactive_session = {
+                    "agent_type": "feature_selection",
+                    "fs_session": fs_session,
+                    "active": True,
+                    "session_id": state.chat_session
+                }
+                
+                # Generate and send initial menu
+                from feature_selection_agent_impl import MenuGenerator
+                if fs_session.phase == "need_target":
+                    initial_msg = "🎯 Please specify your target column to start feature selection analysis."
+                else:
+                    initial_msg = MenuGenerator.generate_main_menu(fs_session)
+                
+                self._send_interactive_message(state, initial_msg)
+                state.last_response = initial_msg
+                
+                return state
+            
+            else:
+                # Continue existing interactive session
+                fs_session = state.interactive_session["fs_session"]
+                
+                # Process user input if provided
+                if user_input:
+                    # Use the original agent's bot logic
+                    from feature_selection_agent_impl import AgenticFeatureSelectionBot
+                    
+                    # Create a temporary bot instance for processing
+                    bot = AgenticFeatureSelectionBot()
+                    
+                    # Mock Slack 'say' function to capture responses
+                    responses = []
+                    def mock_say(message, thread_ts=None):
+                        responses.append(message)
+                    
+                    # Handle the user input
+                    if fs_session.phase == "need_target":
+                        bot.handle_target_selection(fs_session, user_input, mock_say)
+                    else:
+                        bot.handle_analysis_request(fs_session, user_input, mock_say)
+                    
+                    # Send all responses to user
+                    for response in responses:
+                        self._send_interactive_message(state, response)
+                    
+                    # Update state with latest response
+                    if responses:
+                        state.last_response = responses[-1]
+                    
+                    # Check if analysis is complete (user said "proceed" or similar)
+                    if (fs_session.phase == "completed" or 
+                        (hasattr(fs_session, 'analysis_chain') and 
+                         len(fs_session.analysis_chain) > 0 and
+                         "proceed" in user_input.lower())):
+                        
+                        # Extract final selected features
+                        selected_features = fs_session.current_features
+                        
+                        state.selected_features = selected_features
+                        state.feature_selection_state = {
+                            "completed": True,
+                            "timestamp": datetime.now().isoformat(),
+                            "original_features": len(fs_session.original_df.columns) if fs_session.original_df is not None else 0,
+                            "selected_features": len(selected_features),
+                            "method": "interactive_agentic",
+                            "analysis_chain": [step.type for step in fs_session.analysis_chain] if hasattr(fs_session, 'analysis_chain') else []
+                        }
+                        
+                        completion_msg = f"🎉 Interactive feature selection completed!\n\n" \
+                                       f"📊 **Final Results:**\n" \
+                                       f"• Original features: {len(fs_session.original_df.columns) if fs_session.original_df is not None else 0}\n" \
+                                       f"• Selected features: {len(selected_features)}\n" \
+                                       f"• Analysis steps: {len(fs_session.analysis_chain) if hasattr(fs_session, 'analysis_chain') else 0}"
+                        
+                        self._send_interactive_message(state, completion_msg)
+                        state.last_response = completion_msg
+                        
+                        # Clear interactive session
+                        state.interactive_session = None
+                
+                return state
+            
+        except Exception as e:
+            print(f"[{self.agent_name}] Interactive workflow failed: {e}")
+            # Clear interactive session on error
+            state.interactive_session = None
+            return self._run_basic_feature_selection_fallback(state)
+    
+    def _send_interactive_message(self, state: PipelineState, message: str):
+        """Send interactive message via Slack"""
+        try:
+            from toolbox import slack_manager
+            if slack_manager and state.chat_session:
+                slack_manager.send_message(message, state.chat_session)
+        except Exception as e:
+            print(f"[{self.agent_name}] Failed to send interactive message: {e}")
+            print(f"📤 Interactive Message: {message}")
+    
+    def _run_basic_feature_selection_fallback(self, state: PipelineState) -> PipelineState:
+        """Fallback to basic feature selection"""
+        selected_features = self._run_basic_feature_selection(state)
+        state.selected_features = selected_features
         return state
     
     def _run_comprehensive_feature_selection(self, state: PipelineState) -> List[str]:

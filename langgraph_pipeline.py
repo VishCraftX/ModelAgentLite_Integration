@@ -563,8 +563,28 @@ class MultiAgentMLPipeline:
                     state.feature_selection_state = previous_state['feature_selection_state']
                 if 'model_building_state' in previous_state:
                     state.model_building_state = previous_state['model_building_state']
+                # Restore interactive session if available
+                if 'interactive_session' in previous_state:
+                    state.interactive_session = previous_state['interactive_session']
         else:
             state.user_query = query
+        
+        # Check if we have an active interactive session that needs to continue
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session is not None and 
+            state.interactive_session.get('active', False)):
+            
+            print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
+            
+            # Route to the appropriate agent to continue the interactive session
+            agent_type = state.interactive_session['agent_type']
+            if agent_type == "preprocessing":
+                from agents_integrated import preprocessing_agent
+                return self._prepare_response(preprocessing_agent.run_interactive_workflow(state, query))
+            elif agent_type == "feature_selection":
+                from agents_integrated import feature_selection_agent
+                return self._prepare_response(feature_selection_agent.run_interactive_workflow(state, query))
+            # Add other interactive agents as needed
         
         # Add raw data if provided
         if raw_data is not None:

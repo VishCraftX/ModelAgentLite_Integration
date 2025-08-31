@@ -45,6 +45,9 @@ class PipelineState(BaseModel):
     feature_selection_state: Optional[Dict] = Field(default_factory=dict)
     model_building_state: Optional[Dict] = Field(default_factory=dict)
     
+    # Interactive session management
+    interactive_session: Optional[Dict] = None
+    
     # Execution context
     current_agent: Optional[str] = None
     execution_history: List[Dict] = Field(default_factory=list)
