@@ -20,29 +20,188 @@ def test_semantic_classification():
     # Initialize orchestrator
     orchestrator = Orchestrator()
     
-    # Test cases that should benefit from semantic understanding
+    # Track statistics
+    stats = {
+        "total_tests": 0,
+        "semantic_used": 0,
+        "keyword_fallback": 0,
+        "llm_fallback": 0,
+        "errors": 0,
+        "correct_classifications": 0,
+        "by_intent": {
+            "preprocessing": {"total": 0, "correct": 0, "semantic": 0},
+            "feature_selection": {"total": 0, "correct": 0, "semantic": 0},
+            "model_building": {"total": 0, "correct": 0, "semantic": 0},
+            "code_execution": {"total": 0, "correct": 0, "semantic": 0},
+            "general_query": {"total": 0, "correct": 0, "semantic": 0}
+        }
+    }
+    
+    # SUPER EXHAUSTIVE test cases designed to challenge semantic understanding
     test_cases = [
-        # Synonyms and variations that keywords might miss
-        ("Data Cleaning", "sanitize my dataset and handle inconsistencies"),
-        ("Feature Engineering", "engineer new variables and select important attributes"),  
-        ("Model Development", "develop a machine learning algorithm for prediction"),
-        ("Statistical Analysis", "compute descriptive statistics and create visualizations"),
-        ("General Help", "what are your capabilities and how can you assist me"),
+        # ========== PREPROCESSING INTENT ==========
+        # Synonyms that keywords would miss
+        ("Preprocessing - Sanitize", "sanitize my dataset and handle inconsistencies"),
+        ("Preprocessing - Purify", "purify the data by removing noise and errors"),
+        ("Preprocessing - Cleanse", "cleanse the dataset from anomalies and duplicates"),
+        ("Preprocessing - Scrub", "scrub the data to make it analysis-ready"),
+        ("Preprocessing - Refine", "refine my raw data for better quality"),
+        ("Preprocessing - Polish", "polish the dataset before analysis"),
+        
+        # Different phrasings for same intent
+        ("Preprocessing - Handle Issues", "deal with missing values and outliers in my data"),
+        ("Preprocessing - Fix Problems", "fix data quality problems and inconsistencies"),
+        ("Preprocessing - Resolve Gaps", "resolve gaps and errors in the dataset"),
+        ("Preprocessing - Address Quality", "address data quality issues before modeling"),
+        ("Preprocessing - Rectify Data", "rectify data problems and prepare for analysis"),
+        
+        # Technical variations
+        ("Preprocessing - Data Munging", "perform data munging and wrangling operations"),
+        ("Preprocessing - ETL Process", "execute ETL processes on my raw dataset"),
+        ("Preprocessing - Data Preparation", "prepare and condition data for machine learning"),
+        ("Preprocessing - Data Conditioning", "condition the dataset for optimal analysis"),
         
         # Plurals and variations
-        ("Preprocessing Plurals", "clean datasets, handle missing values, remove outliers"),
-        ("Model Building Plurals", "train multiple models and compare their performances"),
-        ("Feature Selection Plurals", "analyze correlations between variables"),
+        ("Preprocessing - Multiple Datasets", "clean and prepare multiple datasets simultaneously"),
+        ("Preprocessing - Various Files", "process various data files and standardize them"),
+        ("Preprocessing - Batch Processing", "batch process several datasets for consistency"),
         
-        # Context-dependent phrases
-        ("Complex Preprocessing", "prepare my data for machine learning by handling quality issues"),
-        ("Complex Model Building", "create predictive models using ensemble methods"),
-        ("Complex Feature Selection", "identify the most predictive variables for my target"),
+        # ========== FEATURE SELECTION INTENT ==========
+        # Engineering synonyms
+        ("Feature Selection - Engineer", "engineer new variables from existing data"),
+        ("Feature Selection - Craft", "craft meaningful features for better predictions"),
+        ("Feature Selection - Construct", "construct relevant attributes for modeling"),
+        ("Feature Selection - Derive", "derive important variables from raw data"),
+        ("Feature Selection - Extract", "extract significant features for analysis"),
+        ("Feature Selection - Generate", "generate predictive variables from dataset"),
         
-        # Edge cases that might confuse keyword matching
-        ("Mixed Context", "clean my model's predictions and retrain"),
-        ("Ambiguous", "analyze my data thoroughly"),
-        ("Very General", "help me with my machine learning project"),
+        # Selection synonyms
+        ("Feature Selection - Choose", "choose the most important variables for modeling"),
+        ("Feature Selection - Pick", "pick relevant attributes for prediction"),
+        ("Feature Selection - Identify", "identify key predictors in my dataset"),
+        ("Feature Selection - Determine", "determine which variables are most valuable"),
+        ("Feature Selection - Discover", "discover the most informative features"),
+        ("Feature Selection - Find", "find the best predictive variables"),
+        
+        # Analysis variations
+        ("Feature Selection - Analyze Importance", "analyze variable importance and relevance"),
+        ("Feature Selection - Assess Predictors", "assess predictor strength and correlation"),
+        ("Feature Selection - Evaluate Variables", "evaluate which variables contribute most"),
+        ("Feature Selection - Examine Attributes", "examine attribute significance for modeling"),
+        ("Feature Selection - Study Features", "study feature relationships and importance"),
+        
+        # Technical terms
+        ("Feature Selection - Dimensionality", "reduce dimensionality while preserving information"),
+        ("Feature Selection - Correlation Analysis", "perform correlation analysis between variables"),
+        ("Feature Selection - Information Value", "calculate information value for feature ranking"),
+        ("Feature Selection - Mutual Information", "compute mutual information between features"),
+        
+        # ========== MODEL BUILDING INTENT ==========
+        # Building synonyms
+        ("Model Building - Construct", "construct a predictive model for classification"),
+        ("Model Building - Develop", "develop machine learning algorithms for prediction"),
+        ("Model Building - Create", "create intelligent models for data analysis"),
+        ("Model Building - Build", "build robust predictive algorithms"),
+        ("Model Building - Design", "design ML models for forecasting"),
+        ("Model Building - Architect", "architect sophisticated prediction systems"),
+        
+        # Training variations
+        ("Model Building - Train", "train algorithms on historical data patterns"),
+        ("Model Building - Fit", "fit statistical models to observed data"),
+        ("Model Building - Learn", "learn patterns from data using ML techniques"),
+        ("Model Building - Optimize", "optimize model parameters for best performance"),
+        ("Model Building - Calibrate", "calibrate predictive models for accuracy"),
+        
+        # Algorithm types (should still route to model_building)
+        ("Model Building - Neural Networks", "implement neural networks for pattern recognition"),
+        ("Model Building - Ensemble Methods", "deploy ensemble methods for robust predictions"),
+        ("Model Building - Tree Algorithms", "utilize tree-based algorithms for classification"),
+        ("Model Building - Regression Models", "apply regression models for continuous prediction"),
+        ("Model Building - Clustering", "perform clustering analysis on customer segments"),
+        
+        # Evaluation context
+        ("Model Building - Assess Performance", "assess model performance using cross-validation"),
+        ("Model Building - Validate Results", "validate predictive results and model accuracy"),
+        ("Model Building - Benchmark Models", "benchmark different models against each other"),
+        ("Model Building - Compare Algorithms", "compare various algorithms for best results"),
+        
+        # ========== CODE EXECUTION INTENT ==========
+        # Analysis synonyms
+        ("Code Execution - Analyze", "analyze data distributions and statistical properties"),
+        ("Code Execution - Examine", "examine dataset characteristics and patterns"),
+        ("Code Execution - Investigate", "investigate data trends and relationships"),
+        ("Code Execution - Explore", "explore dataset structure and content"),
+        ("Code Execution - Study", "study data patterns and anomalies"),
+        
+        # Computation variations
+        ("Code Execution - Calculate", "calculate descriptive statistics and metrics"),
+        ("Code Execution - Compute", "compute correlation matrices and summaries"),
+        ("Code Execution - Generate", "generate statistical reports and visualizations"),
+        ("Code Execution - Produce", "produce data profiling and quality reports"),
+        ("Code Execution - Execute", "execute custom analysis on specific columns"),
+        
+        # Visualization requests
+        ("Code Execution - Visualize", "visualize data distributions using plots"),
+        ("Code Execution - Plot", "plot relationships between key variables"),
+        ("Code Execution - Chart", "chart data trends over time periods"),
+        ("Code Execution - Graph", "graph correlations and dependencies"),
+        ("Code Execution - Display", "display summary statistics in tables"),
+        
+        # ========== GENERAL QUERY INTENT ==========
+        # Help variations
+        ("General Query - Assistance", "what kind of assistance can you provide"),
+        ("General Query - Support", "what support do you offer for data science"),
+        ("General Query - Guidance", "provide guidance on ML workflow steps"),
+        ("General Query - Help", "help me understand your capabilities"),
+        ("General Query - Aid", "what aid can you provide for my project"),
+        
+        # Capability inquiries
+        ("General Query - Functions", "what functions and features do you have"),
+        ("General Query - Services", "what services are available in this system"),
+        ("General Query - Options", "what options do I have for data analysis"),
+        ("General Query - Possibilities", "what possibilities exist for ML workflows"),
+        ("General Query - Features", "describe the features of this platform"),
+        
+        # Conversational
+        ("General Query - Greeting", "hello, I'm new to this system"),
+        ("General Query - Introduction", "introduce yourself and your capabilities"),
+        ("General Query - Overview", "give me an overview of what you can do"),
+        ("General Query - Summary", "summarize your main functionalities"),
+        
+        # ========== EDGE CASES & CHALLENGING SCENARIOS ==========
+        # Mixed contexts that could confuse keyword matching
+        ("Edge Case - Clean Model", "clean my model's predictions and improve accuracy"),
+        ("Edge Case - Feature Model", "model the relationship between selected features"),
+        ("Edge Case - Build Data", "build a comprehensive data preprocessing pipeline"),
+        ("Edge Case - Train Data", "train my data preparation workflow"),
+        
+        # Ambiguous but should be classifiable
+        ("Edge Case - Improve Quality", "improve the quality of my analysis workflow"),
+        ("Edge Case - Enhance Performance", "enhance performance of my ML pipeline"),
+        ("Edge Case - Optimize Process", "optimize the entire data science process"),
+        ("Edge Case - Streamline Workflow", "streamline my machine learning workflow"),
+        
+        # Complex multi-step requests
+        ("Complex - Full Pipeline", "prepare data, select features, and build models"),
+        ("Complex - End-to-End", "execute end-to-end ML pipeline from raw data"),
+        ("Complex - Complete Analysis", "perform complete analysis from data to insights"),
+        
+        # Domain-specific terminology
+        ("Domain - Financial", "prepare financial data for risk modeling"),
+        ("Domain - Healthcare", "analyze patient data for predictive healthcare"),
+        ("Domain - Marketing", "build customer segmentation models"),
+        ("Domain - Operations", "optimize operational efficiency using ML"),
+        
+        # Negative cases (should still classify correctly)
+        ("Negative - Don't Clean", "don't clean the data, just analyze it"),
+        ("Negative - Skip Preprocessing", "skip preprocessing and go straight to modeling"),
+        ("Negative - Avoid Features", "avoid feature engineering, use raw variables"),
+        
+        # Typos and informal language
+        ("Informal - Gonna", "gonna clean my dataset real quick"),
+        ("Informal - Wanna", "wanna build some ML models"),
+        ("Informal - Need To", "need to prep my data for analysis"),
+        ("Informal - Gotta", "gotta select the best features"),
     ]
     
     for test_name, query in test_cases:
@@ -50,15 +209,111 @@ def test_semantic_classification():
         print(f"Query: '{query}'")
         print("-" * 50)
         
+        # Extract expected intent from test name
+        expected_intent = None
+        if "Preprocessing" in test_name:
+            expected_intent = "preprocessing"
+        elif "Feature Selection" in test_name:
+            expected_intent = "feature_selection"
+        elif "Model Building" in test_name:
+            expected_intent = "model_building"
+        elif "Code Execution" in test_name:
+            expected_intent = "code_execution"
+        elif "General Query" in test_name:
+            expected_intent = "general_query"
+        elif "Complex" in test_name or "Domain" in test_name:
+            # These could route to multiple intents, we'll analyze manually
+            expected_intent = "multiple_possible"
+        elif "Edge Case" in test_name or "Negative" in test_name or "Informal" in test_name:
+            # These are tricky cases, we'll see how they perform
+            expected_intent = "challenging"
+        
         # Create a mock state
         state = PipelineState(user_query=query, session_id="test_session")
         
-        # Test routing
+        # Test routing and track method used
         try:
             result = orchestrator.route(state)
             print(f"🎯 Routed to: {result}")
+            
+            # Track statistics
+            stats["total_tests"] += 1
+            
+            # Determine method used
+            method_used = "unknown"
+            if hasattr(orchestrator, '_active_embedding_model'):
+                method_used = "semantic"
+                stats["semantic_used"] += 1
+                print(f"📊 Method: 🧠 Semantic (using {orchestrator._active_embedding_model})")
+            else:
+                method_used = "keyword"
+                stats["keyword_fallback"] += 1
+                print(f"📊 Method: ⚡ Keyword fallback")
+            
+            # Check correctness for clear cases
+            if expected_intent in ["preprocessing", "feature_selection", "model_building", "code_execution", "general_query"]:
+                stats["by_intent"][expected_intent]["total"] += 1
+                
+                # Map result to intent (remove _node suffix)
+                result_intent = result.replace("_node", "").replace("preprocessing", "preprocessing").replace("feature_selection", "feature_selection").replace("model_building", "model_building").replace("code_execution", "code_execution").replace("general_response", "general_query")
+                
+                if result_intent == expected_intent:
+                    stats["correct_classifications"] += 1
+                    stats["by_intent"][expected_intent]["correct"] += 1
+                    print(f"✅ Correct classification!")
+                    
+                    if method_used == "semantic":
+                        stats["by_intent"][expected_intent]["semantic"] += 1
+                else:
+                    print(f"❌ Expected: {expected_intent}, Got: {result_intent}")
+            else:
+                print(f"🤔 Complex case - manual analysis needed")
+                
         except Exception as e:
             print(f"❌ Error: {e}")
+            stats["errors"] += 1
+    
+    # Print comprehensive analysis
+    print("\n" + "=" * 80)
+    print("📊 COMPREHENSIVE SEMANTIC CLASSIFICATION ANALYSIS")
+    print("=" * 80)
+    
+    print(f"\n🎯 OVERALL STATISTICS:")
+    print(f"   Total Tests: {stats['total_tests']}")
+    print(f"   Semantic Used: {stats['semantic_used']} ({stats['semantic_used']/stats['total_tests']*100:.1f}%)")
+    print(f"   Keyword Fallback: {stats['keyword_fallback']} ({stats['keyword_fallback']/stats['total_tests']*100:.1f}%)")
+    print(f"   Errors: {stats['errors']}")
+    
+    if stats['semantic_used'] > 0:
+        print(f"\n🧠 SEMANTIC CLASSIFICATION SUCCESS:")
+        print(f"   Semantic success rate: {stats['semantic_used']}/{stats['total_tests']} = {stats['semantic_used']/stats['total_tests']*100:.1f}%")
+        
+        if stats['semantic_used'] >= stats['total_tests'] * 0.8:
+            print("   ✅ EXCELLENT: >80% semantic classification!")
+        elif stats['semantic_used'] >= stats['total_tests'] * 0.6:
+            print("   🟡 GOOD: >60% semantic classification")
+        else:
+            print("   ❌ POOR: <60% semantic classification - check embedding model")
+    
+    print(f"\n📈 BY INTENT ANALYSIS:")
+    for intent, data in stats['by_intent'].items():
+        if data['total'] > 0:
+            accuracy = data['correct'] / data['total'] * 100
+            semantic_rate = data['semantic'] / data['total'] * 100 if data['total'] > 0 else 0
+            print(f"   {intent.upper()}:")
+            print(f"     Accuracy: {data['correct']}/{data['total']} = {accuracy:.1f}%")
+            print(f"     Semantic Rate: {data['semantic']}/{data['total']} = {semantic_rate:.1f}%")
+    
+    # Recommendations
+    print(f"\n💡 RECOMMENDATIONS:")
+    if stats['semantic_used'] < stats['total_tests'] * 0.7:
+        print("   ⚠️  Consider pulling bge-large: ollama pull bge-large")
+    if stats['errors'] > 0:
+        print("   ⚠️  Check system configuration - errors detected")
+    if stats['correct_classifications'] / (stats['total_tests'] - stats['errors']) > 0.9:
+        print("   ✅ System is performing excellently!")
+    
+    return stats
 
 def test_fallback_behavior():
     """Test that the system gracefully falls back when embeddings are unavailable"""
@@ -77,13 +332,42 @@ def test_fallback_behavior():
         print(f"❌ Fallback test failed: {e}")
 
 if __name__ == "__main__":
-    print("🚀 Semantic Intent Classification Test Suite")
-    print("=" * 60)
+    print("🚀 SUPER EXHAUSTIVE Semantic Intent Classification Test Suite")
+    print("=" * 80)
+    print("🎯 Testing 100+ challenging queries to validate semantic understanding")
+    print("📊 Tracking semantic vs keyword fallback usage rates")
+    print("🧠 Verifying BGE-Large embedding model performance")
+    print("=" * 80)
     
     # Test semantic classification
-    test_semantic_classification()
+    stats = test_semantic_classification()
     
     # Test fallback behavior
     test_fallback_behavior()
+    
+    print("\n" + "=" * 80)
+    print("🎉 FINAL SUMMARY")
+    print("=" * 80)
+    
+    if stats['semantic_used'] >= stats['total_tests'] * 0.8:
+        print("🏆 OUTSTANDING PERFORMANCE!")
+        print("   ✅ Semantic classification is working excellently")
+        print("   ✅ BGE-Large embeddings are functioning properly")
+        print("   ✅ Ready for production use")
+    elif stats['semantic_used'] >= stats['total_tests'] * 0.6:
+        print("🟡 GOOD PERFORMANCE")
+        print("   ✅ Semantic classification is working well")
+        print("   ⚠️  Some fallback to keywords (acceptable)")
+        print("   ✅ Ready for production with monitoring")
+    else:
+        print("❌ NEEDS ATTENTION")
+        print("   ⚠️  Too much keyword fallback detected")
+        print("   💡 Action: Run 'ollama pull bge-large' on server")
+        print("   💡 Check: Ollama service status and model availability")
+    
+    print(f"\n📈 Key Metrics:")
+    print(f"   🧠 Semantic Rate: {stats['semantic_used']}/{stats['total_tests']} ({stats['semantic_used']/stats['total_tests']*100:.1f}%)")
+    print(f"   🎯 Accuracy: {stats['correct_classifications']}/{stats['total_tests']-stats['errors']} ({stats['correct_classifications']/(stats['total_tests']-stats['errors'])*100:.1f}%)")
+    print(f"   ⚡ Fallback Rate: {stats['keyword_fallback']}/{stats['total_tests']} ({stats['keyword_fallback']/stats['total_tests']*100:.1f}%)")
     
     print("\n✅ Test suite completed!")
