@@ -652,10 +652,84 @@ class MultiAgentMLPipeline:
             
             # Check if this is a continuation command vs a new request
             query_lower = query.lower().strip()
-            continuation_commands = ['proceed', 'yes', 'skip', 'no', 'continue', 'next', 'back', 'summary', 'explain']
             
-            # If it's a continuation command, route directly to the interactive agent
-            if any(cmd in query_lower for cmd in continuation_commands):
+            # Pure continuation commands (context-independent)
+            pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help']
+            
+            # Check for explicit session management commands
+            clear_session_commands = ['clear session', 'reset', 'start over', 'new session', 'exit session']
+            is_clear_command = any(cmd in query_lower for cmd in clear_session_commands)
+            
+            if is_clear_command:
+                print(f"🔄 Explicit session clear requested")
+                state.interactive_session = None
+                from toolbox import slack_manager
+                slack_manager.send_message(state.chat_session, "✅ Session cleared. You can now start a new workflow.")
+                return self._prepare_response(state, "Session cleared successfully.")
+            
+            # Also check for target column specification patterns
+            target_column_patterns = ['target ', 'column ']
+            is_target_specification = any(pattern in query_lower for pattern in target_column_patterns)
+            
+            # Check for new ML requests that should bypass interactive session
+            new_request_patterns = [
+                'clean my data', 'select features', 'train a', 'build a', 'create a', 'analyze my',
+                'skip preprocessing', 'skip feature selection', 'without preprocessing', 'bypass cleaning'
+            ]
+            
+            # Context-aware continuation detection
+            def is_context_continuation(query_lower: str, session: Dict) -> bool:
+                """Check if query is a continuation based on current session context"""
+                if not session:
+                    return False
+                
+                # Pure continuation commands (always valid)
+                if any(cmd in query_lower for cmd in pure_continuation_commands):
+                    return True
+                
+                # Context-dependent commands
+                agent_type = session.get('agent_type')
+                current_phase = session.get('phase')
+                
+                if agent_type == 'preprocessing':
+                    # In preprocessing context, these are continuations:
+                    preprocessing_continuations = [
+                        'skip outliers', 'skip missing', 'skip encoding', 'skip transformations',
+                        'skip this phase', 'skip current', 'target ', 'column '
+                    ]
+                    return any(cmd in query_lower for cmd in preprocessing_continuations)
+                
+                elif agent_type == 'feature_selection':
+                    # In feature selection context:
+                    fs_continuations = [
+                        'skip analysis', 'run iv', 'run shap', 'select features'
+                    ]
+                    return any(cmd in query_lower for cmd in fs_continuations)
+                
+                # Yes/No only valid for confirmation contexts
+                if current_phase in ['confirmation', 'approval_needed']:
+                    return query_lower.strip() in ['yes', 'no', 'y', 'n']
+                
+                return False
+            
+            # Detect new requests and context-aware continuations
+            is_new_request = any(pattern in query_lower for pattern in new_request_patterns)
+            is_continuation = is_context_continuation(query_lower, state.interactive_session)
+            
+            # Handle conflicts: if both detected, prioritize based on context
+            if is_new_request and is_continuation:
+                # If query starts with new request pattern, treat as new request
+                query_start = query_lower[:20]  # First 20 characters
+                if any(pattern in query_start for pattern in new_request_patterns):
+                    print(f"🆕 New ML request detected (despite continuation words) - clearing session")
+                    state.interactive_session = None
+                else:
+                    print(f"🔄 Treating as continuation command despite new request words")
+                    is_new_request = False
+            elif is_new_request:
+                print(f"🆕 New ML request detected - clearing interactive session and routing through orchestrator")
+                state.interactive_session = None
+            elif is_continuation or is_target_specification:
                 print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
                 
                 # Route to the appropriate agent to continue the interactive session
@@ -667,10 +741,6 @@ class MultiAgentMLPipeline:
                     from agents_wrapper import feature_selection_agent
                     return self._prepare_response(feature_selection_agent.run(state))
                 # Add other interactive agents as needed
-            else:
-                # New request - clear interactive session and go through orchestrator
-                print(f"🆕 New request detected - clearing interactive session and routing through orchestrator")
-                state.interactive_session = None
         
         # Add raw data if provided
         if raw_data is not None:
@@ -734,13 +804,13 @@ class MultiAgentMLPipeline:
             
             return error_response
     
-    def _prepare_response(self, state: PipelineState) -> Dict[str, Any]:
+    def _prepare_response(self, state: PipelineState, custom_message: str = None) -> Dict[str, Any]:
         """Prepare response from final state"""
         response = {
             "success": state.last_error is None,
             "session_id": state.session_id,
             "chat_session": state.chat_session,
-            "response": self._generate_response_text(state),
+            "response": custom_message if custom_message else self._generate_response_text(state),
             "data_summary": state.get_data_summary(),
             "artifacts": state.artifacts or {},
             "execution_history": state.execution_history[-5:] if state.execution_history else []  # Last 5 records

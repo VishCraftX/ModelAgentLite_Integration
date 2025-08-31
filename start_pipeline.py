@@ -11,6 +11,7 @@ import sys
 import os
 import argparse
 from pathlib import Path
+from logging_config import setup_colored_logging
 
 # Try to load .env file if it exists
 try:
@@ -362,6 +363,10 @@ def run_direct_tests():
 def main():
     """Main startup function"""
     args = parse_arguments()
+    
+    # Setup instance-specific logging
+    log_file = setup_colored_logging(args.instance)
+    print(f"📝 Logs will be saved to: {log_file}")
     
     # Print system status
     if not print_system_status():
