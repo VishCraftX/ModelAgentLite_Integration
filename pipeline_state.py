@@ -127,10 +127,24 @@ class StateManager:
     
     def __init__(self, base_dir: str = None):
         if base_dir is None:
-            base_dir = os.path.join(tempfile.gettempdir(), "mal_integration_states")
+            # Check for environment variable first
+            base_dir = os.environ.get("MAL_STATES_DIR")
+            if base_dir is None:
+                # Use a more reliable directory location
+                import tempfile
+                temp_dir = tempfile.mkdtemp(prefix="mal_integration_states_")
+                base_dir = temp_dir
         
         self.base_dir = base_dir
-        os.makedirs(self.base_dir, exist_ok=True)
+        try:
+            os.makedirs(self.base_dir, exist_ok=True)
+        except PermissionError:
+            # Fallback to user's home directory if /tmp has permission issues
+            import os.path
+            fallback_dir = os.path.expanduser("~/mal_integration_states")
+            print(f"⚠️ Permission denied for {self.base_dir}, using fallback: {fallback_dir}")
+            self.base_dir = fallback_dir
+            os.makedirs(self.base_dir, exist_ok=True)
     
     def save_state(self, state: PipelineState) -> str:
         """Save pipeline state to disk"""
@@ -138,7 +152,15 @@ class StateManager:
             state.session_id = f"session_{int(datetime.now().timestamp())}"
         
         session_dir = os.path.join(self.base_dir, state.session_id)
-        os.makedirs(session_dir, exist_ok=True)
+        try:
+            os.makedirs(session_dir, exist_ok=True)
+        except PermissionError as e:
+            print(f"❌ Permission error creating session directory: {e}")
+            # Try creating in a more accessible location
+            fallback_session_dir = os.path.expanduser(f"~/mal_integration_sessions/{state.session_id}")
+            print(f"🔄 Using fallback directory: {fallback_session_dir}")
+            os.makedirs(fallback_session_dir, exist_ok=True)
+            session_dir = fallback_session_dir
         
         # Save state metadata (without DataFrames)
         state_dict = state.dict()
