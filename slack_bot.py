@@ -85,8 +85,12 @@ class SlackMLBot:
             thread_ts = event.get('thread_ts', event['ts'])
             session_id = self._get_session_id(user_id, thread_ts)
             
-            # Register session with SlackManager for proper channel tracking
+            # Debugging for session registration
+            print(f"🔍 DEBUG: Registering session with ID: {session_id}")
+            print(f"🔍 DEBUG: Channel: {channel}")
+            print(f"🔍 DEBUG: Thread TS: {thread_ts}")
             self.ml_pipeline.slack_manager.register_session(session_id, channel, thread_ts)
+            print(f"🔍 DEBUG: Session registered. Current sessions: {self.ml_pipeline.slack_manager.session_channels}")
             
             # Clean the message text (remove bot mention)
             if f"<@{bot_user_id}>" in text:
