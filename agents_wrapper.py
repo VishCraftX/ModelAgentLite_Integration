@@ -61,14 +61,6 @@ class PreprocessingAgentWrapper:
             return self._run_basic_preprocessing_fallback(state)
             
         try:
-            # Check if this is a continuation of an interactive session
-            if (hasattr(state, 'interactive_session') and 
-                state.interactive_session is not None and 
-                state.interactive_session.get('agent_type') == 'preprocessing'):
-                print("🔄 Continuing interactive preprocessing session")
-                # For now, just run basic preprocessing to avoid breaking
-                return self._run_basic_preprocessing_fallback(state)
-            
             # Save data to temp file for the working agent
             if state.raw_data is None:
                 print("❌ No raw data available for preprocessing")
@@ -80,16 +72,45 @@ class PreprocessingAgentWrapper:
             # Determine target column
             target_column = state.target_column or "target"
             
-            print(f"🚀 Running basic preprocessing (interactive mode disabled temporarily)")
+            print(f"🚀 Launching your actual interactive preprocessing agent")
             print(f"🎯 Target column: {target_column}")
+            print(f"📁 Temp file: {temp_file}")
             
-            # For now, run basic preprocessing to avoid breaking the system
-            return self._run_basic_preprocessing_fallback(state)
+            # Call your working preprocessing agent AS-IS
+            # This should launch the full interactive workflow with Slack menus
+            final_state = run_preprocessing_agent(
+                df_path=temp_file,
+                target_column=target_column,
+                model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+            )
+            
+            # Extract results from the working agent
+            if hasattr(final_state, 'df') and final_state.df is not None:
+                state.cleaned_data = final_state.df
+                state.processed_data = final_state.df
+                state.preprocessing_state = {
+                    "completed": True,
+                    "timestamp": datetime.now().isoformat(),
+                    "method": "sequential_interactive",
+                    "phases_completed": final_state.completed_phases if hasattr(final_state, 'completed_phases') else []
+                }
+                print(f"✅ Interactive preprocessing completed. Final shape: {final_state.df.shape}")
+            else:
+                print("⚠️ No final dataframe returned from interactive agent")
+            
+            # Clean up temp file
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+                
+            return state
             
         except Exception as e:
-            print(f"❌ Preprocessing agent failed: {e}")
+            print(f"❌ Interactive preprocessing agent failed: {e}")
             import traceback
             traceback.print_exc()
+            print("🔄 Falling back to basic preprocessing")
             return self._run_basic_preprocessing_fallback(state)
     
     def _run_basic_preprocessing_fallback(self, state: PipelineState) -> PipelineState:
