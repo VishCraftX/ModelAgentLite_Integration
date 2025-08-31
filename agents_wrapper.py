@@ -20,6 +20,11 @@ try:
         SequentialState,
         PreprocessingPhase
     )
+    # Also import the new Slack-compatible version
+    from preprocessing_agent_slack import (
+        create_slack_preprocessing_bot,
+        SlackPreprocessingBot
+    )
     PREPROCESSING_AVAILABLE = True
     print("✅ Preprocessing agent imported successfully")
 except ImportError as e:
@@ -53,50 +58,87 @@ class PreprocessingAgentWrapper:
     
     def __init__(self):
         self.available = PREPROCESSING_AVAILABLE
+        self.slack_bot = None
+        if self.available:
+            try:
+                # Initialize the Slack-compatible preprocessing bot
+                self.slack_bot = create_slack_preprocessing_bot()
+                print("✅ Slack preprocessing bot initialized")
+            except Exception as e:
+                print(f"❌ Failed to initialize Slack preprocessing bot: {e}")
+                self.available = False
         
     def run(self, state: PipelineState) -> PipelineState:
-        """Route to the actual working preprocessing agent"""
-        if not self.available:
-            print("❌ Preprocessing agent not available - falling back to basic preprocessing")
+        """Route to the Slack-compatible preprocessing agent"""
+        if not self.available or not self.slack_bot:
+            print("❌ Slack preprocessing agent not available - falling back to basic preprocessing")
             return self._run_basic_preprocessing_fallback(state)
             
         try:
-            # Save data to temp file for the working agent
+            # Check if we have raw data
             if state.raw_data is None:
                 print("❌ No raw data available for preprocessing")
                 return state
                 
+            print(f"🚀 Launching Slack-compatible interactive preprocessing agent")
+            print(f"🎯 Target column: {state.target_column}")
+            print(f"📊 Data shape: {state.raw_data.shape}")
+            
+            # Create a preprocessing session in the Slack bot
+            # Save data to temp file
             temp_file = os.path.join(tempfile.gettempdir(), f"temp_data_{state.session_id}.csv")
             state.raw_data.to_csv(temp_file, index=False)
             
-            # Determine target column
-            target_column = state.target_column or "target"
+            # Create session directly in the Slack bot
+            from preprocessing_agent_slack import PreprocessingSession
             
-            print(f"🚀 Launching your actual interactive preprocessing agent")
-            print(f"🎯 Target column: {target_column}")
-            print(f"📁 Temp file: {temp_file}")
-            
-            # Call your working preprocessing agent AS-IS
-            # This should launch the full interactive workflow with Slack menus
-            final_state = run_preprocessing_agent(
-                df_path=temp_file,
-                target_column=target_column,
-                model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+            session = PreprocessingSession(
+                file_path=temp_file,
+                file_name=f"data_{state.session_id}.csv",
+                user_id=state.chat_session,
+                target_column=state.target_column,
+                original_df=state.raw_data.copy(),
+                current_df=state.raw_data.copy(),
+                phase="waiting_input" if state.target_column else "need_target"
             )
             
-            # Extract results from the working agent
-            if hasattr(final_state, 'df') and final_state.df is not None:
-                state.cleaned_data = final_state.df
-                state.processed_data = final_state.df
-                state.preprocessing_state = {
-                    "completed": True,
-                    "timestamp": datetime.now().isoformat(),
-                    "method": "sequential_interactive",
-                    "phases_completed": final_state.completed_phases if hasattr(final_state, 'completed_phases') else []
-                }
-                print(f"✅ Interactive preprocessing completed. Final shape: {final_state.df.shape}")
-            else:
-                print("⚠️ No final dataframe returned from interactive agent")
+            # Store session in the Slack bot
+            self.slack_bot.users[state.chat_session] = session
+            
+            # Send initial menu via Slack
+            from toolbox import slack_manager
+            if slack_manager and state.chat_session:
+                if session.phase == "need_target":
+                    initial_msg = f"""📁 **Dataset loaded for preprocessing**
+📊 **Shape:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+
+🎯 **Please specify your target column:**
+• Available columns: {', '.join(list(state.raw_data.columns)[:10])}{'...' if len(state.raw_data.columns) > 10 else ''}
+• Type the column name (e.g., `target` or `my_target_column`)"""
+                else:
+                    from preprocessing_agent_slack import PreprocessingMenuGenerator
+                    initial_msg = PreprocessingMenuGenerator.generate_main_menu(session)
+                
+                slack_manager.send_message(state.chat_session, initial_msg)
+                print("✅ Sent interactive preprocessing menu to Slack")
+            
+            # Set up interactive session state for continuation
+            state.interactive_session = {
+                "agent_type": "preprocessing",
+                "session_active": True,
+                "session_id": state.chat_session,
+                "slack_bot": self.slack_bot
+            }
+            
+            # For now, return with session started (actual processing happens via Slack interactions)
+            state.preprocessing_state = {
+                "completed": False,
+                "timestamp": datetime.now().isoformat(),
+                "method": "slack_interactive",
+                "session_active": True
+            }
+            
+            print("✅ Interactive preprocessing session started - user will interact via Slack")
             
             # Clean up temp file
             try:
@@ -107,7 +149,7 @@ class PreprocessingAgentWrapper:
             return state
             
         except Exception as e:
-            print(f"❌ Interactive preprocessing agent failed: {e}")
+            print(f"❌ Slack preprocessing agent failed: {e}")
             import traceback
             traceback.print_exc()
             print("🔄 Falling back to basic preprocessing")
