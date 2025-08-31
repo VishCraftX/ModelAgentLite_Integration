@@ -616,6 +616,10 @@ class IntegratedModelBuildingAgent(BaseAgent):
         self._update_progress(state, "Starting model building", "Model Building")
         
         try:
+            # Check if this is actually a general query that got routed here
+            if self._is_general_query(state.user_query):
+                return self._handle_general_query(state)
+            
             if state.cleaned_data is None:
                 self._update_progress(state, "No cleaned data available for model building")
                 return state
@@ -899,6 +903,80 @@ class IntegratedModelBuildingAgent(BaseAgent):
         except Exception as e:
             print(f"[{self.agent_name}] Failed to save rank-order CSV for {model_id}: {e}")
             return None
+    
+    def _is_general_query(self, query: str) -> bool:
+        """Check if query is a general conversational query"""
+        if not query:
+            return False
+        
+        query_lower = query.lower()
+        general_patterns = [
+            "hello", "hi", "hey", "greetings", "morning", "afternoon", "evening",
+            "how are you", "what's up", "what can you do", "help", "capabilities",
+            "tell me about", "explain", "what is", "how does", "how do",
+            "thanks", "thank you", "bye", "goodbye"
+        ]
+        
+        # Check if it's a general question about ML concepts
+        ml_concept_patterns = [
+            "what is lgbm", "how does lgbm work", "explain lgbm", "tell me about lgbm",
+            "what is lightgbm", "how does lightgbm work", "explain lightgbm",
+            "what is random forest", "how does random forest work",
+            "what is machine learning", "explain machine learning",
+            "what is classification", "what is regression"
+        ]
+        
+        return (any(pattern in query_lower for pattern in general_patterns) or 
+                any(pattern in query_lower for pattern in ml_concept_patterns))
+    
+    def _handle_general_query(self, state: PipelineState) -> PipelineState:
+        """Handle general conversational queries using LLM"""
+        try:
+            # Import LLM functionality
+            try:
+                import ollama
+                LLM_AVAILABLE = True
+            except ImportError:
+                LLM_AVAILABLE = False
+            
+            if not LLM_AVAILABLE:
+                # Fallback response when LLM not available
+                state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, and model building. How can I assist you today?"
+                return state
+            
+            query = state.user_query or ""
+            
+            # Generate context-aware response
+            if state.raw_data is not None:
+                context_prompt = f"The user said: '{query}'. I have their dataset with {state.raw_data.shape[0]:,} rows and {state.raw_data.shape[1]} columns. Respond naturally and conversationally about machine learning concepts or general assistance. If they ask about specific ML algorithms like LGBM, explain them clearly."
+            else:
+                context_prompt = f"The user said: '{query}'. Respond naturally and conversationally as an AI assistant specialized in machine learning and data science. If they ask about ML algorithms or concepts, explain them clearly."
+            
+            print(f"[{self.agent_name}] Generating conversational response for: '{query}'")
+            
+            # Use LLM for conversational response
+            response = ollama.chat(
+                model="llama3.2:3b",  # Use available model
+                messages=[
+                    {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users understand ML concepts, build models, analyze data, and work with datasets. When explaining algorithms like LightGBM, Random Forest, etc., be clear and educational. Keep responses conversational but informative."},
+                    {"role": "user", "content": context_prompt}
+                ]
+            )
+            
+            generated_response = response["message"]["content"].strip()
+            state.last_response = generated_response
+            
+            print(f"[{self.agent_name}] Generated response: {generated_response[:100]}...")
+            
+        except Exception as e:
+            print(f"[{self.agent_name}] Error generating conversational response: {e}")
+            # Fallback response
+            if "lgbm" in (state.user_query or "").lower() or "lightgbm" in (state.user_query or "").lower():
+                state.last_response = "LightGBM (Light Gradient Boosting Machine) is a gradient boosting framework that uses tree-based learning algorithms. It's designed to be distributed and efficient with faster training speed and higher efficiency, lower memory usage, and better accuracy compared to other boosting frameworks."
+            else:
+                state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, model building, and explaining machine learning concepts. How can I assist you today?"
+        
+        return state
     
     def _is_use_existing_request(self, query: str) -> bool:
         """Check if query is requesting to use existing model"""

@@ -85,6 +85,7 @@ class MultiAgentMLPipeline:
         graph.add_node("preprocessing", self._preprocessing_node)
         graph.add_node("feature_selection", self._feature_selection_node)
         graph.add_node("model_building", self._model_building_node)
+        graph.add_node("general_response", self._general_response_node)
         graph.add_node("code_execution", self._code_execution_node)
         
         # Add edges from orchestrator to agents
@@ -92,9 +93,10 @@ class MultiAgentMLPipeline:
             "orchestrator",
             self._route_to_agent,
             {
-                AgentType.PREPROCESSING.value: "preprocessing",
-                AgentType.FEATURE_SELECTION.value: "feature_selection",
+                                AgentType.PREPROCESSING.value: "preprocessing",
+                AgentType.FEATURE_SELECTION.value: "feature_selection", 
                 AgentType.MODEL_BUILDING.value: "model_building",
+                "general_response": "general_response",
                 "code_execution": "code_execution",
                 AgentType.END.value: END
             }
@@ -134,8 +136,9 @@ class MultiAgentMLPipeline:
             }
         )
         
-        # Code execution always ends after completion
+        # Code execution and general response always end after completion
         graph.add_edge("code_execution", END)
+        graph.add_edge("general_response", END)
         
         # Set entry point
         graph.set_entry_point("orchestrator")
@@ -178,6 +181,54 @@ class MultiAgentMLPipeline:
         """Model building node"""
         print(f"\n🤖 [Model Building] Starting model building")
         return model_building_agent.run(state)
+    
+    def _general_response_node(self, state: PipelineState) -> PipelineState:
+        """General response node - handles conversational queries using LLM"""
+        print(f"\n💬 [General Response] Generating conversational response")
+        
+        try:
+            # Import LLM functionality
+            try:
+                import ollama
+                LLM_AVAILABLE = True
+            except ImportError:
+                LLM_AVAILABLE = False
+            
+            if not LLM_AVAILABLE:
+                # Fallback response when LLM not available
+                state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, and model building. How can I assist you today?"
+                return state
+            
+            # Generate context-aware response
+            query = state.user_query or ""
+            
+            if state.raw_data is not None:
+                context_prompt = f"The user said: '{query}'. I have their dataset with {state.raw_data.shape[0]:,} rows and {state.raw_data.shape[1]} columns. Respond naturally and conversationally. Only mention specific capabilities if they ask 'what can you do' or similar questions."
+            else:
+                context_prompt = f"The user said: '{query}'. Respond naturally and conversationally as an AI assistant. Don't list capabilities unless they specifically ask what you can do."
+            
+            print(f"🔍 Generating conversational response for: '{query}'")
+            
+            # Use LLM for conversational response
+            response = ollama.chat(
+                model="llama3.2:3b",  # Use available model
+                messages=[
+                    {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."},
+                    {"role": "user", "content": context_prompt}
+                ]
+            )
+            
+            generated_response = response["message"]["content"].strip()
+            state.last_response = generated_response
+            
+            print(f"✅ Generated response: {generated_response[:100]}...")
+            
+        except Exception as e:
+            print(f"❌ Error generating conversational response: {e}")
+            # Fallback response
+            state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, and model building. How can I assist you today?"
+        
+        return state
     
     def _code_execution_node(self, state: PipelineState) -> PipelineState:
         """Code execution node - handles general code execution requests"""
