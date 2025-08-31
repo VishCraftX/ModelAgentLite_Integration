@@ -389,8 +389,16 @@ class ModelBuildingAgentWrapper:
             
             # Extract results
             if result and isinstance(result, dict):
+                # Extract response message (for no data cases, error messages, etc.)
+                if 'response' in result:
+                    state.last_response = result['response']
+                    print(f"📤 Model building response: {result['response'][:100]}...")
+                
+                # Extract model if built
                 if 'model' in result:
                     state.trained_model = result['model']
+                
+                # Extract metrics if available
                 if 'metrics' in result:
                     state.model_building_state = {
                         "completed": True,
