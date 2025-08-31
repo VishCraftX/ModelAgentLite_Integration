@@ -24,7 +24,7 @@ except ImportError as e:
 
 from pipeline_state import PipelineState, state_manager
 from orchestrator import orchestrator, AgentType
-from agents_integrated import preprocessing_agent, feature_selection_agent, model_building_agent
+from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
 from toolbox import initialize_toolbox, progress_tracker, slack_manager, user_directory_manager
 
 
@@ -371,6 +371,28 @@ class MultiAgentMLPipeline:
             else:
                 state_dict['cleaned_data'] = None
             
+            # Handle interactive_session which may contain DataFrames
+            if 'interactive_session' in state_dict and state_dict['interactive_session'] is not None:
+                # Save interactive session state separately if it contains DataFrames
+                interactive_session = state_dict['interactive_session'].copy()
+                if 'current_state' in interactive_session:
+                    # Remove or serialize any DataFrames in the interactive session
+                    current_state = interactive_session['current_state']
+                    if hasattr(current_state, 'df') and current_state.df is not None:
+                        interactive_df_file = os.path.join(user_dir, "interactive_df.csv")
+                        current_state.df.to_csv(interactive_df_file, index=False)
+                        interactive_session['current_state'] = "serialized_to_interactive_df.csv"
+                    elif hasattr(current_state, '__dict__'):
+                        # Convert to dict and remove DataFrames
+                        state_as_dict = {}
+                        for key, value in current_state.__dict__.items():
+                            if hasattr(value, 'to_csv'):  # It's a DataFrame
+                                state_as_dict[key] = f"DataFrame({value.shape})"
+                            else:
+                                state_as_dict[key] = value
+                        interactive_session['current_state'] = state_as_dict
+                state_dict['interactive_session'] = interactive_session
+            
             import json
             from datetime import datetime
             
@@ -632,11 +654,11 @@ class MultiAgentMLPipeline:
             # Route to the appropriate agent to continue the interactive session
             agent_type = state.interactive_session['agent_type']
             if agent_type == "preprocessing":
-                from agents_integrated import preprocessing_agent
-                return self._prepare_response(preprocessing_agent.run_interactive_workflow(state, query))
+                from agents_wrapper import preprocessing_agent
+                return self._prepare_response(preprocessing_agent.run(state))
             elif agent_type == "feature_selection":
-                from agents_integrated import feature_selection_agent
-                return self._prepare_response(feature_selection_agent.run_interactive_workflow(state, query))
+                from agents_wrapper import feature_selection_agent
+                return self._prepare_response(feature_selection_agent.run(state))
             # Add other interactive agents as needed
         
         # Add raw data if provided

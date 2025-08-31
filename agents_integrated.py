@@ -321,6 +321,15 @@ class IntegratedPreprocessingAgent(BaseAgent):
                 # Run initial overview
                 result = self.langgraph_workflow.invoke(preprocessing_state)
                 
+                print(f"[{self.agent_name}] Interactive workflow result:")
+                print(f"  - Type: {type(result)}")
+                print(f"  - Has query_response: {hasattr(result, 'query_response')}")
+                print(f"  - Has current_step: {hasattr(result, 'current_step')}")
+                if hasattr(result, 'current_step'):
+                    print(f"  - Current step: {result.current_step}")
+                if hasattr(result, 'query_response'):
+                    print(f"  - Query response: {result.query_response[:100] if result.query_response else 'None'}...")
+                
                 # Store interactive session state
                 state.interactive_session = {
                     "agent_type": "preprocessing",
@@ -333,12 +342,23 @@ class IntegratedPreprocessingAgent(BaseAgent):
                 if hasattr(result, 'query_response') and result.query_response:
                     self._send_interactive_message(state, result.query_response)
                     state.last_response = result.query_response
+                    print(f"[{self.agent_name}] Sent initial response to Slack")
                 
                 # If waiting for input, prompt user
                 if hasattr(result, 'current_step') and result.current_step == "awaiting_user_input":
                     prompt = self._generate_input_prompt(result)
                     self._send_interactive_message(state, prompt)
                     state.last_response += f"\n\n{prompt}"
+                    print(f"[{self.agent_name}] Sent interactive prompt to Slack")
+                else:
+                    # Force interactive prompt even if not explicitly awaiting input
+                    print(f"[{self.agent_name}] Not awaiting input, but sending interactive prompt anyway")
+                    prompt = self._generate_input_prompt(result)
+                    self._send_interactive_message(state, prompt)
+                    if state.last_response:
+                        state.last_response += f"\n\n{prompt}"
+                    else:
+                        state.last_response = prompt
                 
                 return state
             
@@ -414,10 +434,20 @@ class IntegratedPreprocessingAgent(BaseAgent):
         try:
             from toolbox import slack_manager
             if slack_manager and state.chat_session:
-                slack_manager.send_message(message, state.chat_session)
+                # Correct parameter order: session_id, text
+                slack_manager.send_message(state.chat_session, message)
+                print(f"[{self.agent_name}] ✅ Sent interactive message to Slack")
+            else:
+                print(f"[{self.agent_name}] ❌ No slack_manager or chat_session available")
+                print(f"  - slack_manager: {slack_manager}")
+                print(f"  - chat_session: {state.chat_session}")
         except Exception as e:
-            print(f"[{self.agent_name}] Failed to send interactive message: {e}")
-            print(f"📤 Interactive Message: {message}")
+            print(f"[{self.agent_name}] ❌ Failed to send interactive message: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Always print to console as backup
+        print(f"📤 Interactive Message: {message}")
     
     def _generate_input_prompt(self, preprocessing_state) -> str:
         """Generate appropriate input prompt based on current phase"""
@@ -798,10 +828,20 @@ Would you like to upload a dataset to start interactive feature selection, or do
         try:
             from toolbox import slack_manager
             if slack_manager and state.chat_session:
-                slack_manager.send_message(message, state.chat_session)
+                # Correct parameter order: session_id, text
+                slack_manager.send_message(state.chat_session, message)
+                print(f"[{self.agent_name}] ✅ Sent interactive message to Slack")
+            else:
+                print(f"[{self.agent_name}] ❌ No slack_manager or chat_session available")
+                print(f"  - slack_manager: {slack_manager}")
+                print(f"  - chat_session: {state.chat_session}")
         except Exception as e:
-            print(f"[{self.agent_name}] Failed to send interactive message: {e}")
-            print(f"📤 Interactive Message: {message}")
+            print(f"[{self.agent_name}] ❌ Failed to send interactive message: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Always print to console as backup
+        print(f"📤 Interactive Message: {message}")
     
     def _run_basic_feature_selection_fallback(self, state: PipelineState) -> PipelineState:
         """Fallback to basic feature selection"""
