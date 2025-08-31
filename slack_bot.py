@@ -254,7 +254,6 @@ Just upload your data and start asking questions in natural language! 🎉"""
             # Create progress callback for real-time updates
             def progress_callback(message: str, stage: str = ""):
                 """Send progress updates to Slack"""
-                print(f"📡 PROGRESS UPDATE: {stage} - {message}")
                 if stage:
                     say(f"⏳ *{stage}:* {message}", thread_ts=thread_ts)
                 else:

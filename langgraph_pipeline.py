@@ -239,7 +239,12 @@ class MultiAgentMLPipeline:
             if os.path.exists(history_file):
                 import json
                 with open(history_file, 'r') as f:
-                    history = json.load(f)
+                    loaded_data = json.load(f)
+                    if isinstance(loaded_data, list):
+                        history = loaded_data
+                    else:
+                        print(f"⚠️ Invalid conversation history format, starting fresh")
+                        history = []
                 print(f"📚 Loaded {len(history)} existing conversations")
             
             # Add new conversation
@@ -444,8 +449,6 @@ class MultiAgentMLPipeline:
             return feature_selection_agent.run(state)
         elif agent_type == AgentType.MODEL_BUILDING.value:
             return model_building_agent.run(state)
-        elif agent_type == "model_evaluation":
-            return model_evaluation_agent.run(state)
         else:
             print(f"[SimplifiedPipeline] Unknown agent type: {agent_type}")
             return state
@@ -515,6 +518,14 @@ class MultiAgentMLPipeline:
             else:
                 # Simplified pipeline without LangGraph
                 result_state = self._run_simplified_pipeline(state)
+            
+            # Debug: Check result_state type
+            print(f"🔍 DEBUG: result_state type = {type(result_state)}")
+            if not isinstance(result_state, PipelineState):
+                print(f"⚠️ WARNING: result_state is {type(result_state)}, expected PipelineState")
+                if isinstance(result_state, dict):
+                    print(f"🔧 Using original state instead of dict result")
+                    result_state = state  # Fallback to original state
             
             # Save state
             state_manager.save_state(result_state)
