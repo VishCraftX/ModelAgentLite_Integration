@@ -68,11 +68,11 @@ class Orchestrator:
         
         # Semantic intent definitions for embedding-based classification
         self.intent_definitions = {
-            "preprocessing": "Clean, prepare, transform, and preprocess data for machine learning. Handle missing values, outliers, duplicates, encoding, scaling, normalization, and data quality issues.",
-            "feature_selection": "Select, engineer, analyze, and choose the most relevant features for modeling. Perform feature importance analysis, correlation analysis, dimensionality reduction, and feature engineering.",
-            "model_building": "Train, build, create, develop, and evaluate machine learning models. Include algorithm selection, hyperparameter tuning, model training, prediction, forecasting, and performance evaluation.",
-            "code_execution": "Execute custom code, perform data analysis, create visualizations, calculate statistics, generate plots, and run analytical computations on datasets.",
-            "general_query": "General questions, greetings, help requests, capability inquiries, system explanations, status updates, and conversational interactions."
+            "preprocessing": "Data cleaning, preprocessing, preparation, transformation, missing values, outliers, duplicates, data quality, normalization, scaling, encoding, sanitization, purification, data wrangling, cleansing, standardization, imputation, outlier detection, duplicate removal, data validation, quality assurance.",
+            "feature_selection": "Feature selection, feature engineering, feature importance, correlation analysis, dimensionality reduction, variable selection, attribute ranking, predictor analysis, feature extraction, variable engineering, feature scoring, mutual information, chi-square test, recursive feature elimination, principal component analysis, feature correlation, variable importance.",
+            "model_building": "Machine learning, model training, algorithm development, neural networks, ensemble methods, classification, regression, prediction, forecasting, hyperparameter tuning, model creation, predictive modeling, supervised learning, unsupervised learning, deep learning, random forest, gradient boosting, support vector machines, logistic regression, linear regression, decision trees.",
+            "code_execution": "Data visualization, statistical analysis, plotting, charting, descriptive statistics, exploratory data analysis, custom calculations, data exploration, visualization creation, statistical computation, histogram, scatter plot, box plot, correlation matrix, summary statistics, data profiling, statistical tests, hypothesis testing.",
+            "general_query": "Greetings, help requests, system capabilities, status inquiries, general questions, conversational interactions, explanations, assistance, guidance, information requests, hello, hi, what can you do, how does this work, explain, describe, tell me about, what is, how to use, system information."
         }
         
         # Cache for embeddings to avoid recomputation
@@ -215,7 +215,7 @@ class Orchestrator:
             print(f"⚠️ Error initializing embeddings: {e}")
             self._intent_embeddings = None
     
-    def _get_embedding(self, text: str) -> Optional[np.ndarray]:
+    def _get_embedding(self, text: str):
         """Get embedding for text using Ollama"""
         if not EMBEDDINGS_AVAILABLE:
             return None
@@ -310,8 +310,8 @@ class Orchestrator:
                 "score_diff": similarity_diff,
                 "method": "semantic_similarity",
                 "similarities": similarities,
-                "threshold_met": max_similarity > 0.3,  # Semantic similarity threshold
-                "confident": similarity_diff > 0.1  # Clear winner threshold
+                "threshold_met": max_similarity > 0.25,  # Semantic similarity threshold (lowered from 0.3)
+                "confident": similarity_diff > 0.05  # Clear winner threshold (lowered from 0.1)
             }
             
             # Check for full pipeline indicators (still use phrase matching for these)
@@ -917,40 +917,39 @@ How can I help you with your ML workflow today?"""
             print(f"[Orchestrator] Semantic classification: {intent}")
             print(f"[Orchestrator] Similarity: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
             
-            # Check if semantic classification is confident
-            if confidence_info.get("threshold_met", False) and confidence_info.get("confident", False):
-                print(f"[Orchestrator] 🧠 High confidence semantic classification, using: {intent}")
+            # Use semantic if threshold is met (removed "confident" requirement for more usage)
+            if confidence_info.get("threshold_met", False):
+                print(f"[Orchestrator] 🧠 Semantic classification accepted: {intent}")
                 return self._route_by_intent(state, intent)
             else:
-                print(f"[Orchestrator] 🤔 Semantic classification uncertain, trying keyword fallback")
+                print(f"[Orchestrator] 🤔 Semantic classification below threshold, trying LLM")
         
-        # Step 2: Fallback to keyword-based classification
-        intent, confidence_info = self._classify_with_keyword_scoring(state.user_query)
-        
-        print(f"[Orchestrator] Keyword classification: {intent}")
-        print(f"[Orchestrator] Confidence: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
-        
-        # Step 3: Check if we need LLM fallback for keyword results
-        needs_llm_fallback = (
-            confidence_info["max_score"] < 0.25 or  # Low confidence
-            confidence_info["score_diff"] < 0.1     # Ambiguous (scores too close)
-        )
-        
-        if needs_llm_fallback:
-            print(f"[Orchestrator] 🤖 Low confidence or ambiguous scores, using LLM fallback")
-            # Build context for LLM
+        # Step 2: Try LLM Classification (high accuracy for ambiguous cases)
+        try:
+            print(f"[Orchestrator] 🤖 Using LLM for ambiguous/complex query")
             context = {
                 "has_raw_data": state.raw_data is not None,
                 "has_cleaned_data": state.cleaned_data is not None,
                 "has_selected_features": state.selected_features is not None,
-                "has_trained_model": state.trained_model is not None
+                "has_trained_model": state.models is not None and len(state.models) > 0
             }
             intent = self.classify_intent_with_llm(state.user_query, context)
             print(f"[Orchestrator] LLM classification: {intent}")
-        else:
-            print(f"[Orchestrator] ⚡ High confidence keyword classification, using: {intent}")
+            
+            # Use LLM result if it's valid
+            if intent and intent != "error":
+                return self._route_by_intent(state, intent)
+            else:
+                print(f"[Orchestrator] 🤖 LLM classification failed, falling back to keywords")
+        except Exception as e:
+            print(f"[Orchestrator] 🤖 LLM error: {e}, falling back to keywords")
         
-        # Step 4: Route based on classified intent
+        # Step 3: Keyword Fallback (only if semantic and LLM both fail)
+        print(f"[Orchestrator] ⚡ Using keyword fallback as last resort")
+        intent, confidence_info = self._classify_with_keyword_scoring(state.user_query)
+        print(f"[Orchestrator] Keyword classification: {intent}")
+        print(f"[Orchestrator] Confidence: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
+        
         return self._route_by_intent(state, intent)
 
     def get_routing_explanation(self, state: PipelineState, routing_decision: str) -> str:
