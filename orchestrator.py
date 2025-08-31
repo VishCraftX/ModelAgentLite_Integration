@@ -16,9 +16,13 @@ try:
     import ollama
     from langchain_openai import ChatOpenAI
     from langchain_core.messages import HumanMessage
+    import numpy as np
+    from sklearn.metrics.pairwise import cosine_similarity
     LLM_AVAILABLE = True
+    EMBEDDINGS_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
+    EMBEDDINGS_AVAILABLE = False
     print("⚠️ LLM libraries not available, using keyword-only classification")
 
 # Text normalization imports
@@ -62,7 +66,24 @@ class Orchestrator:
     def __init__(self):
         self.default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         
-        # Exhaustive keywords for fast classification
+        # Semantic intent definitions for embedding-based classification
+        self.intent_definitions = {
+            "preprocessing": "Clean, prepare, transform, and preprocess data for machine learning. Handle missing values, outliers, duplicates, encoding, scaling, normalization, and data quality issues.",
+            "feature_selection": "Select, engineer, analyze, and choose the most relevant features for modeling. Perform feature importance analysis, correlation analysis, dimensionality reduction, and feature engineering.",
+            "model_building": "Train, build, create, develop, and evaluate machine learning models. Include algorithm selection, hyperparameter tuning, model training, prediction, forecasting, and performance evaluation.",
+            "code_execution": "Execute custom code, perform data analysis, create visualizations, calculate statistics, generate plots, and run analytical computations on datasets.",
+            "general_query": "General questions, greetings, help requests, capability inquiries, system explanations, status updates, and conversational interactions."
+        }
+        
+        # Cache for embeddings to avoid recomputation
+        self._embedding_cache = {}
+        self._intent_embeddings = None
+        
+        # Initialize intent embeddings if possible
+        if EMBEDDINGS_AVAILABLE:
+            self._initialize_intent_embeddings()
+        
+        # Fallback: Exhaustive keywords for compatibility (used when embeddings unavailable)
         self.preprocessing_keywords = [
             # Cleaning & general
             "clean", "cleaning", "preprocess", "preprocessing", "prepare", "preparation",
@@ -173,8 +194,113 @@ class Orchestrator:
             "summary", "describe", "shape", "head", "tail", "info", "schema",
             "columns", "datatypes"
         ]
+    
+    def _initialize_intent_embeddings(self):
+        """Initialize embeddings for all intent definitions"""
+        try:
+            print("🧠 Initializing semantic intent embeddings...")
+            self._intent_embeddings = {}
+            
+            for intent, definition in self.intent_definitions.items():
+                embedding = self._get_embedding(definition)
+                if embedding is not None:
+                    self._intent_embeddings[intent] = embedding
+                    
+            if self._intent_embeddings:
+                print(f"✅ Initialized embeddings for {len(self._intent_embeddings)} intents")
+            else:
+                print("❌ Failed to initialize intent embeddings, falling back to keywords")
+                
+        except Exception as e:
+            print(f"⚠️ Error initializing embeddings: {e}")
+            self._intent_embeddings = None
+    
+    def _get_embedding(self, text: str) -> Optional[np.ndarray]:
+        """Get embedding for text using Ollama"""
+        if not EMBEDDINGS_AVAILABLE:
+            return None
+            
+        # Check cache first
+        if text in self._embedding_cache:
+            return self._embedding_cache[text]
         
-
+        try:
+            # Use Ollama's embedding endpoint
+            response = ollama.embeddings(
+                model="nomic-embed-text",  # Ollama's default embedding model
+                prompt=text
+            )
+            
+            if 'embedding' in response:
+                embedding = np.array(response['embedding'])
+                self._embedding_cache[text] = embedding
+                return embedding
+            else:
+                print(f"⚠️ No embedding in response for: {text[:50]}...")
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ Error getting embedding: {e}")
+            return None
+    
+    def _classify_with_semantic_similarity(self, query: str) -> Tuple[str, Dict]:
+        """
+        Semantic classification using embedding similarity
+        Returns: (intent, confidence_info)
+        """
+        if not EMBEDDINGS_AVAILABLE or not self._intent_embeddings:
+            # Fallback to keyword classification
+            return self._classify_with_keyword_scoring(query)
+        
+        try:
+            # Get query embedding
+            query_embedding = self._get_embedding(query)
+            if query_embedding is None:
+                return self._classify_with_keyword_scoring(query)
+            
+            # Calculate similarities with all intents
+            similarities = {}
+            for intent, intent_embedding in self._intent_embeddings.items():
+                similarity = cosine_similarity(
+                    query_embedding.reshape(1, -1),
+                    intent_embedding.reshape(1, -1)
+                )[0][0]
+                similarities[intent] = float(similarity)
+            
+            # Find best match
+            best_intent = max(similarities, key=similarities.get)
+            max_similarity = similarities[best_intent]
+            
+            # Calculate confidence metrics
+            sorted_similarities = sorted(similarities.values(), reverse=True)
+            second_best = sorted_similarities[1] if len(sorted_similarities) > 1 else 0
+            similarity_diff = max_similarity - second_best
+            
+            confidence_info = {
+                "max_score": max_similarity,
+                "score_diff": similarity_diff,
+                "method": "semantic_similarity",
+                "similarities": similarities,
+                "threshold_met": max_similarity > 0.3,  # Semantic similarity threshold
+                "confident": similarity_diff > 0.1  # Clear winner threshold
+            }
+            
+            # Check for full pipeline indicators (still use phrase matching for these)
+            query_lower = query.lower()
+            full_pipeline_phrases = ["complete pipeline", "full pipeline", "end to end", "build complete", "entire pipeline"]
+            if any(phrase in query_lower for phrase in full_pipeline_phrases):
+                return "full_pipeline", {
+                    **confidence_info,
+                    "method": "phrase_match_override",
+                    "max_score": 1.0
+                }
+            
+            return best_intent, confidence_info
+            
+        except Exception as e:
+            print(f"⚠️ Error in semantic classification: {e}")
+            # Fallback to keyword classification
+            return self._classify_with_keyword_scoring(query)
 
     def normalize_text(self, query: str) -> List[str]:
         """
@@ -748,20 +874,34 @@ How can I help you with your ML workflow today?"""
 
     def route(self, state: PipelineState) -> str:
         """
-        Hybrid routing: Fast keyword scoring with LLM fallback for ambiguous cases
+        Semantic-first routing: Embedding similarity with keyword and LLM fallbacks
         """
         if not state.user_query:
             return "preprocessing"  # Default
         
         print(f"[Orchestrator] Processing query: '{state.user_query}'")
         
-        # Step 1: Try fast keyword-based classification first
+        # Step 1: Try semantic similarity classification first (if available)
+        if EMBEDDINGS_AVAILABLE and self._intent_embeddings:
+            intent, confidence_info = self._classify_with_semantic_similarity(state.user_query)
+            
+            print(f"[Orchestrator] Semantic classification: {intent}")
+            print(f"[Orchestrator] Similarity: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
+            
+            # Check if semantic classification is confident
+            if confidence_info.get("threshold_met", False) and confidence_info.get("confident", False):
+                print(f"[Orchestrator] 🧠 High confidence semantic classification, using: {intent}")
+                return self._route_by_intent(state, intent)
+            else:
+                print(f"[Orchestrator] 🤔 Semantic classification uncertain, trying keyword fallback")
+        
+        # Step 2: Fallback to keyword-based classification
         intent, confidence_info = self._classify_with_keyword_scoring(state.user_query)
         
         print(f"[Orchestrator] Keyword classification: {intent}")
         print(f"[Orchestrator] Confidence: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
         
-        # Step 2: Check if we need LLM fallback
+        # Step 3: Check if we need LLM fallback for keyword results
         needs_llm_fallback = (
             confidence_info["max_score"] < 0.25 or  # Low confidence
             confidence_info["score_diff"] < 0.1     # Ambiguous (scores too close)
@@ -781,7 +921,7 @@ How can I help you with your ML workflow today?"""
         else:
             print(f"[Orchestrator] ⚡ High confidence keyword classification, using: {intent}")
         
-        # Step 3: Route based on classified intent
+        # Step 4: Route based on classified intent
         return self._route_by_intent(state, intent)
 
     def get_routing_explanation(self, state: PipelineState, routing_decision: str) -> str:
