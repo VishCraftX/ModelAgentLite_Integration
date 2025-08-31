@@ -41,17 +41,19 @@ from preprocessing_agent_impl import (
     SequentialState,
     get_llm_from_state,
     classify_user_intent_with_llm,
-    # Import all the analysis functions
-    analyze_dataset_overview,
-    analyze_outliers_comprehensive,
-    analyze_missing_values_comprehensive,
-    analyze_encoding_comprehensive,
-    analyze_transformations_comprehensive,
+    # Import the actual analysis functions from your implementation
+    initialize_dataset_analysis,
+    generate_overview_summary,
+    analyze_outliers_with_llm,
+    analyze_missing_values_with_llm,
+    analyze_encoding_with_llm,
+    analyze_transformations_with_llm,
     # Import processing functions
-    handle_missing_values_comprehensive,
-    handle_outliers_comprehensive,
-    handle_encoding_comprehensive,
-    handle_transformations_comprehensive
+    apply_outliers_treatment,
+    apply_missing_values_treatment,
+    apply_encoding_treatment,
+    apply_transformations_treatment,
+    get_current_data_state
 )
 
 @dataclass
@@ -402,17 +404,17 @@ Please specify a valid column name.""")
             sequential_state = self._convert_to_sequential_state(session)
             
             if current_phase == PreprocessingPhase.OVERVIEW:
-                # Run overview analysis
-                result = analyze_dataset_overview(sequential_state)
-                session.column_analysis = result.column_analysis
-                session.phase_results[current_phase] = result.phase_results.get(current_phase, {})
+                # Run overview analysis using your actual functions
+                updated_state = initialize_dataset_analysis(sequential_state)
+                overview_summary = generate_overview_summary(updated_state)
+                
+                # Update session with results
+                session.column_analysis = updated_state.column_analysis
+                session.phase_results[current_phase] = updated_state.phase_results.get(current_phase, {})
                 
                 say(f"""📊 **Dataset Overview Complete**
 
-**Dataset Info:**
-• Shape: {session.current_df.shape[0]:,} rows × {session.current_df.shape[1]} columns
-• Target: {session.target_column}
-• Memory usage: {session.current_df.memory_usage(deep=True).sum() / 1024**2:.1f} MB
+{overview_summary}
 
 **Next Phase:** Outlier Detection
 """)
@@ -422,13 +424,17 @@ Please specify a valid column name.""")
                 session.completed_phases.append(PreprocessingPhase.OVERVIEW)
                 
             elif current_phase == PreprocessingPhase.OUTLIERS:
-                # Run outlier analysis and handling
-                analysis_result = analyze_outliers_comprehensive(sequential_state)
-                processed_result = handle_outliers_comprehensive(analysis_result)
+                # Run outlier analysis using your actual functions
+                analysis_result = analyze_outliers_with_llm(sequential_state)
                 
-                session.outlier_analysis = analysis_result.outlier_analysis
-                session.current_df = processed_result.df
-                session.phase_results[current_phase] = processed_result.phase_results.get(current_phase, {})
+                # Apply outlier treatment
+                current_df = get_current_data_state(sequential_state)
+                processed_df = apply_outliers_treatment(current_df, analysis_result)
+                
+                # Update session
+                session.outlier_analysis = analysis_result
+                session.current_df = processed_df
+                session.phase_results[current_phase] = analysis_result
                 
                 say(f"""🎯 **Outlier Detection Complete**
 
@@ -443,13 +449,17 @@ Please specify a valid column name.""")
                 session.completed_phases.append(PreprocessingPhase.OUTLIERS)
                 
             elif current_phase == PreprocessingPhase.MISSING_VALUES:
-                # Run missing values analysis and handling
-                analysis_result = analyze_missing_values_comprehensive(sequential_state)
-                processed_result = handle_missing_values_comprehensive(analysis_result)
+                # Run missing values analysis using your actual functions
+                analysis_result = analyze_missing_values_with_llm(sequential_state)
                 
-                session.missing_analysis = analysis_result.missing_analysis
-                session.current_df = processed_result.df
-                session.phase_results[current_phase] = processed_result.phase_results.get(current_phase, {})
+                # Apply missing values treatment
+                current_df = get_current_data_state(sequential_state)
+                processed_df = apply_missing_values_treatment(current_df, analysis_result)
+                
+                # Update session
+                session.missing_analysis = analysis_result
+                session.current_df = processed_df
+                session.phase_results[current_phase] = analysis_result
                 
                 say(f"""🔍 **Missing Values Handling Complete**
 
@@ -464,13 +474,17 @@ Please specify a valid column name.""")
                 session.completed_phases.append(PreprocessingPhase.MISSING_VALUES)
                 
             elif current_phase == PreprocessingPhase.ENCODING:
-                # Run encoding analysis and handling
-                analysis_result = analyze_encoding_comprehensive(sequential_state)
-                processed_result = handle_encoding_comprehensive(analysis_result)
+                # Run encoding analysis using your actual functions
+                analysis_result = analyze_encoding_with_llm(sequential_state)
                 
-                session.encoding_analysis = analysis_result.encoding_analysis
-                session.current_df = processed_result.df
-                session.phase_results[current_phase] = processed_result.phase_results.get(current_phase, {})
+                # Apply encoding treatment
+                current_df = get_current_data_state(sequential_state)
+                processed_df = apply_encoding_treatment(current_df, analysis_result)
+                
+                # Update session
+                session.encoding_analysis = analysis_result
+                session.current_df = processed_df
+                session.phase_results[current_phase] = analysis_result
                 
                 say(f"""🔤 **Categorical Encoding Complete**
 
@@ -485,13 +499,17 @@ Please specify a valid column name.""")
                 session.completed_phases.append(PreprocessingPhase.ENCODING)
                 
             elif current_phase == PreprocessingPhase.TRANSFORMATIONS:
-                # Run transformations analysis and handling
-                analysis_result = analyze_transformations_comprehensive(sequential_state)
-                processed_result = handle_transformations_comprehensive(analysis_result)
+                # Run transformations analysis using your actual functions
+                analysis_result = analyze_transformations_with_llm(sequential_state)
                 
-                session.transformation_analysis = analysis_result.transformation_analysis
-                session.current_df = processed_result.df
-                session.phase_results[current_phase] = processed_result.phase_results.get(current_phase, {})
+                # Apply transformations treatment
+                current_df = get_current_data_state(sequential_state)
+                processed_df = apply_transformations_treatment(current_df, analysis_result)
+                
+                # Update session
+                session.transformation_analysis = analysis_result
+                session.current_df = processed_df
+                session.phase_results[current_phase] = analysis_result
                 
                 say(f"""⚡ **Feature Transformations Complete**
 
