@@ -108,6 +108,9 @@ class PreprocessingAgentWrapper:
             # Send initial menu via Slack
             from toolbox import slack_manager
             if slack_manager and state.chat_session:
+                # Debug session info
+                print(f"🔍 Debug: Sending Slack message to session: {state.chat_session}")
+                
                 if session.phase == "need_target":
                     initial_msg = f"""📁 **Dataset loaded for preprocessing**
 📊 **Shape:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
@@ -119,15 +122,23 @@ class PreprocessingAgentWrapper:
                     from preprocessing_agent_slack import PreprocessingMenuGenerator
                     initial_msg = PreprocessingMenuGenerator.generate_main_menu(session)
                 
-                slack_manager.send_message(state.chat_session, initial_msg)
-                print("✅ Sent interactive preprocessing menu to Slack")
+                # Try to send message and handle any errors
+                try:
+                    slack_manager.send_message(state.chat_session, initial_msg)
+                    print("✅ Sent interactive preprocessing menu to Slack")
+                except Exception as e:
+                    print(f"❌ Failed to send Slack message: {e}")
+                    print(f"🔍 Session channels: {getattr(slack_manager, 'session_channels', {})}")
+            else:
+                print(f"❌ Cannot send Slack message - slack_manager: {slack_manager}, chat_session: {state.chat_session}")
             
-            # Set up interactive session state for continuation
+            # Set up interactive session state for continuation (without non-serializable objects)
             state.interactive_session = {
                 "agent_type": "preprocessing",
                 "session_active": True,
                 "session_id": state.chat_session,
-                "slack_bot": self.slack_bot
+                "phase": session.phase,
+                "target_column": session.target_column
             }
             
             # For now, return with session started (actual processing happens via Slack interactions)

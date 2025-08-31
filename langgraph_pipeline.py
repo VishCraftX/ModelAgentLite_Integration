@@ -661,8 +661,10 @@ class MultiAgentMLPipeline:
                 # Route to the appropriate agent to continue the interactive session
                 agent_type = state.interactive_session['agent_type']
                 if agent_type == "preprocessing":
-                    from agents_wrapper import preprocessing_agent
-                    return self._prepare_response(preprocessing_agent.run(state))
+                    # For preprocessing, we need to handle the continuation differently
+                    # since it uses a separate Slack bot for interaction
+                    print(f"🔄 Preprocessing session continuation - user should interact via Slack")
+                    return self._prepare_response(state, "Please continue the preprocessing workflow in Slack by responding to the menu options.")
                 elif agent_type == "feature_selection":
                     from agents_wrapper import feature_selection_agent
                     return self._prepare_response(feature_selection_agent.run(state))
