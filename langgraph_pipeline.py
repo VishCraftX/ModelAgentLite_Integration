@@ -544,6 +544,8 @@ class MultiAgentMLPipeline:
             # Prepare response
             response = self._prepare_response(result_state)
             
+            # Log the response for debugging/monitoring
+            print(f"📤 Response: {response['response']}")
             print(f"✅ Query processing completed for session {session_id}")
             return response
             
@@ -562,6 +564,9 @@ class MultiAgentMLPipeline:
                 "session_id": session_id,
                 "response": f"❌ Sorry, I encountered an error: {error_msg}"
             }
+            
+            # Log the error response for debugging/monitoring
+            print(f"📤 Error Response: {error_response['response']}")
             
             # Save session state and conversation history for errors (single point)
             self._save_session_state(session_id, state)
