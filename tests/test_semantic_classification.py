@@ -143,6 +143,45 @@ def get_improvement_suggestions(failure_reasons):
     
     return suggestions
 
+def analyze_actual_method_used(query, orchestrator_instance):
+    """Analyze which method was actually used for the final decision"""
+    
+    # We need to trace through the orchestrator logic to see what actually happened
+    # This is a simplified analysis based on the orchestrator's decision flow
+    
+    try:
+        # Get the semantic classification result
+        if hasattr(orchestrator_instance, '_intent_embeddings') and orchestrator_instance._intent_embeddings:
+            semantic_intent, semantic_confidence = orchestrator_instance._classify_with_semantic_similarity(query)
+            
+            # Check if semantic classification was confident enough
+            semantic_confident = (
+                semantic_confidence.get("threshold_met", False) and 
+                semantic_confidence.get("confident", False)
+            )
+            
+            if semantic_confident:
+                return "semantic"
+        
+        # If semantic wasn't confident, check keyword classification
+        keyword_intent, keyword_confidence = orchestrator_instance._classify_with_keyword_scoring(query)
+        
+        # Check if keyword classification was confident enough
+        keyword_confident = (
+            keyword_confidence["max_score"] >= 0.25 and 
+            keyword_confidence["score_diff"] >= 0.1
+        )
+        
+        if keyword_confident:
+            return "keyword"
+        
+        # If neither semantic nor keyword was confident, it used LLM fallback
+        return "llm"
+        
+    except Exception as e:
+        # If we can't determine the method, return unknown
+        return f"unknown_error_{str(e)[:20]}"
+
 def test_semantic_classification():
     """Test the new semantic classification system"""
     
@@ -161,11 +200,11 @@ def test_semantic_classification():
         "errors": 0,
         "correct_classifications": 0,
         "by_intent": {
-            "preprocessing": {"total": 0, "correct": 0, "semantic": 0},
-            "feature_selection": {"total": 0, "correct": 0, "semantic": 0},
-            "model_building": {"total": 0, "correct": 0, "semantic": 0},
-            "code_execution": {"total": 0, "correct": 0, "semantic": 0},
-            "general_query": {"total": 0, "correct": 0, "semantic": 0}
+            "preprocessing": {"total": 0, "correct": 0, "semantic": 0, "keyword": 0, "llm": 0},
+            "feature_selection": {"total": 0, "correct": 0, "semantic": 0, "keyword": 0, "llm": 0},
+            "model_building": {"total": 0, "correct": 0, "semantic": 0, "keyword": 0, "llm": 0},
+            "code_execution": {"total": 0, "correct": 0, "semantic": 0, "keyword": 0, "llm": 0},
+            "general_query": {"total": 0, "correct": 0, "semantic": 0, "keyword": 0, "llm": 0}
         }
     }
     
@@ -371,16 +410,22 @@ def test_semantic_classification():
             # Track statistics
             stats["total_tests"] += 1
             
-            # Determine method used
-            method_used = "unknown"
-            if hasattr(orchestrator, '_active_embedding_model'):
-                method_used = "semantic"
+            # Determine method used - need to analyze the actual decision path
+            method_used = analyze_actual_method_used(state.user_query, orchestrator)
+            
+            if method_used == "semantic":
                 stats["semantic_used"] += 1
                 print(f"📊 Method: 🧠 Semantic (using {orchestrator._active_embedding_model})")
-            else:
-                method_used = "keyword"
+            elif method_used == "keyword":
                 stats["keyword_fallback"] += 1
                 print(f"📊 Method: ⚡ Keyword fallback")
+            elif method_used == "llm":
+                if "llm_fallback" not in stats:
+                    stats["llm_fallback"] = 0
+                stats["llm_fallback"] += 1
+                print(f"📊 Method: 🤖 LLM fallback")
+            else:
+                print(f"📊 Method: ❓ Unknown ({method_used})")
             
             # Check correctness for clear cases
             if expected_intent in ["preprocessing", "feature_selection", "model_building", "code_execution", "general_query"]:
@@ -408,8 +453,13 @@ def test_semantic_classification():
                     stats["by_intent"][expected_intent]["correct"] += 1
                     print(f"✅ Correct classification!")
                     
+                    # Track method used for this intent
                     if method_used == "semantic":
                         stats["by_intent"][expected_intent]["semantic"] += 1
+                    elif method_used == "keyword":
+                        stats["by_intent"][expected_intent]["keyword"] += 1
+                    elif method_used == "llm":
+                        stats["by_intent"][expected_intent]["llm"] += 1
                 else:
                     print(f"❌ Expected: {expected_intent}, Got: {result_intent}")
                     
@@ -439,6 +489,7 @@ def test_semantic_classification():
     print(f"   Total Tests: {stats['total_tests']}")
     print(f"   Semantic Used: {stats['semantic_used']} ({stats['semantic_used']/stats['total_tests']*100:.1f}%)")
     print(f"   Keyword Fallback: {stats['keyword_fallback']} ({stats['keyword_fallback']/stats['total_tests']*100:.1f}%)")
+    print(f"   LLM Fallback: {stats['llm_fallback']} ({stats['llm_fallback']/stats['total_tests']*100:.1f}%)")
     print(f"   Errors: {stats['errors']}")
     
     if stats['semantic_used'] > 0:
@@ -457,9 +508,11 @@ def test_semantic_classification():
         if data['total'] > 0:
             accuracy = data['correct'] / data['total'] * 100
             semantic_rate = data['semantic'] / data['total'] * 100 if data['total'] > 0 else 0
+            keyword_rate = data['keyword'] / data['total'] * 100 if data['total'] > 0 else 0
+            llm_rate = data['llm'] / data['total'] * 100 if data['total'] > 0 else 0
             print(f"   {intent.upper()}:")
             print(f"     Accuracy: {data['correct']}/{data['total']} = {accuracy:.1f}%")
-            print(f"     Semantic Rate: {data['semantic']}/{data['total']} = {semantic_rate:.1f}%")
+            print(f"     Methods: 🧠{data['semantic']} ⚡{data['keyword']} 🤖{data['llm']} (Semantic:{semantic_rate:.1f}% Keyword:{keyword_rate:.1f}% LLM:{llm_rate:.1f}%)")
     
     # Failure reason analysis
     if "failure_reasons" in stats and stats["failure_reasons"]:
@@ -561,7 +614,13 @@ if __name__ == "__main__":
     
     print(f"\n📈 Key Metrics:")
     print(f"   🧠 Semantic Rate: {stats['semantic_used']}/{stats['total_tests']} ({stats['semantic_used']/stats['total_tests']*100:.1f}%)")
-    print(f"   🎯 Accuracy: {stats['correct_classifications']}/{stats['total_tests']-stats['errors']} ({stats['correct_classifications']/(stats['total_tests']-stats['errors'])*100:.1f}%)")
-    print(f"   ⚡ Fallback Rate: {stats['keyword_fallback']}/{stats['total_tests']} ({stats['keyword_fallback']/stats['total_tests']*100:.1f}%)")
+    print(f"   ⚡ Keyword Rate: {stats['keyword_fallback']}/{stats['total_tests']} ({stats['keyword_fallback']/stats['total_tests']*100:.1f}%)")
+    print(f"   🤖 LLM Rate: {stats['llm_fallback']}/{stats['total_tests']} ({stats['llm_fallback']/stats['total_tests']*100:.1f}%)")
+    print(f"   🎯 Overall Accuracy: {stats['correct_classifications']}/{stats['total_tests']-stats['errors']} ({stats['correct_classifications']/(stats['total_tests']-stats['errors'])*100:.1f}%)")
     
-    print("\n✅ Test suite completed!")
+    print(f"\n💡 HIERARCHICAL vs INDEPENDENT TESTING:")
+    print(f"   📊 This test shows HIERARCHICAL performance (semantic → keyword → LLM)")
+    print(f"   🔬 For INDEPENDENT method comparison, run: python tests/test_method_comparison.py")
+    print(f"   🎯 Independent testing will show true accuracy of each method alone")
+    
+    print("\n✅ Hierarchical test suite completed!")
