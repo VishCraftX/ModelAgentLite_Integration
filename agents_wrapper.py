@@ -129,11 +129,19 @@ class PreprocessingAgentWrapper:
                 
                 # Try to send message
                 try:
-                    slack_manager.send_message(state.chat_session, initial_msg)
+                    print(f"🔍 DEBUG: About to call slack_manager.send_message")
+                    print(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
+                    print(f"🔍 DEBUG: state.chat_session: {state.chat_session}")
+                    print(f"🔍 DEBUG: message length: {len(initial_msg)}")
+                    
+                    result = slack_manager.send_message(state.chat_session, initial_msg)
+                    print(f"🔍 DEBUG: send_message returned: {result}")
                     print("✅ Sent interactive preprocessing menu to Slack")
                 except Exception as e:
                     print(f"❌ Failed to send Slack message: {e}")
                     print(f"🔍 Session channels: {getattr(slack_manager, 'session_channels', {})}")
+                    import traceback
+                    traceback.print_exc()
                     # Fall back to basic preprocessing if Slack fails
                     return self._run_basic_preprocessing_fallback(state)
             else:

@@ -80,6 +80,13 @@ class SlackManager:
             if not thread_ts:
                 thread_ts = self.session_threads.get(session_id)
             
+            print(f"🔍 DEBUG SlackManager.send_message:")
+            print(f"  Session ID: {session_id}")
+            print(f"  Channel: {channel}")
+            print(f"  Thread TS: {thread_ts}")
+            print(f"  Available sessions: {list(self.session_channels.keys())}")
+            print(f"  Session channels: {self.session_channels}")
+            
             # If still no channel, extract from session_id (format: user_threadts)
             if not channel and "_" in session_id:
                 # This is a fallback - ideally channel should be set properly
@@ -92,6 +99,7 @@ class SlackManager:
                 print(f"[Slack:{session_id}] {text}")
                 return
             
+            print(f"🚀 Attempting to send Slack message to channel {channel}")
             response = self.client.chat_postMessage(
                 channel=channel,
                 text=text,
