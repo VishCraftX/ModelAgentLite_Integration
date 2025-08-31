@@ -140,7 +140,6 @@ class StateManager:
             os.makedirs(self.base_dir, exist_ok=True)
         except PermissionError:
             # Fallback to user's home directory if /tmp has permission issues
-            import os.path
             fallback_dir = os.path.expanduser("~/mal_integration_states")
             print(f"⚠️ Permission denied for {self.base_dir}, using fallback: {fallback_dir}")
             self.base_dir = fallback_dir
