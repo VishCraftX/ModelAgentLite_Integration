@@ -513,6 +513,9 @@ class MultiAgentMLPipeline:
             return feature_selection_agent.run(state)
         elif agent_type == AgentType.MODEL_BUILDING.value:
             return model_building_agent.run(state)
+        elif agent_type == "general_response":
+            # Handle general response in simplified pipeline
+            return self._general_response_node(state)
         else:
             print(f"[SimplifiedPipeline] Unknown agent type: {agent_type}")
             return state
