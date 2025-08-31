@@ -340,22 +340,36 @@ class MultiAgentMLPipeline:
             return []
     
     def _save_session_state(self, session_id: str, state: PipelineState):
-        """Save session state to user directory"""
+        """Save session state to user directory including DataFrames"""
         try:
             user_dir = self._get_user_session_dir(session_id)
             state_file = os.path.join(user_dir, "session_state.json")
             
             # Convert state to dict for JSON serialization
             state_dict = state.dict()
-            # Remove non-serializable data
-            if 'raw_data' in state_dict:
-                state_dict['raw_data'] = f"DataFrame({state.raw_data.shape})" if state.raw_data is not None else None
-            if 'processed_data' in state_dict:
-                state_dict['processed_data'] = f"DataFrame({state.processed_data.shape})" if state.processed_data is not None else None
-            if 'cleaned_data' in state_dict:
-                state_dict['cleaned_data'] = f"DataFrame({state.cleaned_data.shape})" if state.cleaned_data is not None else None
-            if 'selected_features' in state_dict:
-                state_dict['selected_features'] = f"DataFrame({state.selected_features.shape})" if state.selected_features is not None else None
+            
+            # Save DataFrames as CSV files and store references
+            if 'raw_data' in state_dict and state.raw_data is not None:
+                raw_data_file = os.path.join(user_dir, "raw_data.csv")
+                state.raw_data.to_csv(raw_data_file, index=False)
+                state_dict['raw_data'] = {"type": "dataframe", "file": "raw_data.csv", "shape": list(state.raw_data.shape)}
+            else:
+                state_dict['raw_data'] = None
+                
+            if 'processed_data' in state_dict and state.processed_data is not None:
+                processed_data_file = os.path.join(user_dir, "processed_data.csv")
+                state.processed_data.to_csv(processed_data_file, index=False)
+                state_dict['processed_data'] = {"type": "dataframe", "file": "processed_data.csv", "shape": list(state.processed_data.shape)}
+            else:
+                state_dict['processed_data'] = None
+                
+            if 'cleaned_data' in state_dict and state.cleaned_data is not None:
+                cleaned_data_file = os.path.join(user_dir, "cleaned_data.csv")
+                state.cleaned_data.to_csv(cleaned_data_file, index=False)
+                state_dict['cleaned_data'] = {"type": "dataframe", "file": "cleaned_data.csv", "shape": list(state.cleaned_data.shape)}
+                print(f"💾 Saved cleaned_data to session: {state.cleaned_data.shape}")
+            else:
+                state_dict['cleaned_data'] = None
             
             import json
             from datetime import datetime
@@ -374,15 +388,38 @@ class MultiAgentMLPipeline:
             print(f"⚠️ Failed to save session state: {e}")
     
     def _load_session_state(self, session_id: str) -> Optional[Dict]:
-        """Load session state from user directory"""
+        """Load session state from user directory including DataFrames"""
         try:
             user_dir = self._get_user_session_dir(session_id)
             state_file = os.path.join(user_dir, "session_state.json")
             
             if os.path.exists(state_file):
                 import json
+                import pandas as pd
+                
                 with open(state_file, 'r') as f:
-                    return json.load(f)
+                    state_dict = json.load(f)
+                
+                # Restore DataFrames from CSV files
+                if state_dict.get('raw_data') and isinstance(state_dict['raw_data'], dict):
+                    raw_data_file = os.path.join(user_dir, state_dict['raw_data']['file'])
+                    if os.path.exists(raw_data_file):
+                        state_dict['raw_data'] = pd.read_csv(raw_data_file)
+                        print(f"📂 Restored raw_data: {state_dict['raw_data'].shape}")
+                
+                if state_dict.get('processed_data') and isinstance(state_dict['processed_data'], dict):
+                    processed_data_file = os.path.join(user_dir, state_dict['processed_data']['file'])
+                    if os.path.exists(processed_data_file):
+                        state_dict['processed_data'] = pd.read_csv(processed_data_file)
+                        print(f"📂 Restored processed_data: {state_dict['processed_data'].shape}")
+                
+                if state_dict.get('cleaned_data') and isinstance(state_dict['cleaned_data'], dict):
+                    cleaned_data_file = os.path.join(user_dir, state_dict['cleaned_data']['file'])
+                    if os.path.exists(cleaned_data_file):
+                        state_dict['cleaned_data'] = pd.read_csv(cleaned_data_file)
+                        print(f"📂 Restored cleaned_data: {state_dict['cleaned_data'].shape}")
+                
+                return state_dict
             return None
             
         except Exception as e:
@@ -556,7 +593,7 @@ class MultiAgentMLPipeline:
             previous_state = self._load_session_state(session_id)
             if previous_state:
                 print(f"📂 Loaded previous session state for {session_id}")
-                # Restore relevant state information (but not DataFrames)
+                # Restore relevant state information INCLUDING DataFrames
                 if 'preprocessing_state' in previous_state:
                     state.preprocessing_state = previous_state['preprocessing_state']
                 if 'feature_selection_state' in previous_state:
@@ -566,6 +603,22 @@ class MultiAgentMLPipeline:
                 # Restore interactive session if available
                 if 'interactive_session' in previous_state:
                     state.interactive_session = previous_state['interactive_session']
+                # Restore DataFrames
+                if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
+                    state.raw_data = previous_state['raw_data']
+                if 'processed_data' in previous_state and previous_state['processed_data'] is not None:
+                    state.processed_data = previous_state['processed_data']
+                if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
+                    state.cleaned_data = previous_state['cleaned_data']
+                # Restore other important fields
+                if 'selected_features' in previous_state and previous_state['selected_features'] is not None:
+                    state.selected_features = previous_state['selected_features']
+                if 'models' in previous_state and previous_state['models'] is not None:
+                    state.models = previous_state['models']
+                if 'best_model' in previous_state and previous_state['best_model'] is not None:
+                    state.best_model = previous_state['best_model']
+                if 'target_column' in previous_state and previous_state['target_column'] is not None:
+                    state.target_column = previous_state['target_column']
         else:
             state.user_query = query
         
