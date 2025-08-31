@@ -68,11 +68,11 @@ class Orchestrator:
         
         # Semantic intent definitions for embedding-based classification
         self.intent_definitions = {
-            "preprocessing": "Data cleaning, preprocessing, preparation, transformation, missing values, outliers, duplicates, data quality, normalization, scaling, encoding, sanitization, purification, data wrangling, cleansing, standardization, imputation, outlier detection, duplicate removal, data validation, quality assurance.",
-            "feature_selection": "Feature selection, feature engineering, feature importance, correlation analysis, dimensionality reduction, variable selection, attribute ranking, predictor analysis, feature extraction, variable engineering, feature scoring, mutual information, chi-square test, recursive feature elimination, principal component analysis, feature correlation, variable importance.",
-            "model_building": "Train machine learning models, build predictive algorithms, create classification models, develop regression models, neural network training, ensemble model creation, deep learning model development, hyperparameter optimization, model fitting, algorithm training, predictive model construction, supervised model training, unsupervised learning, model evaluation, cross-validation, model selection, algorithm comparison, model deployment preparation.",
-            "code_execution": "Execute Python code, run custom scripts, perform statistical calculations, generate data visualizations, create plots and charts, compute descriptive statistics, run exploratory data analysis, calculate correlations, generate histograms, create scatter plots, box plots, statistical testing, data profiling, custom data analysis, mathematical computations, data exploration scripts, analytical programming, code-based analysis.",
-            "general_query": "Greetings, help requests, system capabilities, status inquiries, general questions, conversational interactions, explanations, assistance, guidance, information requests, hello, hi, what can you do, how does this work, explain, describe, tell me about, what is, how to use, system information."
+            "preprocessing": "Data cleaning, preprocessing, preparation, transformation, missing values, outliers, duplicates, data quality, normalization, scaling, encoding, sanitization, purification, data wrangling, cleansing, standardization, imputation, outlier detection, duplicate removal, data validation, quality assurance, clean my data, prepare my data, handle missing values, remove outliers, data preparation workflow, data cleaning pipeline.",
+            "feature_selection": "Feature selection, feature engineering, feature importance, correlation analysis, dimensionality reduction, variable selection, attribute ranking, predictor analysis, feature extraction, variable engineering, feature scoring, mutual information, chi-square test, recursive feature elimination, principal component analysis, feature correlation, variable importance, select best features, engineer features, reduce dimensions, feature analysis.",
+            "model_building": "Train machine learning models, build predictive algorithms, create classification models, develop regression models, neural network training, ensemble model creation, deep learning model development, hyperparameter optimization, model fitting, algorithm training, predictive model construction, supervised model training, unsupervised learning, model evaluation, cross-validation, model selection, algorithm comparison, model deployment preparation, train classifier, build predictor, create model, develop algorithm.",
+            "code_execution": "Execute Python code, run custom scripts, perform statistical calculations, generate data visualizations, create plots and charts, compute descriptive statistics, run exploratory data analysis, calculate correlations, generate histograms, create scatter plots, box plots, statistical testing, data profiling, custom data analysis, mathematical computations, data exploration scripts, analytical programming, code-based analysis, run code, execute script, custom analysis, statistical computation.",
+            "general_query": "Greetings, help requests, system capabilities, status inquiries, general questions, conversational interactions, explanations, assistance, guidance, information requests, hello, hi, what can you do, how does this work, explain, describe, tell me about, what is, how to use, system information, help me, what are your capabilities, system overview, introduction."
         }
         
         # Cache for embeddings to avoid recomputation
@@ -310,8 +310,8 @@ class Orchestrator:
                 "score_diff": similarity_diff,
                 "method": "semantic_similarity",
                 "similarities": similarities,
-                "threshold_met": max_similarity > 0.25,  # Semantic similarity threshold (lowered from 0.3)
-                "confident": similarity_diff > 0.05  # Clear winner threshold (lowered from 0.1)
+                "threshold_met": max_similarity > 0.4 and similarity_diff > 0.08,  # Balanced threshold for ~60-70% semantic usage
+                "confident": similarity_diff > 0.08  # Clear winner threshold
             }
             
             # Check for full pipeline indicators (still use phrase matching for these)
@@ -575,6 +575,18 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         """
         Route based on classified intent and current state
         """
+        # Handle skip/bypass requests - route to the agent being skipped
+        query_lower = (state.user_query or "").lower()
+        skip_patterns = [
+            "skip preprocessing", "bypass preprocessing", "skip data cleaning", 
+            "bypass data cleaning", "skip to modeling", "go straight to modeling",
+            "bypass preprocessing and", "skip preprocessing and"
+        ]
+        
+        if any(pattern in query_lower for pattern in skip_patterns):
+            print(f"[Orchestrator] Skip preprocessing detected - routing to preprocessing agent to handle")
+            return "preprocessing"
+        
         if intent == "full_pipeline":
             # Start from the beginning or continue from current state
             if state.raw_data is None:

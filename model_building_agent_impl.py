@@ -839,8 +839,129 @@ Respond with ONLY one word: new_model or use_existing"""
         state["intent"] = intent
         return state
 
-def fallback_classify_intent(query: str) -> str:
-    """Fallback classification logic - only handles model-specific intents"""
+def semantic_classify_model_intent(query: str) -> str:
+    """Semantic classification for model-specific intents using embeddings"""
+    
+    try:
+        # Import orchestrator for semantic classification
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from orchestrator import Orchestrator
+        
+        # Create temporary orchestrator for semantic classification
+        temp_orchestrator = Orchestrator()
+        
+        # Define model-specific intent definitions
+        model_intent_definitions = {
+            "use_existing": "Use existing model, apply current model, utilize trained model, work with built model, use this model, apply this classifier, use previous model, existing model analysis, current model evaluation, built model application, trained model usage, model reuse, apply saved model, show plot, visualize tree, display tree, build segments, build deciles, build buckets, build rankings, rank ordering, score, predict, classify",
+            "new_model": "Train new model, build new classifier, create new predictor, develop new algorithm, train fresh model, build from scratch, new model training, create classifier, develop predictor, train algorithm, build new, create new, fresh training, new machine learning model, model development, algorithm training"
+        }
+        
+        # Set up semantic classification
+        temp_orchestrator.intent_definitions = model_intent_definitions
+        temp_orchestrator._initialize_intent_embeddings()
+        
+        if temp_orchestrator._intent_embeddings:
+            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query)
+            print(f"[ModelAgent] Semantic model intent: {intent} (confidence: {confidence_info['max_score']:.3f})")
+            
+            # Use moderate threshold for model intent classification
+            if confidence_info.get("max_score", 0) > 0.3:
+                return intent
+            else:
+                print(f"[ModelAgent] Semantic confidence too low, trying LLM fallback")
+        
+    except Exception as e:
+        print(f"[ModelAgent] Semantic classification error: {e}, trying LLM fallback")
+    
+    # Step 2: LLM fallback
+    try:
+        print(f"[ModelAgent] 🤖 Using LLM for model intent classification")
+        llm_intent = llm_classify_model_intent(query)
+        if llm_intent and llm_intent in ["use_existing", "new_model"]:
+            print(f"[ModelAgent] LLM model intent: {llm_intent}")
+            return llm_intent
+        else:
+            print(f"[ModelAgent] LLM classification failed, using keyword fallback")
+    except Exception as e:
+        print(f"[ModelAgent] LLM classification error: {e}, using keyword fallback")
+    
+    # Step 3: Keyword fallback
+    print(f"[ModelAgent] ⚡ Using keyword fallback for model intent")
+    return fallback_classify_intent_keywords(query)
+
+def llm_classify_model_intent(query: str) -> str:
+    """LLM-based classification for model-specific intents"""
+    try:
+        import requests
+        import json
+        
+        # Use the same LLM setup as the main orchestrator
+        prompt = f"""
+        Classify this query into one of these model intents:
+        - "use_existing": User wants to use/apply an existing trained model
+        - "new_model": User wants to train/build a new model
+        
+        Query: "{query}"
+        
+        Respond with ONLY the intent name (use_existing or new_model).
+        """
+        
+        # Try Ollama first
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "qwen2.5-coder:32b-instruct-q4_K_M",
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                intent = result.get("response", "").strip().lower()
+                
+                # Validate and clean response
+                if "use_existing" in intent:
+                    return "use_existing"
+                elif "new_model" in intent:
+                    return "new_model"
+                    
+        except Exception as ollama_error:
+            print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
+            
+        # Fallback to OpenAI if available
+        try:
+            import openai
+            client = openai.OpenAI()
+            
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10,
+                temperature=0
+            )
+            
+            intent = response.choices[0].message.content.strip().lower()
+            
+            if "use_existing" in intent:
+                return "use_existing"
+            elif "new_model" in intent:
+                return "new_model"
+                
+        except Exception as openai_error:
+            print(f"[ModelAgent] OpenAI LLM error: {openai_error}")
+            
+    except Exception as e:
+        print(f"[ModelAgent] LLM classification failed: {e}")
+    
+    return None
+
+def fallback_classify_intent_keywords(query: str) -> str:
+    """Keyword fallback classification logic - only handles model-specific intents"""
     query_lower = query.lower()
     
     # Use existing patterns for existing models
@@ -858,6 +979,240 @@ def fallback_classify_intent(query: str) -> str:
     
     # Default to new_model for all other cases since we're in ModelBuildingAgent
     return "new_model"
+
+# Keep the original function name for backward compatibility
+def fallback_classify_intent(query: str) -> str:
+    """Wrapper for backward compatibility - now uses semantic classification"""
+    return semantic_classify_model_intent(query)
+
+def semantic_detect_plot_request(query: str) -> bool:
+    """Semantic detection of plot/visualization requests"""
+    
+    try:
+        # Import orchestrator for semantic classification
+        from orchestrator import Orchestrator
+        
+        # Create temporary orchestrator for semantic classification
+        temp_orchestrator = Orchestrator()
+        
+        # Define plot detection intent definitions
+        plot_intent_definitions = {
+            "plot_request": "Show plot, visualize tree, display tree, generate plot, create visualization, show visualization, plot tree, display model, visualize model, show decision tree, plot decision tree, tree visualization, model visualization, graphical representation, visual display",
+            "no_plot": "Train model, build classifier, create predictor, develop algorithm, model training, algorithm development, machine learning, predictive modeling, classification, regression, model building, model creation"
+        }
+        
+        # Set up semantic classification
+        temp_orchestrator.intent_definitions = plot_intent_definitions
+        temp_orchestrator._initialize_intent_embeddings()
+        
+        if temp_orchestrator._intent_embeddings:
+            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query)
+            print(f"[ModelAgent] Semantic plot detection: {intent} (confidence: {confidence_info['max_score']:.3f})")
+            
+            # Use moderate threshold for plot detection
+            if confidence_info.get("max_score", 0) > 0.4:
+                return intent == "plot_request"
+            else:
+                print(f"[ModelAgent] Plot detection confidence too low, trying LLM fallback")
+        
+    except Exception as e:
+        print(f"[ModelAgent] Semantic plot detection error: {e}, trying LLM fallback")
+    
+    # Step 2: LLM fallback
+    try:
+        print(f"[ModelAgent] 🤖 Using LLM for plot detection")
+        llm_result = llm_detect_plot_request(query)
+        if llm_result is not None:
+            print(f"[ModelAgent] LLM plot detection: {llm_result}")
+            return llm_result
+        else:
+            print(f"[ModelAgent] LLM plot detection failed, using keyword fallback")
+    except Exception as e:
+        print(f"[ModelAgent] LLM plot detection error: {e}, using keyword fallback")
+    
+    # Step 3: Keyword fallback
+    print(f"[ModelAgent] ⚡ Using keyword fallback for plot detection")
+    plot_keywords = ['show', 'plot', 'visualize', 'display']
+    tree_keywords = ['tree', 'decision tree', 'model']
+    return any(pk in query.lower() for pk in plot_keywords) and any(tk in query.lower() for tk in tree_keywords)
+
+def semantic_detect_financial_analysis(query: str) -> bool:
+    """Semantic detection of financial analysis/rank ordering requests"""
+    
+    try:
+        # Import orchestrator for semantic classification
+        from orchestrator import Orchestrator
+        
+        # Create temporary orchestrator for semantic classification
+        temp_orchestrator = Orchestrator()
+        
+        # Define financial analysis intent definitions
+        financial_intent_definitions = {
+            "financial_analysis": "Segment analysis, decile analysis, rank ordering, bucket analysis, bad rate analysis, coverage analysis, segmentation, ranking, financial segmentation, risk segmentation, score segmentation, decile buckets, rank order, performance buckets, risk buckets, score buckets, population segmentation",
+            "regular_modeling": "Train model, build classifier, create predictor, develop algorithm, model training, algorithm development, machine learning, predictive modeling, classification, regression, model building, model creation, model development"
+        }
+        
+        # Set up semantic classification
+        temp_orchestrator.intent_definitions = financial_intent_definitions
+        temp_orchestrator._initialize_intent_embeddings()
+        
+        if temp_orchestrator._intent_embeddings:
+            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query)
+            print(f"[ModelAgent] Semantic financial analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
+            
+            # Use moderate threshold for financial analysis detection
+            if confidence_info.get("max_score", 0) > 0.4:
+                return intent == "financial_analysis"
+            else:
+                print(f"[ModelAgent] Financial analysis confidence too low, trying LLM fallback")
+        
+    except Exception as e:
+        print(f"[ModelAgent] Semantic financial analysis error: {e}, trying LLM fallback")
+    
+    # Step 2: LLM fallback
+    try:
+        print(f"[ModelAgent] 🤖 Using LLM for financial analysis detection")
+        llm_result = llm_detect_financial_analysis(query)
+        if llm_result is not None:
+            print(f"[ModelAgent] LLM financial analysis: {llm_result}")
+            return llm_result
+        else:
+            print(f"[ModelAgent] LLM financial analysis failed, using keyword fallback")
+    except Exception as e:
+        print(f"[ModelAgent] LLM financial analysis error: {e}, using keyword fallback")
+    
+    # Step 3: Keyword fallback
+    print(f"[ModelAgent] ⚡ Using keyword fallback for financial analysis")
+    financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
+    return any(fk in query.lower() for fk in financial_keywords)
+
+def llm_detect_plot_request(query: str) -> bool:
+    """LLM-based detection of plot/visualization requests"""
+    try:
+        import requests
+        
+        prompt = f"""
+        Does this query request a plot, visualization, or graphical display?
+        
+        Query: "{query}"
+        
+        Respond with ONLY "yes" or "no".
+        """
+        
+        # Try Ollama first
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "qwen2.5-coder:32b-instruct-q4_K_M",
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                answer = result.get("response", "").strip().lower()
+                
+                if "yes" in answer:
+                    return True
+                elif "no" in answer:
+                    return False
+                    
+        except Exception as ollama_error:
+            print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
+            
+        # Fallback to OpenAI if available
+        try:
+            import openai
+            client = openai.OpenAI()
+            
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5,
+                temperature=0
+            )
+            
+            answer = response.choices[0].message.content.strip().lower()
+            
+            if "yes" in answer:
+                return True
+            elif "no" in answer:
+                return False
+                
+        except Exception as openai_error:
+            print(f"[ModelAgent] OpenAI LLM error: {openai_error}")
+            
+    except Exception as e:
+        print(f"[ModelAgent] LLM plot detection failed: {e}")
+    
+    return None
+
+def llm_detect_financial_analysis(query: str) -> bool:
+    """LLM-based detection of financial analysis/rank ordering requests"""
+    try:
+        import requests
+        
+        prompt = f"""
+        Does this query request financial analysis, segmentation, rank ordering, or decile analysis?
+        
+        Query: "{query}"
+        
+        Respond with ONLY "yes" or "no".
+        """
+        
+        # Try Ollama first
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "qwen2.5-coder:32b-instruct-q4_K_M",
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                answer = result.get("response", "").strip().lower()
+                
+                if "yes" in answer:
+                    return True
+                elif "no" in answer:
+                    return False
+                    
+        except Exception as ollama_error:
+            print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
+            
+        # Fallback to OpenAI if available
+        try:
+            import openai
+            client = openai.OpenAI()
+            
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=5,
+                temperature=0
+            )
+            
+            answer = response.choices[0].message.content.strip().lower()
+            
+            if "yes" in answer:
+                return True
+            elif "no" in answer:
+                return False
+                
+        except Exception as openai_error:
+            print(f"[ModelAgent] OpenAI LLM error: {openai_error}")
+            
+    except Exception as e:
+        print(f"[ModelAgent] LLM financial analysis failed: {e}")
+    
+    return None
 
 # =============================================================================
 # AGENT 2: CONTROLLER AGENT (ROUTER)
@@ -1310,10 +1665,8 @@ else:
             return state
         
     else:  # build_new_model
-        # Check if plot/visualization is requested
-        plot_keywords = ['show', 'plot', 'visualize', 'display']
-        tree_keywords = ['tree', 'decision tree', 'model']
-        should_generate_plot = any(pk in query.lower() for pk in plot_keywords) and any(tk in query.lower() for tk in tree_keywords)
+        # Check if plot/visualization is requested using semantic classification
+        should_generate_plot = semantic_detect_plot_request(query)
         
         # AUTOMATIC DECISION TREE PLOTTING - Always generate plot for decision trees
         decision_tree_keywords = ['decision tree', 'decision-tree', 'decisiontree', 'tree classifier', 'tree regressor']
@@ -1323,9 +1676,8 @@ else:
         if is_decision_tree_request:
             should_generate_plot = True
         
-        # Check if financial segmentation/rank ordering is requested
-        financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
-        should_generate_ranking = any(fk in query.lower() for fk in financial_keywords)
+        # Check if financial segmentation/rank ordering is requested using semantic classification
+        should_generate_ranking = semantic_detect_financial_analysis(query)
         
         # Check if multiple models comparison is requested
         comparison_keywords = ['compare', 'comparison', 'multiple models', 'best model', 'model comparison']
