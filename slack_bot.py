@@ -83,14 +83,35 @@ class SlackMLBot:
             user_id = event['user']
             channel = event['channel']
             thread_ts = event.get('thread_ts', event['ts'])
-            session_id = self._get_session_id(user_id, thread_ts)
+            
+            # For consistent session tracking, use the THREAD ID (not timestamp)
+            # All messages in the same thread should use the same session ID
+            # If this is a thread reply, use the thread_ts as the session identifier
+            # If this is a new message, use the message ts as the session identifier
+            if event.get('thread_ts'):
+                # This is a reply in an existing thread - use the thread ID
+                session_id = self._get_session_id(user_id, event['thread_ts'])
+                print(f"🔍 DEBUG: Thread reply detected - using thread ID: {event['thread_ts']}")
+            else:
+                # This is a new message - use the message timestamp as session ID
+                session_id = self._get_session_id(user_id, event['ts'])
+                print(f"🔍 DEBUG: New message detected - using message timestamp: {event['ts']}")
             
             # Debugging for session registration
             print(f"🔍 DEBUG: Registering session with ID: {session_id}")
             print(f"🔍 DEBUG: Channel: {channel}")
             print(f"🔍 DEBUG: Thread TS: {thread_ts}")
-            self.ml_pipeline.slack_manager.register_session(session_id, channel, thread_ts)
+            print(f"🔍 DEBUG: Event type: {event.get('type', 'unknown')}")
+            print(f"🔍 DEBUG: Event subtype: {event.get('subtype', 'none')}")
+            print(f"🔍 DEBUG: Is thread reply: {bool(event.get('thread_ts'))}")
+            print(f"🔍 DEBUG: Parent thread: {event.get('thread_ts', 'none')}")
+            print(f"🔍 DEBUG: Message timestamp: {event.get('ts', 'none')}")
+            
+            # Use the thread ID for session registration (consistent with session ID)
+            session_thread_ts = event.get('thread_ts') if event.get('thread_ts') else event.get('ts')
+            self.ml_pipeline.slack_manager.register_session(session_id, channel, session_thread_ts)
             print(f"🔍 DEBUG: Session registered. Current sessions: {self.ml_pipeline.slack_manager.session_channels}")
+            print(f"🔍 DEBUG: Session threads: {self.ml_pipeline.slack_manager.session_threads}")
             
             # Clean the message text (remove bot mention)
             if f"<@{bot_user_id}>" in text:
@@ -209,8 +230,13 @@ Just upload your data and start asking questions in natural language! 🎉"""
     
     def _get_session_id(self, user_id: str, thread_ts: Optional[str] = None) -> str:
         """Generate a unique session ID for tracking user conversations"""
+        # Use thread_ts if provided, otherwise use user_id
+        # For consistent session tracking, use the thread_ts as the session identifier
         if thread_ts:
-            return f"{user_id}_{thread_ts}"
+            # Extract the base thread timestamp (without milliseconds) for consistency
+            # This ensures the same session ID for all messages in the same thread
+            base_thread = thread_ts.split('.')[0] if '.' in thread_ts else thread_ts
+            return f"{user_id}_{base_thread}"
         return user_id
     
     def _handle_file_attachments(self, files: List[Dict], session_id: str, say, thread_ts: str):

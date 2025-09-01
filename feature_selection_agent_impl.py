@@ -38,7 +38,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.stats import chi2
 
 # Global configuration
-GLOBAL_DEFAULT_MODEL = "gpt-4o"
+GLOBAL_DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "gpt-4o")
 
 @dataclass
 class AnalysisStep:

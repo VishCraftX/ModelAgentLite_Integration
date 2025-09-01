@@ -906,9 +906,14 @@ How can I help you with your ML workflow today?"""
         Semantic-first routing: Embedding similarity with keyword and LLM fallbacks
         """
         if not state.user_query:
-            return "preprocessing"  # Default
+            return "general_response"  # Do nothing until user provides intent
         
         print(f"[Orchestrator] Processing query: '{state.user_query}'")
+        # Minimal hardcoded override for local testing without embeddings/LLM
+        ql = state.user_query.lower().strip()
+        if ql == "preprocessing" or ql.startswith("preprocessing "):
+            print("[Orchestrator] 🔧 Keyword override matched: preprocessing → routing to preprocessing agent")
+            return "preprocessing"
         
         # Step 1: Try semantic similarity classification first (if available)
         if EMBEDDINGS_AVAILABLE and self._intent_embeddings:

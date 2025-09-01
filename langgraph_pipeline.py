@@ -165,6 +165,21 @@ class MultiAgentMLPipeline:
         
         progress_tracker.update(state, f"Routed to {selected_agent}: {explanation}")
         
+        # Send a friendly next-steps hint via Slack
+        try:
+            slack_manager = self.slack_manager
+            if slack_manager and state.chat_session:
+                next_hint = {
+                    'preprocessing': "Type `proceed` to begin preprocessing, or `help` for options.",
+                    'feature_selection': "Type `proceed` to begin feature selection, or `help` for options.",
+                    'model_building': "Type `proceed` to begin model building, or `help` for options.",
+                    'general_response': "You can ask a question or say `help` for options.",
+                    'code_execution': "Type your code question or `help` for options.",
+                }.get(selected_agent, "Type `help` for options.")
+                slack_manager.send_message(state.chat_session, f"{explanation}\n\n{next_hint}")
+        except Exception as e:
+            print(f"⚠️ Failed to send orchestrator next-steps hint: {e}")
+        
         return state
     
     def _preprocessing_node(self, state: PipelineState) -> PipelineState:
@@ -211,7 +226,7 @@ class MultiAgentMLPipeline:
             
             # Use LLM for conversational response
             response = ollama.chat(
-                model="qwen2.5-coder:32b-instruct-q4_K_M",  # Same model as ModelBuildingAgent
+                model=os.getenv("DEFAULT_MODEL", "gpt-4o"),  # Use environment variable
                 messages=[
                     {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."},
                     {"role": "user", "content": context_prompt}
@@ -347,6 +362,22 @@ class MultiAgentMLPipeline:
             
             # Convert state to dict for JSON serialization
             state_dict = state.dict()
+
+            # Recursively convert numpy types to native Python
+            import numpy as np
+            def to_native(obj):
+                if isinstance(obj, dict):
+                    return {k: to_native(v) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [to_native(v) for v in obj]
+                if isinstance(obj, (np.integer,)):
+                    return int(obj)
+                if isinstance(obj, (np.floating,)):
+                    return float(obj)
+                if isinstance(obj, (np.bool_,)):
+                    return bool(obj)
+                return obj
+            state_dict = to_native(state_dict)
             
             # Save DataFrames as CSV files and store references
             if 'raw_data' in state_dict and state.raw_data is not None:
@@ -368,6 +399,8 @@ class MultiAgentMLPipeline:
                 state.cleaned_data.to_csv(cleaned_data_file, index=False)
                 state_dict['cleaned_data'] = {"type": "dataframe", "file": "cleaned_data.csv", "shape": list(state.cleaned_data.shape)}
                 print(f"💾 Saved cleaned_data to session: {state.cleaned_data.shape}")
+                print(f"📁 Data saved to: {cleaned_data_file}")
+                print(f"🔧 DEBUG: Data columns: {list(state.cleaned_data.columns)}")
             else:
                 state_dict['cleaned_data'] = None
             
@@ -611,47 +644,66 @@ class MultiAgentMLPipeline:
                 chat_session=session_id,
                 user_query=query
             )
-            # Load previous session state if available
-            previous_state = self._load_session_state(session_id)
-            if previous_state:
-                print(f"📂 Loaded previous session state for {session_id}")
-                # Restore relevant state information INCLUDING DataFrames
-                if 'preprocessing_state' in previous_state:
-                    state.preprocessing_state = previous_state['preprocessing_state']
-                if 'feature_selection_state' in previous_state:
-                    state.feature_selection_state = previous_state['feature_selection_state']
-                if 'model_building_state' in previous_state:
-                    state.model_building_state = previous_state['model_building_state']
-                # Restore interactive session if available
-                if 'interactive_session' in previous_state:
-                    state.interactive_session = previous_state['interactive_session']
-                # Restore DataFrames
-                if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
-                    state.raw_data = previous_state['raw_data']
-                if 'processed_data' in previous_state and previous_state['processed_data'] is not None:
-                    state.processed_data = previous_state['processed_data']
-                if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
-                    state.cleaned_data = previous_state['cleaned_data']
-                # Restore other important fields
-                if 'selected_features' in previous_state and previous_state['selected_features'] is not None:
-                    state.selected_features = previous_state['selected_features']
-                if 'models' in previous_state and previous_state['models'] is not None:
-                    state.models = previous_state['models']
-                if 'best_model' in previous_state and previous_state['best_model'] is not None:
-                    state.best_model = previous_state['best_model']
-                if 'target_column' in previous_state and previous_state['target_column'] is not None:
-                    state.target_column = previous_state['target_column']
+        
+        # Always load session state if available (for interactive sessions)
+        previous_state = self._load_session_state(session_id)
+        if previous_state:
+            print(f"📂 Loaded previous session state for {session_id}")
+            print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
+            # Restore relevant state information INCLUDING DataFrames
+            if 'preprocessing_state' in previous_state:
+                state.preprocessing_state = previous_state['preprocessing_state']
+                print(f"🔧 DEBUG: Restored preprocessing_state: {state.preprocessing_state}")
+                if state.preprocessing_state:
+                    print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
+                    print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
+            if 'feature_selection_state' in previous_state:
+                state.feature_selection_state = previous_state['feature_selection_state']
+            if 'model_building_state' in previous_state:
+                state.model_building_state = previous_state['model_building_state']
+            # Restore interactive session if available
+            if 'interactive_session' in previous_state:
+                state.interactive_session = previous_state['interactive_session']
+                print(f"🔧 DEBUG: Restored interactive_session: {state.interactive_session}")
+            # Restore DataFrames
+            if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
+                state.raw_data = previous_state['raw_data']
+            if 'processed_data' in previous_state and previous_state['processed_data'] is not None:
+                state.processed_data = previous_state['processed_data']
+            if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
+                state.cleaned_data = previous_state['cleaned_data']
+            # Restore other important fields
+            if 'selected_features' in previous_state and previous_state['selected_features'] is not None:
+                state.selected_features = previous_state['selected_features']
+            if 'models' in previous_state and previous_state['models'] is not None:
+                state.models = previous_state['models']
+            if 'best_model' in previous_state and previous_state['best_model'] is not None:
+                state.best_model = previous_state['best_model']
+            if 'target_column' in previous_state and previous_state['target_column'] is not None:
+                state.target_column = previous_state['target_column']
         else:
-            state.user_query = query
+            print(f"🔧 DEBUG: No previous state found for {session_id}")
+        
+        # Update user query
+        state.user_query = query
         
         # Check if we have an active interactive session that needs to continue
         # BUT only if the query is a continuation command, not a new request
+        print(f"🔍 DEBUG: Checking interactive session:")
+        print(f"  Has interactive_session attr: {hasattr(state, 'interactive_session')}")
+        print(f"  Interactive session is None: {state.interactive_session is None}")
+        print(f"  Session active: {state.interactive_session.get('session_active', False) if state.interactive_session else 'N/A'}")
+        print(f"  Interactive session details: {state.interactive_session}")
+        
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session is not None and 
             state.interactive_session.get('session_active', False)):
             
+            print(f"🔄 Interactive session active: {state.interactive_session['agent_type']}")
+            
             # Check if this is a continuation command vs a new request
             query_lower = query.lower().strip()
+            print(f"🔍 DEBUG: Query to check: '{query_lower}'")
             
             # Pure continuation commands (context-independent)
             pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help']
@@ -663,7 +715,7 @@ class MultiAgentMLPipeline:
             if is_clear_command:
                 print(f"🔄 Explicit session clear requested")
                 state.interactive_session = None
-                from toolbox import slack_manager
+                slack_manager = self.slack_manager
                 slack_manager.send_message(state.chat_session, "✅ Session cleared. You can now start a new workflow.")
                 return self._prepare_response(state, "Session cleared successfully.")
             
@@ -778,7 +830,13 @@ class MultiAgentMLPipeline:
                 if agent_type == 'preprocessing':
                     preprocessing_continuations = [
                         'skip outliers', 'skip missing', 'skip encoding', 'skip transformations',
-                        'skip this phase', 'skip current', 'target ', 'column '
+                        'skip this phase', 'skip current', 'target ', 'column ',
+                        'go ahead', 'go ahead with', 'proceed with', 'continue with',
+                        'start outliers', 'start missing', 'start encoding', 'start transformations',
+                        'begin outliers', 'begin missing', 'begin encoding', 'begin transformations',
+                        'run outliers', 'run missing', 'run encoding', 'run transformations',
+                        'do outliers', 'do missing', 'do encoding', 'do transformations',
+                        'handle outliers', 'handle missing', 'handle encoding', 'handle transformations'
                     ]
                     return any(cmd in query_lower for cmd in preprocessing_continuations)
                 
@@ -919,7 +977,26 @@ class MultiAgentMLPipeline:
     def _handle_preprocessing_interaction(self, state: PipelineState, query: str):
         """Handle interactive preprocessing commands"""
         try:
-            from toolbox import slack_manager
+            # Load previous session state to ensure we have the latest state
+            previous_state = self._load_session_state(state.chat_session)
+            if previous_state:
+                print(f"📂 Loaded previous session state in preprocessing handler")
+                print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
+                # Restore preprocessing state if available
+                if 'preprocessing_state' in previous_state:
+                    state.preprocessing_state = previous_state['preprocessing_state']
+                    print(f"🔧 DEBUG: Restored preprocessing_state in handler: {state.preprocessing_state}")
+                    print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
+                    print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
+                # Restore interactive session if available
+                if 'interactive_session' in previous_state:
+                    state.interactive_session = previous_state['interactive_session']
+                    print(f"🔧 DEBUG: Restored interactive_session in handler: {state.interactive_session}")
+            else:
+                print(f"🔧 DEBUG: No previous state found in preprocessing handler")
+            
+            # Use the pipeline's slack_manager instead of the global one
+            slack_manager = self.slack_manager
             query_lower = query.lower().strip()
             
             # Handle target column specification
@@ -972,30 +1049,65 @@ Please specify a valid column name."""
             
             # Handle preprocessing commands
             elif 'proceed' in query_lower:
-                # Run basic preprocessing and show results
+                # Start the actual preprocessing phases
                 from agents_wrapper import preprocessing_agent
-                processed_state = preprocessing_agent._run_basic_preprocessing_fallback(state)
                 
-                result_msg = f"""✅ **Preprocessing Completed!**
-
-📊 **Results:**
-• Original: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-• Processed: {processed_state.cleaned_data.shape[0]:,} rows × {processed_state.cleaned_data.shape[1]} columns
-• Target column: {processed_state.target_column}
-
-**✅ Your data is now ready for feature selection and model building!**
-
-**Next steps:**
-• `select features` - Choose important features
-• `build model` - Train a machine learning model
-• `analyze data` - Get data insights"""
+                # Check if we need to start the interactive workflow
+                if not state.interactive_session or state.interactive_session.get('phase') != 'processing':
+                    # Start the interactive preprocessing workflow
+                    print("🚀 Starting interactive preprocessing workflow")
+                    # Pass the pipeline's slack_manager to the state
+                    state._slack_manager = self.slack_manager
+                    processed_state = preprocessing_agent.handle_interactive_command(state, 'proceed')
+                    
+                    # Debug: Check if preprocessing state was set
+                    print(f"🔧 DEBUG: After proceed - preprocessing_state: {processed_state.preprocessing_state}")
+                    print(f"🔧 DEBUG: After proceed - has outlier_results: {processed_state.preprocessing_state.get('outlier_results') is not None if processed_state.preprocessing_state else False}")
+                    
+                    # Save the updated state to session state file
+                    self._save_session_state(processed_state.session_id, processed_state)
+                    
+                    # The preprocessing agent should handle the interactive flow
+                    # and return the state with the interactive session set up
+                    return self._prepare_response(processed_state, "Interactive preprocessing started.")
+                else:
+                    # Continue with the current preprocessing phase
+                    print("🔄 Continuing current preprocessing phase")
+                    # This should be handled by the preprocessing agent's interactive flow
+                    return self._prepare_response(state, "Continuing preprocessing phase.")
+            
+            elif 'continue' in query_lower:
+                # Handle continue command for applying recommendations and moving to next phase
+                from agents_wrapper import preprocessing_agent
                 
-                slack_manager.send_message(state.chat_session, result_msg)
+                print("🔄 Handling continue command for preprocessing")
+                # Debug: Check current state before continue
+                print(f"🔧 DEBUG: Before continue - preprocessing_state: {state.preprocessing_state}")
                 
-                # Clear interactive session
-                state.interactive_session = None
+                # Pass the pipeline's slack_manager to the state
+                state._slack_manager = self.slack_manager
+                processed_state = preprocessing_agent.handle_interactive_command(state, 'continue')
                 
-                return self._prepare_response(processed_state, "Preprocessing completed successfully!")
+                # Save the updated state to session state file
+                self._save_session_state(processed_state.session_id, processed_state)
+                
+                # Let the preprocessing agent handle the response, don't override it
+                return self._prepare_response(processed_state, "Continue command processed.")
+            
+            # Check if we're in an active preprocessing phase and route to preprocessing agent
+            elif state.preprocessing_state and state.preprocessing_state.get('current_phase') in ['outliers', 'missing_values', 'encoding', 'transformations']:
+                # Route to preprocessing agent for phase-specific handling
+                from agents_wrapper import preprocessing_agent
+                
+                print(f"🔄 Routing to preprocessing agent for phase: {state.preprocessing_state.get('current_phase')}")
+                # Pass the pipeline's slack_manager to the state
+                state._slack_manager = self.slack_manager
+                processed_state = preprocessing_agent.handle_interactive_command(state, query)
+                
+                # Save the updated state to session state file
+                self._save_session_state(processed_state.session_id, processed_state)
+                
+                return self._prepare_response(processed_state, f"Processed in {state.preprocessing_state.get('current_phase')} phase.")
             
             elif 'summary' in query_lower:
                 summary_msg = f"""📋 **Preprocessing Status**
@@ -1064,9 +1176,83 @@ What would you like to do?"""
             state = PipelineState(session_id=session_id, chat_session=session_id)
         
         state.raw_data = data
+        
+        # Auto-detect target column if not set
+        target_was_auto_detected = False
+        if state.target_column is None and hasattr(data, 'columns'):
+            print(f"🔧 DEBUG: Auto-detecting target column from columns: {list(data.columns)}")
+            
+            # Common target column names
+            common_target_names = ['target', 'label', 'class', 'y', 'outcome', 'result', 'prediction', 'is_fraud', 'default_risk', 'churn', 'conversion']
+            
+            for col in data.columns:
+                if col.lower() in common_target_names:
+                    state.target_column = col
+                    print(f"🎯 Auto-detected target column: {col}")
+                    target_was_auto_detected = True
+                    break
+            
+            # If no common name found, use the last column as target
+            if state.target_column is None:
+                state.target_column = data.columns[-1]
+                print(f"🎯 Using last column as target: {state.target_column}")
+                target_was_auto_detected = True
+        
         state_manager.save_state(state)
         
         print(f"📊 Data loaded for session {session_id}: {data.shape if hasattr(data, 'shape') else 'Unknown shape'}")
+        if state.target_column:
+            print(f"🎯 Target column: {state.target_column}")
+        
+        # If target was auto-detected, automatically show preprocessing menu
+        if target_was_auto_detected and state.target_column:
+            # Only auto-show when the current intent is preprocessing/full_pipeline
+            current_intent = getattr(state, 'current_intent', None) or getattr(state, 'user_intent', None)
+            if not current_intent:
+                # Try to infer from last routing decision if stored
+                current_intent = getattr(state, 'last_route', None)
+            if current_intent not in ['preprocessing', 'full_pipeline']:
+                print("🎯 Target auto-detected but intent is not preprocessing/full_pipeline; skipping auto menu")
+                return
+            print("🎯 Target auto-detected - automatically showing preprocessing menu")
+            # Set up interactive session
+            state.interactive_session = {
+                "agent_type": "preprocessing",
+                "session_active": True,
+                "session_id": state.chat_session,
+                "phase": "waiting_input",
+                "target_column": state.target_column,
+                "current_phase": "overview"
+            }
+            
+            # Send preprocessing menu via Slack
+            # Use the pipeline's slack_manager instead of the global one
+            slack_manager = self.slack_manager
+            if slack_manager and state.chat_session:
+                menu_msg = f"""🧹 **Sequential Preprocessing Agent**
+
+📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target Column:** {state.target_column} (auto-detected)
+
+**🔄 Preprocessing Phases:**
+• `Overview` - Dataset analysis and summary
+• `Outliers` - Detect and handle outliers  
+• `Missing Values` - Handle missing data
+• `Encoding` - Categorical variable encoding
+• `Transformations` - Feature transformations
+
+**💬 Your Options:**
+• `proceed` - Start preprocessing workflow
+• `skip overview` - Skip to outlier detection
+• `explain outliers` - Learn about outlier handling
+• `summary` - Show current status
+
+💬 **What would you like to do?**"""
+                
+                slack_manager.send_message(state.chat_session, menu_msg)
+                print("✅ Auto-sent preprocessing menu to Slack")
+            
+            state_manager.save_state(state)
     
     def get_session_status(self, session_id: str) -> Dict[str, Any]:
         """Get status of a session"""
