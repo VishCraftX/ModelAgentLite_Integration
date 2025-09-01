@@ -1297,6 +1297,55 @@ What would you like to do?"""
         """Clean up old sessions"""
         state_manager.cleanup_old_sessions(max_age_hours)
 
+    def _classify_in_phase_intent(self, query: str) -> str:
+        """
+        Classify user intent within an active preprocessing phase using embeddings with keyword fallbacks.
+        
+        Args:
+            query: User's input query
+            
+        Returns:
+            Classified intent: 'proceed', 'skip', 'query', 'override', 'summary', or original query
+        """
+        try:
+            # Try semantic classification first (if embeddings available)
+            from orchestrator import orchestrator
+            if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
+                intent, scores = orchestrator._classify_with_semantic_similarity(query)
+                if scores.get('max_score', 0) > 0.6:  # High confidence threshold for in-phase
+                    print(f"🧠 Semantic classification: '{query}' → '{intent}' (confidence: {scores.get('max_score', 0):.2f})")
+                    return intent
+            
+            # Fallback to keyword matching
+            query_lower = query.lower().strip()
+            
+            # Continuation keywords
+            continue_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good']
+            if any(kw in query_lower for kw in continue_keywords):
+                return 'proceed'
+            
+            # Skip keywords  
+            skip_keywords = ['skip', 'pass', 'ignore', 'no thanks']
+            if any(kw in query_lower for kw in skip_keywords):
+                return 'skip'
+            
+            # Override keywords
+            override_keywords = ['use', 'set', 'change', 'override', 'apply', 'modify']
+            if any(kw in query_lower for kw in override_keywords):
+                return 'override'
+            
+            # Summary/status keywords
+            summary_keywords = ['summary', 'status', 'show', 'what', 'current', 'progress']
+            if any(kw in query_lower for kw in summary_keywords):
+                return 'summary'
+            
+            # Default to query for unrecognized patterns
+            return 'query'
+            
+        except Exception as e:
+            print(f"⚠️ Error in in-phase intent classification: {e}")
+            return 'query'  # Safe fallback
+
 
 # Global pipeline instance
 pipeline = None
