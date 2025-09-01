@@ -80,6 +80,13 @@ class SlackManager:
     
     def register_session(self, session_id: str, channel: str, thread_ts: str = None):
         """Register a new session with channel and thread information"""
+        print(f"🔍 DEBUG: register_session called:")
+        print(f"  Session ID: {session_id}")
+        print(f"  Channel: {channel}")
+        print(f"  Thread TS: {thread_ts}")
+        print(f"  Before registration - sessions: {self.session_channels}")
+        print(f"  Before registration - threads: {self.session_threads}")
+        
         print(f"🔍 DEBUG SlackManager.register_session:")
         print(f"  Before: session_channels = {self.session_channels}")
         self.session_channels[session_id] = channel
@@ -87,6 +94,10 @@ class SlackManager:
             self.session_threads[session_id] = thread_ts
         print(f"  After: session_channels = {self.session_channels}")
         print(f"  Registered session {session_id} with channel {channel}")
+            
+        print(f"🔍 DEBUG: After registration:")
+        print(f"  Sessions: {self.session_channels}")
+        print(f"  Threads: {self.session_threads}")
     
     def send_message(self, session_id: str, text: str, channel: str = None, thread_ts: str = None):
         """Send message to specific session"""
@@ -101,7 +112,21 @@ class SlackManager:
             if not thread_ts:
                 thread_ts = self.session_threads.get(session_id)
             
-            # Only show debug for actual failures, not all messages
+            print(f"🔍 DEBUG SlackManager.send_message:")
+            print(f"  Session ID: {session_id}")
+            print(f"  Channel: {channel}")
+            print(f"  Thread TS: {thread_ts}")
+            print(f"  Available sessions: {list(self.session_channels.keys())}")
+            print(f"  Session channels: {self.session_channels}")
+            
+            # If still no channel, extract from session_id (format: user_threadts)
+            if not channel and "_" in session_id:
+                # This is a fallback - ideally channel should be set properly
+                print(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
+                print(f"🔍 DEBUG: Available sessions: {self.session_channels}")
+                print(f"[Slack:{session_id}] {text}")
+                return
+            
             if not channel:
                 print(f"🔍 DEBUG SlackManager.send_message - SESSION NOT FOUND:")
                 print(f"  Session ID: {session_id}")
@@ -951,6 +976,21 @@ pattern_classifier = UniversalPatternClassifier()
 
 def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None):
     """Initialize global toolbox with custom configuration"""
+    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager
+    
+    # Preserve existing session data if slack_manager already exists
+    existing_sessions = {}
+    existing_threads = {}
+    if slack_manager and hasattr(slack_manager, 'session_channels'):
+        existing_sessions = slack_manager.session_channels.copy()
+        existing_threads = slack_manager.session_threads.copy()
+        print(f"🔍 DEBUG: Preserving {len(existing_sessions)} existing sessions")
+        print(f"🔍 DEBUG: Existing sessions: {existing_sessions}")
+        print(f"🔍 DEBUG: Existing threads: {existing_threads}")
+        print(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
+        print(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
+    
+    if slack_token:
     global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager, pattern_classifier
     
     if slack_token and not hasattr(slack_manager, 'client'):
@@ -964,6 +1004,16 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
     elif slack_token:
         # Fallback - create new one
         slack_manager = SlackManager(slack_token)
+        # Restore existing sessions
+        if existing_sessions:
+            print(f"🔍 DEBUG: Before restoration - new slack_manager sessions: {slack_manager.session_channels}")
+            print(f"🔍 DEBUG: Before restoration - new slack_manager threads: {slack_manager.session_threads}")
+            slack_manager.session_channels.update(existing_sessions)
+            slack_manager.session_threads.update(existing_threads)
+            print(f"🔍 DEBUG: Restored {len(existing_sessions)} sessions to new SlackManager")
+            print(f"🔍 DEBUG: Restored sessions: {slack_manager.session_channels}")
+            print(f"🔍 DEBUG: Restored threads: {slack_manager.session_threads}")
+            print(f"🔍 DEBUG: New slack_manager id: {id(slack_manager)}")
         progress_tracker = ProgressTracker(slack_manager)
         print("🔧 Created fallback SlackManager instance")
     
