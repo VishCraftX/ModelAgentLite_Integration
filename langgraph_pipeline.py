@@ -1000,7 +1000,7 @@ class MultiAgentMLPipeline:
             query_lower = query.lower().strip()
             
             # Handle target column specification
-            if state.interactive_session.get('phase') == 'need_target':
+            if state.interactive_session and state.interactive_session.get('phase') == 'need_target':
                 if query_lower.startswith('target '):
                     target_col = query[7:].strip()
                 else:
@@ -1053,7 +1053,9 @@ Please specify a valid column name."""
                 from agents_wrapper import preprocessing_agent
                 
                 # Check if we need to start the interactive workflow
-                if not state.interactive_session or state.interactive_session.get('phase') != 'processing':
+                active_phase = (state.preprocessing_state or {}).get('current_phase')
+                phase_active = active_phase in ['outliers', 'missing_values', 'encoding', 'transformations']
+                if not phase_active:
                     # Start the interactive preprocessing workflow
                     print("🚀 Starting interactive preprocessing workflow")
                     # Pass the pipeline's slack_manager to the state
@@ -1071,10 +1073,12 @@ Please specify a valid column name."""
                     # and return the state with the interactive session set up
                     return self._prepare_response(processed_state, "Interactive preprocessing started.")
                 else:
-                    # Continue with the current preprocessing phase
-                    print("🔄 Continuing current preprocessing phase")
-                    # This should be handled by the preprocessing agent's interactive flow
-                    return self._prepare_response(state, "Continuing preprocessing phase.")
+                    # Phase-aware: treat 'proceed' as 'continue' when already inside a phase
+                    print("🔄 Proceed received in-phase → treating as 'continue'")
+                    state._slack_manager = self.slack_manager
+                    processed_state = preprocessing_agent.handle_interactive_command(state, 'continue')
+                    self._save_session_state(processed_state.session_id, processed_state)
+                    return self._prepare_response(processed_state, "Proceed mapped to continue in current phase.")
             
             elif 'continue' in query_lower:
                 # Handle continue command for applying recommendations and moving to next phase
@@ -1100,9 +1104,23 @@ Please specify a valid column name."""
                 from agents_wrapper import preprocessing_agent
                 
                 print(f"🔄 Routing to preprocessing agent for phase: {state.preprocessing_state.get('current_phase')}")
+                # Classify in-phase intent first (embeddings→keywords→heuristics)
+                intent = self._classify_in_phase_intent(query)
+                # Map intent to underlying commands handled by wrapper
+                mapped = query
+                if intent == 'proceed':
+                    mapped = 'continue'
+                elif intent == 'summary':
+                    mapped = 'summary'
+                elif intent == 'override':
+                    mapped = 'override ' + query
+                elif intent == 'skip':
+                    mapped = query  # allows 'skip encoding' etc.
+                else:
+                    mapped = query  # query/help/navigate pass through
                 # Pass the pipeline's slack_manager to the state
                 state._slack_manager = self.slack_manager
-                processed_state = preprocessing_agent.handle_interactive_command(state, query)
+                processed_state = preprocessing_agent.handle_interactive_command(state, mapped)
                 
                 # Save the updated state to session state file
                 self._save_session_state(processed_state.session_id, processed_state)
