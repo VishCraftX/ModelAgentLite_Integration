@@ -1376,9 +1376,10 @@ What would you like to do?"""
         print(f"🔍 [Level 4] Processing query: '{query}'")
         
         try:
-            # BGE-based classification for preprocessing actions
-            if hasattr(self, 'intent_classifier') and self.intent_classifier:
-                print(f"🧠 [Level 4] BGE embeddings available, attempting semantic classification...")
+            # BGE-based classification using orchestrator's embeddings (same as Levels 1-3)
+            from orchestrator import orchestrator
+            if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
+                print(f"🧠 [Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
                 
                 action_definitions = {
                     "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this",
@@ -1388,14 +1389,15 @@ What would you like to do?"""
                     "summary_action": "show current strategies, display current plan, what's planned, show me current approach, current strategy summary, what are we doing, show strategies for all columns, current preprocessing plan"
                 }
                 
-                query_embedding = self.intent_classifier.get_embedding(query)
+                # Use orchestrator's embedding system (same as main pipeline)
+                query_embedding = orchestrator._get_embedding(query)
                 if query_embedding is not None:
-                    print(f"✅ [Level 4] Query embedding generated successfully")
+                    print(f"✅ [Level 4] Query embedding generated successfully via orchestrator")
                     similarities = {}
                     for intent_name, definition in action_definitions.items():
-                        intent_embedding = self.intent_classifier.get_embedding(definition)
+                        intent_embedding = orchestrator._get_embedding(definition)
                         if intent_embedding is not None:
-                            similarity = self.intent_classifier.calculate_similarity(query_embedding, intent_embedding)
+                            similarity = orchestrator._calculate_similarity(query_embedding, intent_embedding)
                             similarities[intent_name] = similarity
                     
                     if similarities:
@@ -1415,9 +1417,9 @@ What would you like to do?"""
                         else:
                             print(f"⚠️ [Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
                 else:
-                    print(f"❌ [Level 4] Failed to generate query embedding")
+                    print(f"❌ [Level 4] Failed to generate query embedding via orchestrator")
             else:
-                print(f"⚠️ [Level 4] BGE embeddings not available, using keyword fallback")
+                print(f"⚠️ [Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
         
         except Exception as e:
             print(f"❌ [Level 4] BGE classification error: {e}")
