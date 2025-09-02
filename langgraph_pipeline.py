@@ -648,44 +648,44 @@ class MultiAgentMLPipeline:
         # Always load session state if available (for interactive sessions)
         previous_state = self._load_session_state(session_id)
         if previous_state:
-            print(f"📂 Loaded previous session state for {session_id}")
-            print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
-            # Restore relevant state information INCLUDING DataFrames
-            if 'preprocessing_state' in previous_state:
-                state.preprocessing_state = previous_state['preprocessing_state']
+                print(f"📂 Loaded previous session state for {session_id}")
+                print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
+                # Restore relevant state information INCLUDING DataFrames
+                if 'preprocessing_state' in previous_state:
+                    state.preprocessing_state = previous_state['preprocessing_state']
                 print(f"🔧 DEBUG: Restored preprocessing_state: {state.preprocessing_state}")
                 if state.preprocessing_state:
                     print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
                     print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
-            if 'feature_selection_state' in previous_state:
-                state.feature_selection_state = previous_state['feature_selection_state']
-            if 'model_building_state' in previous_state:
-                state.model_building_state = previous_state['model_building_state']
-            # Restore interactive session if available
-            if 'interactive_session' in previous_state:
-                state.interactive_session = previous_state['interactive_session']
+                if 'feature_selection_state' in previous_state:
+                    state.feature_selection_state = previous_state['feature_selection_state']
+                if 'model_building_state' in previous_state:
+                    state.model_building_state = previous_state['model_building_state']
+                # Restore interactive session if available
+                if 'interactive_session' in previous_state:
+                    state.interactive_session = previous_state['interactive_session']
                 print(f"🔧 DEBUG: Restored interactive_session: {state.interactive_session}")
-            # Restore DataFrames
-            if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
-                state.raw_data = previous_state['raw_data']
-            if 'processed_data' in previous_state and previous_state['processed_data'] is not None:
-                state.processed_data = previous_state['processed_data']
-            if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
-                state.cleaned_data = previous_state['cleaned_data']
-            # Restore other important fields
-            if 'selected_features' in previous_state and previous_state['selected_features'] is not None:
-                state.selected_features = previous_state['selected_features']
-            if 'models' in previous_state and previous_state['models'] is not None:
-                state.models = previous_state['models']
-            if 'best_model' in previous_state and previous_state['best_model'] is not None:
-                state.best_model = previous_state['best_model']
-            if 'target_column' in previous_state and previous_state['target_column'] is not None:
-                state.target_column = previous_state['target_column']
+                # Restore DataFrames
+                if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
+                    state.raw_data = previous_state['raw_data']
+                if 'processed_data' in previous_state and previous_state['processed_data'] is not None:
+                    state.processed_data = previous_state['processed_data']
+                if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
+                    state.cleaned_data = previous_state['cleaned_data']
+                # Restore other important fields
+                if 'selected_features' in previous_state and previous_state['selected_features'] is not None:
+                    state.selected_features = previous_state['selected_features']
+                if 'models' in previous_state and previous_state['models'] is not None:
+                    state.models = previous_state['models']
+                if 'best_model' in previous_state and previous_state['best_model'] is not None:
+                    state.best_model = previous_state['best_model']
+                if 'target_column' in previous_state and previous_state['target_column'] is not None:
+                    state.target_column = previous_state['target_column']
         else:
             print(f"🔧 DEBUG: No previous state found for {session_id}")
         
         # Update user query
-        state.user_query = query
+            state.user_query = query
         
         # Check if we have an active interactive session that needs to continue
         # BUT only if the query is a continuation command, not a new request
@@ -736,7 +736,7 @@ class MultiAgentMLPipeline:
                     # Define what constitutes a "new request" vs "session continuation"
                     new_request_definitions = {
                         "new_ml_request": "Start new machine learning task, begin different ML workflow, switch to new agent, train new model, build new classifier, create new predictor, analyze different dataset, perform new analysis, start fresh preprocessing, begin new feature selection, initiate model building, commence new ML pipeline",
-                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis"
+                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now"
                     }
                     
                     from orchestrator import Orchestrator
@@ -792,8 +792,8 @@ class MultiAgentMLPipeline:
                 try:
                     continuation_definitions = {
                         'preprocessing': {
-                            'continue_preprocessing': "Skip current step, proceed to next phase, continue preprocessing workflow, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation",
-                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent"
+                            'continue_preprocessing': "Skip current step, proceed to next phase, continue preprocessing workflow, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, fine continue preprocessing, sure proceed now, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, precisely continue workflow, indeed proceed now, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now",
+                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent, what is this, how does this work, why did you do that, when will this finish, where is the data, which algorithm should I use, who created this, explain this result, help me understand, what does this mean, how do I interpret this, why is this happening, when should I use this, where can I find more info, which option is better, who can help me, explain the process, help with analysis, what are the steps, how to proceed differently, why choose this method, when to stop preprocessing, where to go next, which features matter, who decides this, explain the logic, help me choose, what comes after this, how to improve results, why this recommendation, when to apply transformations, where to check results, which metrics matter, who validates this, explain the outcome, help interpret results"
                         },
                         'feature_selection': {
                             'continue_feature_selection': "Skip current analysis, run information value, execute SHAP analysis, continue feature selection, proceed with variable selection, advance feature engineering, move to next selection step, bypass current feature analysis, select important features, rank features, analyze correlations",
@@ -1108,7 +1108,7 @@ Please specify a valid column name."""
                 intent = self._classify_in_phase_intent(query)
                 # Map intent to underlying commands handled by wrapper
                 mapped = query
-                if intent == 'proceed':
+                if intent in ['proceed', 'continue_preprocessing', 'session_continuation']:
                     mapped = 'continue'
                 elif intent == 'summary':
                     mapped = 'summary'
@@ -1319,8 +1319,9 @@ What would you like to do?"""
             # Fallback to keyword matching
             query_lower = query.lower().strip()
             
-            # Continuation keywords
-            continue_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good']
+            # Continuation keywords - expanded to include all affirmative responses
+            continue_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good', 
+                               'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve']
             if any(kw in query_lower for kw in continue_keywords):
                 return 'proceed'
             
@@ -1335,11 +1336,19 @@ What would you like to do?"""
                 return 'override'
             
             # Summary/status keywords
-            summary_keywords = ['summary', 'status', 'show', 'what', 'current', 'progress']
+            summary_keywords = ['summary', 'status', 'show', 'current', 'progress']
             if any(kw in query_lower for kw in summary_keywords):
                 return 'summary'
             
-            # Default to query for unrecognized patterns
+            # Query keywords - explicit questions only
+            question_keywords = ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'explain', 'help', '?']
+            if any(kw in query_lower for kw in question_keywords):
+                return 'query'
+            
+            # Default to proceed for short unrecognized patterns (likely affirmative)
+            if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
+                return 'proceed'
+            
             return 'query'
             
         except Exception as e:
