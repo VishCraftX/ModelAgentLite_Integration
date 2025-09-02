@@ -1153,26 +1153,26 @@ Please specify a valid column name."""
                 # Map Level 4 action to underlying commands handled by wrapper
                 mapped = query
                 if action_intent == 'proceed':
-                    mapped = 'continue'
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'continue' command")
+                    mapped = 'PROCEED: continue'  # Clear intent signal
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'PROCEED: continue' command (BGE intent)")
                 elif action_intent == 'summary':
-                    mapped = 'summary'
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'summary' command")
+                    mapped = 'SUMMARY: summary'  # Clear intent signal
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SUMMARY: summary' command (BGE intent)")
                 elif action_intent == 'override':
-                    mapped = 'override ' + query
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'override {query}' command")
+                    mapped = f'OVERRIDE: {query}'  # Clear intent signal + original query
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'OVERRIDE: {query}' command (BGE intent)")
                 elif action_intent == 'skip':
                     # Check if it's a specific phase skip (skip outliers, skip encoding, etc.)
                     specific_skips = ['skip outliers', 'skip missing', 'skip encoding', 'skip transformations']
                     if any(skip_cmd in query.lower() for skip_cmd in specific_skips):
-                        mapped = query  # preserve specific skip commands
-                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (specific phase skip)")
+                        mapped = f'SKIP: {query}'  # preserve specific skip commands with intent signal
+                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: {query}' command (specific phase skip with BGE intent)")
                     else:
-                        mapped = 'skip'  # generic skip for other skip variations
-                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'skip' command (generic skip)")
+                        mapped = 'SKIP: skip'  # generic skip with intent signal
+                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: skip' command (generic skip with BGE intent)")
                 elif action_intent == 'query':
-                    mapped = query  # query/help pass through
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (query passthrough)")
+                    mapped = f"QUERY: {query}"  # Clear intent signal + original query
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'QUERY: {query}' command (query with intent)")
                 else:
                     mapped = query  # fallback
                     print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (fallback)")

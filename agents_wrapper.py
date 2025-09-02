@@ -1298,6 +1298,214 @@ class PreprocessingAgentWrapper:
                     print(f"❌ Unknown phase for continue command: {current_phase}")
                     return state
             
+            # Handle BGE-classified queries with clear intent signal (Level 4 BGE result)
+            elif command.startswith('QUERY: '):
+                # Extract the actual query from the intent signal
+                actual_query = command[7:]  # Remove 'QUERY: ' prefix
+                print("🔍 Processing BGE-classified query with enhanced LLM...")
+                print(f"🔍 DEBUG: BGE classified query: '{actual_query}'")
+                
+                try:
+                    # Initialize LLM using the same pattern as preprocessing strategies
+                    from preprocessing_agent_impl import get_llm_from_state, SequentialState
+                    import tempfile
+                    import os
+                    
+                    print("🔍 DEBUG: Importing required modules...")
+                    
+                    # Use the data from state for analysis context
+                    data_to_analyze = state.cleaned_data if hasattr(state, 'cleaned_data') and state.cleaned_data is not None else state.raw_data
+                    print(f"🔍 DEBUG: Using data for context - shape: {data_to_analyze.shape}")
+                    
+                    # Create temporary file for LLM processing
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
+                        data_to_analyze.to_csv(tmp_file.name, index=False)
+                        df_path = tmp_file.name
+                        print(f"🔍 DEBUG: Created temp file: {df_path}")
+                    
+                    try:
+                        # Create SequentialState for LLM processing
+                        print("🔍 DEBUG: Creating SequentialState for LLM...")
+                        sequential_state = SequentialState(
+                            df=data_to_analyze,
+                            df_path=df_path,
+                            target_column=state.target_column,
+                            model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                        )
+                        
+                        # Initialize LLM
+                        print("🔍 DEBUG: Initializing LLM...")
+                        llm = get_llm_from_state(sequential_state)
+                        print(f"🔍 DEBUG: LLM initialized successfully")
+                        
+                        # Analyze query context and generate response
+                        print("🔍 DEBUG: Analyzing query context...")
+                        query_analysis = self._analyze_query_context(actual_query, state)
+                        query_type = query_analysis['type']
+                        context_data = query_analysis['context']
+                        
+                        print(f"🔍 DEBUG: Query analysis - Type: {query_type}, Context length: {len(str(context_data))}")
+                        
+                        # Generate appropriate prompt based on query type
+                        if query_type == 'general':
+                            print("🔍 DEBUG: Creating general query prompt...")
+                            prompt = f"""You are a data preprocessing expert. Answer the user's general question about data preprocessing concepts and methods.
+
+QUESTION: "{actual_query}"
+
+Provide a clear, informative explanation about the preprocessing concept or method being asked about.
+"""
+                        elif query_type == 'column_specific':
+                            column = query_analysis.get('column', 'unknown')
+                            print(f"🔍 DEBUG: Creating column-specific query prompt for column: {column}")
+                            prompt = f"""You are a data preprocessing expert. Answer the user's question about a specific column and its preprocessing strategy.
+
+QUESTION: "{actual_query}"
+TARGET COLUMN: {state.target_column}
+COLUMN OF INTEREST: {column}
+
+COLUMN ANALYSIS AND RECOMMENDATIONS:
+{context_data}
+
+Explain the preprocessing strategy for this column based on the analysis data and reasoning provided.
+"""
+                        elif query_type == 'comparative':
+                            print("🔍 DEBUG: Creating comparative query prompt...")
+                            prompt = f"""You are a data preprocessing expert. Answer the user's comparative question about multiple columns or strategies.
+
+QUESTION: "{actual_query}"
+TARGET COLUMN: {state.target_column}
+
+FULL DATASET ANALYSIS:
+{context_data}
+
+Compare and explain the different strategies, columns, or preprocessing approaches based on the analysis data provided.
+"""
+                        else:  # phase_specific
+                            current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
+                            print(f"🔍 DEBUG: Creating phase-specific query prompt for phase: {current_phase}")
+                            prompt = f"""You are a data preprocessing expert. Answer the user's question about the current preprocessing phase.
+
+QUESTION: "{actual_query}"
+CURRENT PHASE: {current_phase}
+TARGET COLUMN: {state.target_column}
+
+PHASE ANALYSIS:
+{context_data}
+
+Explain the current preprocessing phase, strategies, and recommendations based on the analysis data provided.
+"""
+                        
+                        print(f"🔍 DEBUG: Prompt created - length: {len(prompt)} characters")
+                        
+                        # Get LLM response
+                        print("🤖 DEBUG: Sending prompt to LLM...")
+                        from langchain_core.messages import HumanMessage
+                        response = llm.invoke([HumanMessage(content=prompt)]).content
+                        
+                        print(f"🤖 DEBUG: LLM response received - length: {len(response)} characters")
+                        print(f"🤖 DEBUG: Response preview: {response[:100]}...")
+                        
+                        # Clean up temp file
+                        try:
+                            os.unlink(df_path)
+                            print(f"🔍 DEBUG: Cleaned up temp file: {df_path}")
+                        except Exception as cleanup_error:
+                            print(f"⚠️ DEBUG: Failed to clean up temp file: {cleanup_error}")
+                        
+                        # Send response to Slack
+                        print("📤 DEBUG: Preparing Slack response...")
+                        slack_manager = getattr(state, '_slack_manager', None)
+                        if not slack_manager:
+                            print("📤 DEBUG: No slack_manager in state, using global")
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
+                        
+                        if slack_manager and state.chat_session:
+                            print(f"📤 DEBUG: Sending message to Slack session: {state.chat_session}")
+                            message = f"""🤖 **Query Response:**
+
+{response}
+
+**💬 Continue with preprocessing:**
+• `continue` - Continue with current phase
+• `summary` - Show current status  
+• `help` - Get more assistance"""
+                            
+                            slack_manager.send_message(state.chat_session, message)
+                            print("📤 DEBUG: Slack message sent successfully")
+                        else:
+                            print("⚠️ DEBUG: No Slack session available - message not sent")
+                        
+                        print("✅ DEBUG: BGE-classified query processing completed successfully")
+                        return state
+                        
+                    except Exception as e:
+                        print(f"❌ DEBUG: BGE query processing failed with error: {e}")
+                        # Clean up temp file on error
+                        try:
+                            os.unlink(df_path)
+                        except:
+                            pass
+                        
+                        # Fallback to basic response
+                        slack_manager = getattr(state, '_slack_manager', None)
+                        if not slack_manager:
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
+                        
+                        if slack_manager and state.chat_session:
+                            fallback_message = f"""🤖 **Query Response:**
+
+I understand you're asking: "{actual_query}"
+
+I'm having trouble accessing detailed analysis data right now, but I can help with general preprocessing questions.
+
+**💬 Continue with preprocessing:**
+• `continue` - Continue with current phase
+• `summary` - Show current status"""
+                            
+                            slack_manager.send_message(state.chat_session, fallback_message)
+                        
+                        return state
+                        
+                except Exception as e:
+                    print(f"❌ DEBUG: Complete BGE query processing failed: {e}")
+                    return state
+            
+            # Handle other BGE-classified intents with clear intent signals (Level 4 BGE results)
+            elif command.startswith('PROCEED: '):
+                # Extract the actual command from the intent signal
+                actual_command = command[9:]  # Remove 'PROCEED: ' prefix
+                print("🚀 Processing BGE-classified PROCEED command...")
+                print(f"🚀 DEBUG: BGE classified proceed: '{actual_command}'")
+                # Route to continue handler (proceed maps to continue)
+                return self.handle_interactive_command(state, actual_command)
+            
+            elif command.startswith('SKIP: '):
+                # Extract the actual command from the intent signal  
+                actual_command = command[6:]  # Remove 'SKIP: ' prefix
+                print("⏭️ Processing BGE-classified SKIP command...")
+                print(f"⏭️ DEBUG: BGE classified skip: '{actual_command}'")
+                # Route to skip handler
+                return self.handle_interactive_command(state, actual_command)
+            
+            elif command.startswith('OVERRIDE: '):
+                # Extract the actual query from the intent signal
+                actual_query = command[10:]  # Remove 'OVERRIDE: ' prefix
+                print("🔧 Processing BGE-classified OVERRIDE command...")
+                print(f"🔧 DEBUG: BGE classified override: '{actual_query}'")
+                # Route to override handler with 'override ' prefix to match existing logic
+                return self.handle_interactive_command(state, f"override {actual_query}")
+            
+            elif command.startswith('SUMMARY: '):
+                # Extract the actual command from the intent signal
+                actual_command = command[9:]  # Remove 'SUMMARY: ' prefix
+                print("📊 Processing BGE-classified SUMMARY command...")
+                print(f"📊 DEBUG: BGE classified summary: '{actual_command}'")
+                # Route to summary handler
+                return self.handle_interactive_command(state, actual_command)
+            
             elif command.lower() in ['query', 'question', 'help', 'what', 'how', 'why', 'explain']:
                 # Enhanced query handling with intelligent context passing
                 print("🔍 Processing user query with enhanced LLM...")
