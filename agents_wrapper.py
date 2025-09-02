@@ -1305,25 +1305,30 @@ class PreprocessingAgentWrapper:
                     return state
             
             elif command.lower() in ['query', 'question', 'help', 'what', 'how', 'why', 'explain']:
-                # Handle user queries using the existing process_user_input_with_llm function
-                print("🔍 Processing user query with LLM...")
-                
-                # Import the function from preprocessing_agent_impl
-                from preprocessing_agent_impl import process_user_input_with_llm, SequentialState
-                
-                # Create a temporary file path for the DataFrame
-                import tempfile
-                import os
-                
-                # Use cleaned_data if available, otherwise raw_data
-                data_to_analyze = state.cleaned_data if state.cleaned_data is not None else state.raw_data
-                
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
-                    data_to_analyze.to_csv(tmp_file.name, index=False)
-                    df_path = tmp_file.name
+                # Enhanced query handling with intelligent context passing
+                print("🔍 Processing user query with enhanced LLM...")
+                print(f"🔍 DEBUG: Raw query command: '{command}'")
                 
                 try:
-                    # Create SequentialState for query processing
+                    # Initialize LLM using the same pattern as preprocessing strategies
+                    from preprocessing_agent_impl import get_llm_from_state, SequentialState
+                    import tempfile
+                    import os
+                    import re
+                    
+                    print("🔍 DEBUG: Importing required modules for query processing")
+                    
+                    # Create SequentialState for LLM initialization
+                    data_to_analyze = state.cleaned_data if state.cleaned_data is not None else state.raw_data
+                    print(f"🔍 DEBUG: Using {'cleaned' if state.cleaned_data is not None else 'raw'} data for analysis")
+                    print(f"🔍 DEBUG: Data shape: {data_to_analyze.shape}")
+                    
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
+                        data_to_analyze.to_csv(tmp_file.name, index=False)
+                        df_path = tmp_file.name
+                    
+                    print(f"🔍 DEBUG: Created temp file: {df_path}")
+                    
                     sequential_state = SequentialState(
                         df=data_to_analyze,
                         df_path=df_path,
@@ -1332,41 +1337,180 @@ class PreprocessingAgentWrapper:
                         current_phase=state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
                     )
                     
-                    # Process the user input
-                    updated_sequential_state = process_user_input_with_llm(sequential_state, command)
+                    print(f"🔍 DEBUG: Created SequentialState - target: {state.target_column}, model: {sequential_state.model_name}")
                     
-                    # Get the response
-                    query_response = updated_sequential_state.query_response or "I can help you with preprocessing questions. What would you like to know?"
+                    # Initialize LLM using the same pattern as strategy generation
+                    print("🔍 DEBUG: Initializing LLM...")
+                    llm = get_llm_from_state(sequential_state)
+                    print(f"🔍 DEBUG: LLM initialized successfully: {type(llm).__name__}")
+                    
+                    # Classify query type and determine context
+                    print("🔍 DEBUG: Starting query context analysis...")
+                    query_analysis = self._analyze_query_context(command, state)
+                    query_type = query_analysis['type']
+                    context_data = query_analysis['context']
+                    
+                    print(f"🔍 DEBUG: Query analysis complete:")
+                    print(f"   - Query type: {query_type}")
+                    print(f"   - Context level: {query_analysis['context_level']}")
+                    print(f"   - Mentioned column: {query_analysis.get('column', 'None')}")
+                    print(f"   - Context data length: {len(str(context_data)) if context_data else 0} characters")
+                    
+                    # Generate LLM response based on query type and context
+                    print(f"🔍 DEBUG: Generating prompt for query type: {query_type}")
+                    
+                    if query_type == 'general':
+                        # General methodology questions - no data context needed
+                        prompt = f"""You are a data preprocessing expert. Answer this question clearly and concisely:
+
+QUESTION: "{command}"
+
+Provide a clear, educational explanation about preprocessing concepts, methods, and best practices. Focus on practical understanding.
+"""
+                        print("🔍 DEBUG: Using general methodology prompt (no context)")
+                    
+                    elif query_type == 'column_specific':
+                        # Questions about specific columns and their strategies
+                        column_name = query_analysis.get('column')
+                        print(f"🔍 DEBUG: Column-specific query for column: {column_name}")
+                        prompt = f"""You are a data preprocessing expert analyzing a specific column. Answer the user's question using the provided analysis data.
+
+QUESTION: "{command}"
+TARGET COLUMN: {state.target_column}
+COLUMN OF INTEREST: {column_name}
+
+COLUMN ANALYSIS:
+{context_data}
+
+Provide a specific explanation about this column's preprocessing strategy, including why it was recommended based on the data characteristics shown above.
+"""
+                        print(f"🔍 DEBUG: Column-specific prompt created with context for '{column_name}'")
+                    
+                    elif query_type == 'comparative':
+                        # Questions about multiple columns or comparisons
+                        print("🔍 DEBUG: Comparative query - using full analysis context")
+                        prompt = f"""You are a data preprocessing expert. Answer the user's question using the complete analysis data provided.
+
+QUESTION: "{command}"
+TARGET COLUMN: {state.target_column}
+
+COMPLETE ANALYSIS:
+{context_data}
+
+Analyze the data and provide a comprehensive answer comparing columns, strategies, or identifying patterns as requested.
+"""
+                        print("🔍 DEBUG: Comparative prompt created with full context")
+                    
+                    else:  # phase_specific
+                        # Questions about current phase strategies
+                        current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
+                        print(f"🔍 DEBUG: Phase-specific query for phase: {current_phase}")
+                        prompt = f"""You are a data preprocessing expert. Answer the user's question about the current preprocessing phase.
+
+QUESTION: "{command}"
+CURRENT PHASE: {current_phase}
+TARGET COLUMN: {state.target_column}
+
+PHASE ANALYSIS:
+{context_data}
+
+Explain the current preprocessing phase, strategies, and recommendations based on the analysis data provided.
+"""
+                        print(f"🔍 DEBUG: Phase-specific prompt created for '{current_phase}'")
+                    
+                    # Get LLM response
+                    print("🤖 DEBUG: Sending prompt to LLM...")
+                    print(f"🤖 DEBUG: Prompt length: {len(prompt)} characters")
+                    
+                    from langchain_core.messages import HumanMessage
+                    response = llm.invoke([HumanMessage(content=prompt)]).content
+                    
+                    print(f"🤖 DEBUG: LLM response received - length: {len(response)} characters")
+                    print(f"🤖 DEBUG: Response preview: {response[:100]}...")
+                    
+                    # Clean up temp file
+                    try:
+                        os.unlink(df_path)
+                        print(f"🔍 DEBUG: Cleaned up temp file: {df_path}")
+                    except Exception as cleanup_error:
+                        print(f"⚠️ DEBUG: Failed to clean up temp file: {cleanup_error}")
                     
                     # Send response to Slack
+                    print("📤 DEBUG: Preparing Slack response...")
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
+                        print("📤 DEBUG: No slack_manager in state, using global")
                         from toolbox import slack_manager as global_slack_manager
                         slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
+                        print(f"📤 DEBUG: Sending message to Slack session: {state.chat_session}")
                         message = f"""🤖 **Query Response:**
 
-{query_response}
+{response}
 
 **💬 Continue with preprocessing:**
 • `continue` - Continue with current phase
-• `summary` - Show current status
+• `summary` - Show current status  
 • `help` - Get more assistance"""
                         
                         slack_manager.send_message(state.chat_session, message)
+                        print("📤 DEBUG: Slack message sent successfully")
+                    else:
+                        print("⚠️ DEBUG: No Slack session available - message not sent")
                     
-                    try:
-                        os.unlink(df_path)
-                    except:
-                        pass
-                    
+                    print("✅ DEBUG: Enhanced query processing completed successfully")
                     return state
                     
                 except Exception as e:
-                    print(f"❌ Query processing failed: {e}")
+                    print(f"❌ DEBUG: Enhanced query processing failed with error: {e}")
+                    print(f"❌ DEBUG: Error type: {type(e).__name__}")
                     import traceback
+                    print(f"❌ DEBUG: Full traceback:")
                     traceback.print_exc()
+                    
+                    # Fallback to basic response
+                    print("🔄 DEBUG: Attempting fallback response...")
+                    try:
+                        slack_manager = getattr(state, '_slack_manager', None)
+                        if not slack_manager:
+                            print("🔄 DEBUG: Using global slack manager for fallback")
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
+                        
+                        if slack_manager and state.chat_session:
+                            print("🔄 DEBUG: Sending fallback message to Slack")
+                            fallback_message = f"""🤖 **Query Response:**
+
+I understand you're asking: "{command}"
+
+I'm having trouble accessing detailed analysis data right now, but I can help with general preprocessing questions. Here are some common topics:
+
+**🔧 Preprocessing Methods:**
+• **Outliers**: Winsorize (clip extreme values) vs Keep (leave as-is)
+• **Missing Values**: Mean/Median imputation vs Model-based vs Drop
+• **Encoding**: One-hot vs Label vs Target encoding for categories  
+• **Transformations**: Log/Square root for skewed data, Scaling for normalization
+
+**💬 Try asking:**
+• `"explain median imputation"`
+• `"what is winsorization"`  
+• `"why use one-hot encoding"`
+• `summary` - Show current preprocessing status
+
+**💬 Continue with preprocessing:**
+• `continue` - Continue with current phase
+• `summary` - Show current status"""
+                            
+                            slack_manager.send_message(state.chat_session, fallback_message)
+                            print("🔄 DEBUG: Fallback message sent successfully")
+                        else:
+                            print("⚠️ DEBUG: No Slack session for fallback message")
+                    
+                    except Exception as fallback_error:
+                        print(f"❌ DEBUG: Fallback response also failed: {fallback_error}")
+                        print(f"❌ DEBUG: Fallback error type: {type(fallback_error).__name__}")
+                    
                     return state
 
             elif command.lower() in ['override', 'change', 'modify', 'custom'] or any(override_word in command.lower() for override_word in ['modify', 'change', 'use', 'apply', 'do', 'keep', 'dont', 'dont transform', 'leave unchanged']):
@@ -1498,7 +1642,7 @@ class PreprocessingAgentWrapper:
 
 **💬 Continue with preprocessing:**
 • `continue` - Apply current phase with overrides
-• `summary` - Show current status
+• `summary` - Show current status  
 • `help` - Get more assistance"""
                         
                         slack_manager.send_message(state.chat_session, message)
@@ -1641,69 +1785,280 @@ class PreprocessingAgentWrapper:
             else:
                 print(f"❌ Unknown interactive command: {command}")
                 return state
-                
+        
         except Exception as e:
             print(f"❌ Interactive command handling failed: {e}")
             import traceback
             traceback.print_exc()
             return state
+
+    def _analyze_query_context(self, query: str, state: PipelineState) -> dict:
+        """Analyze query to determine what context to provide to LLM"""
+        print(f"🔍 DEBUG: [_analyze_query_context] Starting analysis for query: '{query}'")
+        
+        query_lower = query.lower()
+        print(f"🔍 DEBUG: [_analyze_query_context] Normalized query: '{query_lower}'")
+        
+        # Extract column names mentioned in query
+        data_cols = list((state.cleaned_data if state.cleaned_data is not None else state.raw_data).columns)
+        mentioned_columns = [col for col in data_cols if col.lower() in query_lower]
+        print(f"🔍 DEBUG: [_analyze_query_context] Available columns: {data_cols}")
+        print(f"🔍 DEBUG: [_analyze_query_context] Mentioned columns: {mentioned_columns}")
+        
+        # Determine query type
+        general_keywords = ['what is', 'explain', 'how does', 'what are', 'define', 'meaning of', 'concept']
+        column_keywords = ['this column', 'for this', 'why median', 'why mean', 'why winsorize', 'strategy for']
+        comparative_keywords = ['which column', 'what columns', 'how many', 'compare', 'maximum', 'minimum', 'most', 'least']
+        
+        print(f"🔍 DEBUG: [_analyze_query_context] Checking keyword matches:")
+        general_matches = [kw for kw in general_keywords if kw in query_lower]
+        column_matches = [kw for kw in column_keywords if kw in query_lower]
+        comparative_matches = [kw for kw in comparative_keywords if kw in query_lower]
+        print(f"   - General matches: {general_matches}")
+        print(f"   - Column matches: {column_matches}")
+        print(f"   - Comparative matches: {comparative_matches}")
+        
+        if any(keyword in query_lower for keyword in general_keywords) and not mentioned_columns:
+            query_type = 'general'
+            context_level = 'none'
+            context_data = None
+            print(f"🔍 DEBUG: [_analyze_query_context] Classified as GENERAL (no context needed)")
+            
+        elif mentioned_columns or any(keyword in query_lower for keyword in column_keywords):
+            query_type = 'column_specific'
+            context_level = 'column'
+            # Get context for specific column
+            if mentioned_columns:
+                column_name = mentioned_columns[0]  # Use first mentioned column
+                print(f"🔍 DEBUG: [_analyze_query_context] Using mentioned column: {column_name}")
+            else:
+                # Try to infer from current phase context
+                current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
+                column_name = None
+                print(f"🔍 DEBUG: [_analyze_query_context] No specific column mentioned, current phase: {current_phase}")
+            
+            print(f"🔍 DEBUG: [_analyze_query_context] Classified as COLUMN_SPECIFIC for column: {column_name}")
+            context_data = self._get_column_context(column_name, state)
+            
+        elif any(keyword in query_lower for keyword in comparative_keywords):
+            query_type = 'comparative' 
+            context_level = 'full'
+            print(f"🔍 DEBUG: [_analyze_query_context] Classified as COMPARATIVE (full context)")
+            context_data = self._get_full_analysis_context(state)
+            
+        else:
+            query_type = 'phase_specific'
+            context_level = 'phase'
+            print(f"🔍 DEBUG: [_analyze_query_context] Classified as PHASE_SPECIFIC (current phase context)")
+            context_data = self._get_phase_context(state)
+        
+        result = {
+            'type': query_type,
+            'context_level': context_level,
+            'context': context_data,
+            'column': mentioned_columns[0] if mentioned_columns else None
+        }
+        
+        print(f"🔍 DEBUG: [_analyze_query_context] Final analysis result:")
+        print(f"   - Type: {result['type']}")
+        print(f"   - Context level: {result['context_level']}")
+        print(f"   - Column: {result['column']}")
+        print(f"   - Context available: {'Yes' if result['context'] else 'No'}")
+        
+        return result
     
-    def _run_basic_preprocessing_fallback(self, state: PipelineState) -> PipelineState:
-        """Basic preprocessing fallback that works"""
+    def _get_column_context(self, column_name: str, state: PipelineState) -> str:
+        """Get analysis context for a specific column"""
+        print(f"🔍 DEBUG: [_get_column_context] Getting context for column: '{column_name}'")
+        
         try:
-            if state.raw_data is None:
-                print("❌ No raw data for basic preprocessing")
-                return state
+            context_parts = []
             
-            df = state.raw_data.copy()
-            original_shape = df.shape
+            # Basic column info
+            data_to_analyze = state.cleaned_data if state.cleaned_data is not None else state.raw_data
+            print(f"🔍 DEBUG: [_get_column_context] Using {'cleaned' if state.cleaned_data is not None else 'raw'} data")
             
-            print(f"[PreprocessingAgent] Basic preprocessing started: {original_shape}")
+            if column_name and column_name in data_to_analyze.columns:
+                print(f"🔍 DEBUG: [_get_column_context] Column '{column_name}' found in data")
+                col_data = data_to_analyze[column_name]
+                context_parts.append(f"""COLUMN: {column_name}
+- Data Type: {col_data.dtype}
+- Missing Values: {col_data.isnull().sum()} ({col_data.isnull().mean()*100:.1f}%)
+- Unique Values: {col_data.nunique()}
+- Sample Values: {col_data.dropna().head(3).tolist()}""")
+                
+                if col_data.dtype in ['int64', 'float64']:
+                    print(f"🔍 DEBUG: [_get_column_context] Adding numeric statistics for '{column_name}'")
+                    context_parts.append(f"""- Mean: {col_data.mean():.2f}
+- Median: {col_data.median():.2f}
+- Std Dev: {col_data.std():.2f}
+- Min: {col_data.min():.2f}, Max: {col_data.max():.2f}""")
+            else:
+                print(f"⚠️ DEBUG: [_get_column_context] Column '{column_name}' not found in data")
             
-            # Remove duplicates
-            duplicates_removed = len(df) - len(df.drop_duplicates())
-            df = df.drop_duplicates()
-            if duplicates_removed > 0:
-                print(f"  - Removed {duplicates_removed} duplicate rows")
+            # Get recommendations from analysis results
+            if hasattr(state, 'preprocessing_state') and state.preprocessing_state:
+                print(f"🔍 DEBUG: [_get_column_context] Checking preprocessing state for analysis results")
+                
+                # Check outlier results
+                if 'outlier_results' in state.preprocessing_state:
+                    print(f"🔍 DEBUG: [_get_column_context] Found outlier results")
+                    outlier_results = state.preprocessing_state['outlier_results']
+                    if isinstance(outlier_results, dict) and 'llm_recommendations' in outlier_results:
+                        if column_name in outlier_results['llm_recommendations']:
+                            rec = outlier_results['llm_recommendations'][column_name]
+                            print(f"🔍 DEBUG: [_get_column_context] Adding outlier analysis for '{column_name}'")
+                            context_parts.append(f"""OUTLIER ANALYSIS:
+- Recommended Treatment: {rec.get('treatment', 'N/A')}
+- Reasoning: {rec.get('reasoning', 'N/A')}
+- Severity: {rec.get('severity', 'N/A')}""")
+                        else:
+                            print(f"🔍 DEBUG: [_get_column_context] No outlier analysis found for '{column_name}'")
+                
+                # Check missing values results  
+                if 'missing_results' in state.preprocessing_state:
+                    print(f"🔍 DEBUG: [_get_column_context] Found missing values results")
+                    missing_results = state.preprocessing_state['missing_results']
+                    if isinstance(missing_results, dict) and 'llm_recommendations' in missing_results:
+                        if column_name in missing_results['llm_recommendations']:
+                            rec = missing_results['llm_recommendations'][column_name]
+                            print(f"🔍 DEBUG: [_get_column_context] Adding missing values analysis for '{column_name}'")
+                            context_parts.append(f"""MISSING VALUES ANALYSIS:
+- Recommended Strategy: {rec.get('strategy', 'N/A')}
+- Reasoning: {rec.get('reasoning', 'N/A')}
+- Priority: {rec.get('priority', 'N/A')}""")
+                        else:
+                            print(f"🔍 DEBUG: [_get_column_context] No missing values analysis found for '{column_name}'")
+                
+                # Check encoding results
+                if 'encoding_results' in state.preprocessing_state:
+                    print(f"🔍 DEBUG: [_get_column_context] Found encoding results")
+                    encoding_results = state.preprocessing_state['encoding_results']
+                    if isinstance(encoding_results, dict) and 'llm_recommendations' in encoding_results:
+                        if column_name in encoding_results['llm_recommendations']:
+                            rec = encoding_results['llm_recommendations'][column_name]
+                            print(f"🔍 DEBUG: [_get_column_context] Adding encoding analysis for '{column_name}'")
+                            context_parts.append(f"""ENCODING ANALYSIS:
+- Recommended Strategy: {rec.get('strategy', 'N/A')}
+- Reasoning: {rec.get('reasoning', 'N/A')}
+- Cardinality Level: {rec.get('cardinality_level', 'N/A')}""")
+                        else:
+                            print(f"🔍 DEBUG: [_get_column_context] No encoding analysis found for '{column_name}'")
+                
+                # Check transformation results
+                if 'transformation_results' in state.preprocessing_state:
+                    print(f"🔍 DEBUG: [_get_column_context] Found transformation results")
+                    transformation_results = state.preprocessing_state['transformation_results']
+                    if isinstance(transformation_results, dict) and 'llm_recommendations' in transformation_results:
+                        if column_name in transformation_results['llm_recommendations']:
+                            rec = transformation_results['llm_recommendations'][column_name]
+                            print(f"🔍 DEBUG: [_get_column_context] Adding transformation analysis for '{column_name}'")
+                            context_parts.append(f"""TRANSFORMATION ANALYSIS:
+- Recommended Transformation: {rec.get('transformation', 'N/A')}
+- Reasoning: {rec.get('reasoning', 'N/A')}
+- Priority: {rec.get('priority', 'N/A')}""")
+                        else:
+                            print(f"🔍 DEBUG: [_get_column_context] No transformation analysis found for '{column_name}'")
+            else:
+                print(f"⚠️ DEBUG: [_get_column_context] No preprocessing state available")
             
-            # Fill missing values
-            numeric_cols = df.select_dtypes(include=[np.number]).columns
-            categorical_cols = df.select_dtypes(exclude=[np.number]).columns
-            
-            # Fill numeric columns with median
-            numeric_filled = 0
-            for col in numeric_cols:
-                if df[col].isnull().sum() > 0:
-                    df[col].fillna(df[col].median(), inplace=True)
-                    numeric_filled += 1
-            
-            # Fill categorical columns with mode
-            categorical_filled = 0
-            for col in categorical_cols:
-                if df[col].isnull().sum() > 0:
-                    df[col].fillna(df[col].mode()[0] if len(df[col].mode()) > 0 else 'Unknown', inplace=True)
-                    categorical_filled += 1
-            
-            print(f"  - Filled missing values in {numeric_filled} numeric columns")
-            print(f"  - Filled missing values in {categorical_filled} categorical columns")
-            
-            # Update state
-            state.cleaned_data = df
-            state.processed_data = df  # Also set processed_data
-            state.preprocessing_state = {
-                "completed": True,
-                "timestamp": datetime.now().isoformat(),
-                "original_shape": original_shape,
-                "cleaned_shape": df.shape,
-                "method": "basic_fallback"
-            }
-            
-            print(f"[PreprocessingAgent] Basic preprocessing completed: {original_shape} → {df.shape}")
-            return state
+            final_context = '\n\n'.join(context_parts) if context_parts else f"Limited context available for column: {column_name}"
+            print(f"🔍 DEBUG: [_get_column_context] Generated context with {len(context_parts)} sections")
+            return final_context
             
         except Exception as e:
-            print(f"❌ Basic preprocessing failed: {e}")
-            return state
+            print(f"⚠️ DEBUG: [_get_column_context] Error getting column context: {e}")
+            return f"Unable to retrieve detailed context for column: {column_name}"
+    
+    def _get_phase_context(self, state: PipelineState) -> str:
+        """Get analysis context for current phase"""
+        print(f"🔍 DEBUG: [_get_phase_context] Getting phase context")
+        
+        try:
+            current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
+            print(f"🔍 DEBUG: [_get_phase_context] Current phase: {current_phase}")
+            
+            context_parts = [f"CURRENT PHASE: {current_phase}"]
+            
+            if hasattr(state, 'preprocessing_state') and state.preprocessing_state:
+                phase_key = f"{current_phase}_results"
+                print(f"🔍 DEBUG: [_get_phase_context] Looking for phase key: {phase_key}")
+                
+                if phase_key in state.preprocessing_state:
+                    print(f"🔍 DEBUG: [_get_phase_context] Found results for phase: {current_phase}")
+                    results = state.preprocessing_state[phase_key]
+                    if isinstance(results, dict) and 'llm_recommendations' in results:
+                        context_parts.append("PHASE RECOMMENDATIONS:")
+                        rec_count = 0
+                        for col, rec in results['llm_recommendations'].items():
+                            strategy = rec.get('treatment') or rec.get('strategy') or rec.get('transformation', 'N/A')
+                            reasoning = rec.get('reasoning', 'N/A')
+                            context_parts.append(f"- {col}: {strategy} ({reasoning})")
+                            rec_count += 1
+                        print(f"🔍 DEBUG: [_get_phase_context] Added {rec_count} recommendations")
+                    else:
+                        print(f"🔍 DEBUG: [_get_phase_context] No LLM recommendations in phase results")
+                else:
+                    print(f"🔍 DEBUG: [_get_phase_context] No results found for phase key: {phase_key}")
+            else:
+                print(f"⚠️ DEBUG: [_get_phase_context] No preprocessing state available")
+            
+            final_context = '\n'.join(context_parts)
+            print(f"🔍 DEBUG: [_get_phase_context] Generated phase context with {len(context_parts)} parts")
+            return final_context
+            
+        except Exception as e:
+            print(f"⚠️ DEBUG: [_get_phase_context] Error getting phase context: {e}")
+            return "Unable to retrieve phase context"
+    
+    def _get_full_analysis_context(self, state: PipelineState) -> str:
+        """Get complete analysis context for comparative queries"""
+        print(f"🔍 DEBUG: [_get_full_analysis_context] Getting full analysis context")
+        
+        try:
+            context_parts = []
+            
+            # Dataset overview
+            data_to_analyze = state.cleaned_data if state.cleaned_data is not None else state.raw_data
+            print(f"🔍 DEBUG: [_get_full_analysis_context] Dataset shape: {data_to_analyze.shape}")
+            
+            context_parts.append(f"""DATASET OVERVIEW:
+- Shape: {data_to_analyze.shape[0]} rows × {data_to_analyze.shape[1]} columns
+- Target Column: {state.target_column}
+- Columns: {', '.join(data_to_analyze.columns.tolist())}""")
+            
+            # All analysis results
+            if hasattr(state, 'preprocessing_state') and state.preprocessing_state:
+                print(f"🔍 DEBUG: [_get_full_analysis_context] Checking all phase results")
+                
+                phases_found = 0
+                for phase in ['outlier', 'missing', 'encoding', 'transformation']:
+                    phase_key = f"{phase}_results"
+                    if phase_key in state.preprocessing_state:
+                        print(f"🔍 DEBUG: [_get_full_analysis_context] Found results for phase: {phase}")
+                        results = state.preprocessing_state[phase_key]
+                        if isinstance(results, dict) and 'llm_recommendations' in results:
+                            context_parts.append(f"\n{phase.upper()} RECOMMENDATIONS:")
+                            rec_count = 0
+                            for col, rec in results['llm_recommendations'].items():
+                                strategy = rec.get('treatment') or rec.get('strategy') or rec.get('transformation', 'N/A')
+                                reasoning = rec.get('reasoning', 'N/A')
+                                context_parts.append(f"- {col}: {strategy} ({reasoning})")
+                                rec_count += 1
+                            print(f"🔍 DEBUG: [_get_full_analysis_context] Added {rec_count} recommendations for {phase}")
+                            phases_found += 1
+                
+                print(f"🔍 DEBUG: [_get_full_analysis_context] Total phases with results: {phases_found}")
+            else:
+                print(f"⚠️ DEBUG: [_get_full_analysis_context] No preprocessing state available")
+            
+            final_context = '\n'.join(context_parts)
+            print(f"🔍 DEBUG: [_get_full_analysis_context] Generated full context with {len(context_parts)} sections")
+            return final_context
+            
+        except Exception as e:
+            print(f"⚠️ DEBUG: [_get_full_analysis_context] Error getting full context: {e}")
+            return "Unable to retrieve complete analysis context"
 
 
 class FeatureSelectionAgentWrapper:
