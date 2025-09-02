@@ -1123,37 +1123,13 @@ Please specify a valid column name."""
                     self._save_session_state(processed_state.session_id, processed_state)
                     return self._prepare_response(processed_state, "Proceed mapped to continue in current phase.")
             
-            elif 'continue' in query_lower:
-                # Handle continue command for applying recommendations and moving to next phase
+
+            # Check if we're in an active preprocessing phase and route to preprocessing agent
+            elif state.preprocessing_state and state.preprocessing_state.get('current_phase') in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
+                # Route to preprocessing agent for phase-specific handling
                 from agents_wrapper import preprocessing_agent
                 
-                print("🔄 Handling continue command for preprocessing")
-                # Debug: Check current state before continue
-                print(f"🔧 DEBUG: Before continue - preprocessing_state: {state.preprocessing_state}")
-                
-                # Pass the pipeline's slack_manager to the state
-                state._slack_manager = self.slack_manager
-                processed_state = preprocessing_agent.handle_interactive_command(state, 'continue')
-                
-                # Save the updated state to session state file
-                self._save_session_state(processed_state.session_id, processed_state)
-                
-                # Let the preprocessing agent handle the response, don't override it
-                return self._prepare_response(processed_state, "Continue command processed.")
-            
-            # Check if we're in an active preprocessing phase and route to preprocessing agent
-            else:
-                # Get current phase from either preprocessing_state or interactive_session
-                current_phase = None
-                if state.preprocessing_state and state.preprocessing_state.get('current_phase'):
-                    current_phase = state.preprocessing_state.get('current_phase')
-                elif state.interactive_session and state.interactive_session.get('current_phase'):
-                    current_phase = state.interactive_session.get('current_phase')
-                
-                # Check if we're in any preprocessing phase (including overview)
-                if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
-                    # Route to preprocessing agent for phase-specific handling
-                    from agents_wrapper import preprocessing_agent
+                current_phase = state.preprocessing_state.get('current_phase')
                 print(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
                 
                 # 4-Level Classification Flow:
@@ -1203,25 +1179,8 @@ Please specify a valid column name."""
                 self._save_session_state(processed_state.session_id, processed_state)
                 
                 return self._prepare_response(processed_state, f"Processed in {current_phase} phase.")
-                else:
-                    # Not in a preprocessing phase, handle as general query
-                    print(f"🔍 Not in active preprocessing phase (current: {current_phase}), treating as general query")
             
-            elif 'summary' in query_lower:
-                summary_msg = f"""📋 **Preprocessing Status**
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target:** {state.target_column or 'Not set'}
-🔄 **Phase:** {state.interactive_session.get('current_phase', 'Overview')}
-
-**Available Commands:**
-• `proceed` - Start preprocessing
-• `explain [phase]` - Learn about phases
-• `summary` - This status"""
-                
-                slack_manager.send_message(state.chat_session, summary_msg)
-                return self._prepare_response(state, "Status summary sent.")
-            
             else:
                 # Default help message
                 help_msg = """💬 **Available Commands:**
