@@ -646,8 +646,8 @@ class MultiAgentMLPipeline:
             )
         
         # Always load session state if available (for interactive sessions)
-        previous_state = self._load_session_state(session_id)
-        if previous_state:
+            previous_state = self._load_session_state(session_id)
+            if previous_state:
                 print(f"📂 Loaded previous session state for {session_id}")
                 print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
                 # Restore relevant state information INCLUDING DataFrames
@@ -736,7 +736,7 @@ class MultiAgentMLPipeline:
                     # Define what constitutes a "new request" vs "session continuation"
                     new_request_definitions = {
                         "new_ml_request": "Start new machine learning task, begin different ML workflow, switch to new agent, train new model, build new classifier, create new predictor, analyze different dataset, perform new analysis, start fresh preprocessing, begin new feature selection, initiate model building, commence new ML pipeline",
-                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now"
+                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now, skip this step, skip current phase, bypass this, move to next, skip this analysis, pass on this, ignore this step, no thanks, change this strategy, modify approach, use different method, apply different strategy, override this, alter this, what does this mean, explain this step, help me understand, why this recommendation, how does this work, show me options, skip outliers detection, skip missing values, skip encoding, change imputation strategy, use median for age, modify outlier treatment, what is mean imputation, explain encoding methods, show current strategies, skip correlation analysis, skip SHAP step, skip VIF analysis, do analysis with IV values 0.02, run SHAP with 100 samples, change correlation threshold, modify selection criteria, what is information value, explain SHAP, show selected features, execute CSI analysis, perform VIF calculation, run IV analysis"
                     }
                     
                     from orchestrator import Orchestrator
@@ -792,12 +792,12 @@ class MultiAgentMLPipeline:
                 try:
                     continuation_definitions = {
                         'preprocessing': {
-                            'continue_preprocessing': "Skip current step, proceed to next phase, continue preprocessing workflow, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, fine continue preprocessing, sure proceed now, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, precisely continue workflow, indeed proceed now, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now",
-                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent, what is this, how does this work, why did you do that, when will this finish, where is the data, which algorithm should I use, who created this, explain this result, help me understand, what does this mean, how do I interpret this, why is this happening, when should I use this, where can I find more info, which option is better, who can help me, explain the process, help with analysis, what are the steps, how to proceed differently, why choose this method, when to stop preprocessing, where to go next, which features matter, who decides this, explain the logic, help me choose, what comes after this, how to improve results, why this recommendation, when to apply transformations, where to check results, which metrics matter, who validates this, explain the outcome, help interpret results"
+                            'continue_preprocessing': "Continue preprocessing workflow, advance preprocessing stage, data cleaning continuation, preprocessing workflow advancement, outlier detection phase, missing values handling, encoding step, transformation phase, target column specification, data preparation, proceed with preprocessing, continue data cleaning, advance preprocessing, next preprocessing step, move forward in preprocessing, skip current step, proceed to next phase, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, fine continue preprocessing, sure proceed now, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, precisely continue workflow, indeed proceed now, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now",
+                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent, go to feature selection, move to model training, exit preprocessing"
                         },
                         'feature_selection': {
-                            'continue_feature_selection': "Skip current analysis, run information value, execute SHAP analysis, continue feature selection, proceed with variable selection, advance feature engineering, move to next selection step, bypass current feature analysis, select important features, rank features, analyze correlations",
-                            'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing"
+                            'continue_feature_selection': "Continue feature selection workflow, advance feature analysis, feature selection continuation, variable selection advancement, correlation analysis phase, SHAP analysis step, information value calculation, VIF analysis phase, CSI analysis step, feature ranking process, proceed with feature selection, continue feature analysis, advance selection, next feature step, move forward in feature selection, do analysis with IV values 0.02, run SHAP with 100 samples, execute correlation analysis, perform VIF calculation, run CSI analysis, calculate information value 0.1, analyze with IV threshold 0.05, run SHAP analysis now, perform correlation with threshold 0.8, execute VIF analysis, do feature importance analysis, skip correlation analysis, skip SHAP step, skip current analysis, bypass feature ranking, cool, proceed, continue, next, go ahead, yes, yeah, ok, fine, good, sure, alright, agreed, approve, sounds good, let's proceed, move forward",
+                            'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing, go to preprocessing, move to model training, exit feature selection"
                         }
                     }
                     
@@ -1103,21 +1103,42 @@ Please specify a valid column name."""
                 # Route to preprocessing agent for phase-specific handling
                 from agents_wrapper import preprocessing_agent
                 
-                print(f"🔄 Routing to preprocessing agent for phase: {state.preprocessing_state.get('current_phase')}")
-                # Classify in-phase intent first (embeddings→keywords→heuristics)
-                intent = self._classify_in_phase_intent(query)
-                # Map intent to underlying commands handled by wrapper
+                current_phase = state.preprocessing_state.get('current_phase')
+                print(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
+                
+                # 4-Level Classification Flow:
+                print(f"🎯 [4-Level Flow] Starting classification cascade for: '{query}'")
+                print(f"   📍 Level 1: SKIP (already in preprocessing session)")
+                print(f"   📍 Level 2: session_continuation (already determined - we're in preprocessing phase)")
+                print(f"   📍 Level 3: continue_preprocessing (already determined - we're staying in preprocessing)")
+                print(f"   📍 Level 4: Classifying specific preprocessing action...")
+                
+                action_intent = self._classify_preprocessing_action(query)
+                print(f"🎯 [4-Level Flow] Final Level 4 Action Intent: '{action_intent}'")
+                
+                # Map Level 4 action to underlying commands handled by wrapper
                 mapped = query
-                if intent in ['proceed', 'continue_preprocessing', 'session_continuation']:
+                if action_intent == 'proceed':
                     mapped = 'continue'
-                elif intent == 'summary':
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'continue' command")
+                elif action_intent == 'summary':
                     mapped = 'summary'
-                elif intent == 'override':
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'summary' command")
+                elif action_intent == 'override':
                     mapped = 'override ' + query
-                elif intent == 'skip':
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'override {query}' command")
+                elif action_intent == 'skip':
                     mapped = query  # allows 'skip encoding' etc.
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (preserves specific skip)")
+                elif action_intent == 'query':
+                    mapped = query  # query/help pass through
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (query passthrough)")
                 else:
-                    mapped = query  # query/help/navigate pass through
+                    mapped = query  # fallback
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (fallback)")
+                
+                print(f"✅ [4-Level Flow] Final mapped command: '{mapped}' → Sending to preprocessing agent")
+                
                 # Pass the pipeline's slack_manager to the state
                 state._slack_manager = self.slack_manager
                 processed_state = preprocessing_agent.handle_interactive_command(state, mapped)
@@ -1125,7 +1146,7 @@ Please specify a valid column name."""
                 # Save the updated state to session state file
                 self._save_session_state(processed_state.session_id, processed_state)
                 
-                return self._prepare_response(processed_state, f"Processed in {state.preprocessing_state.get('current_phase')} phase.")
+                return self._prepare_response(processed_state, f"Processed in {current_phase} phase.")
             
             elif 'summary' in query_lower:
                 summary_msg = f"""📋 **Preprocessing Status**
@@ -1296,6 +1317,115 @@ What would you like to do?"""
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up old sessions"""
         state_manager.cleanup_old_sessions(max_age_hours)
+
+    def _classify_preprocessing_action(self, query: str) -> str:
+        """
+        Level 4: Classify specific preprocessing actions using BGE with keyword fallbacks.
+        
+        Args:
+            query: User's input query
+            
+        Returns:
+            Classified action: 'proceed', 'skip', 'override', 'query', 'summary'
+        """
+        print(f"🔍 [Level 4] Processing query: '{query}'")
+        
+        try:
+            # BGE-based classification for preprocessing actions
+            if hasattr(self, 'intent_classifier') and self.intent_classifier:
+                print(f"🧠 [Level 4] BGE embeddings available, attempting semantic classification...")
+                
+                action_definitions = {
+                    "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this",
+                    "skip_action": "skip current phase, skip this step, bypass current analysis, move to next phase, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, pass on this, ignore this step, skip to next, move on, bypass this, no thanks to this step",
+                    "override_action": "change strategy, modify approach, use different method, apply different strategy, override current, alter this approach, use median for age, apply mean imputation, change to winsorize, modify outlier treatment, use different encoding, apply one-hot, change transformation, use standard scaling, apply robust scaling",
+                    "query_action": "what is this strategy, explain current approach, how does this work, why this recommendation, what happens to columns, how does imputation work, explain outlier detection, what is encoding, how does transformation work, what does this mean, help me understand, why median imputation",
+                    "summary_action": "show current strategies, display current plan, what's planned, show me current approach, current strategy summary, what are we doing, show strategies for all columns, current preprocessing plan"
+                }
+                
+                query_embedding = self.intent_classifier.get_embedding(query)
+                if query_embedding is not None:
+                    print(f"✅ [Level 4] Query embedding generated successfully")
+                    similarities = {}
+                    for intent_name, definition in action_definitions.items():
+                        intent_embedding = self.intent_classifier.get_embedding(definition)
+                        if intent_embedding is not None:
+                            similarity = self.intent_classifier.calculate_similarity(query_embedding, intent_embedding)
+                            similarities[intent_name] = similarity
+                    
+                    if similarities:
+                        # Show all similarity scores for debugging
+                        print(f"🔍 [Level 4] BGE similarity scores:")
+                        for intent, score in sorted(similarities.items(), key=lambda x: x[1], reverse=True):
+                            action_name = intent.replace('_action', '')
+                            print(f"   {action_name}: {score:.3f}")
+                        
+                        best_intent = max(similarities.items(), key=lambda x: x[1])
+                        action_intent = best_intent[0].replace('_action', '')  # Remove _action suffix
+                        print(f"🎯 [Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
+                        
+                        if best_intent[1] > 0.3:  # Confidence threshold
+                            print(f"✅ [Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
+                            return action_intent
+                        else:
+                            print(f"⚠️ [Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
+                else:
+                    print(f"❌ [Level 4] Failed to generate query embedding")
+            else:
+                print(f"⚠️ [Level 4] BGE embeddings not available, using keyword fallback")
+        
+        except Exception as e:
+            print(f"❌ [Level 4] BGE classification error: {e}")
+            print(f"🔄 [Level 4] Falling back to keyword classification")
+        
+        # Keyword fallback classification
+        print(f"🔑 [Level 4] Starting keyword fallback classification...")
+        query_lower = query.lower().strip()
+        print(f"🔍 [Level 4] Normalized query: '{query_lower}'")
+        
+        # Proceed keywords
+        proceed_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good',
+                           'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve']
+        matched_proceed = [kw for kw in proceed_keywords if kw in query_lower]
+        if matched_proceed:
+            print(f"✅ [Level 4] Matched proceed keywords: {matched_proceed}")
+            return 'proceed'
+        
+        # Skip keywords  
+        skip_keywords = ['skip', 'pass', 'ignore', 'no thanks', 'bypass', 'move on']
+        matched_skip = [kw for kw in skip_keywords if kw in query_lower]
+        if matched_skip:
+            print(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
+            return 'skip'
+        
+        # Override keywords
+        override_keywords = ['use', 'set', 'change', 'override', 'apply', 'modify', 'alter']
+        matched_override = [kw for kw in override_keywords if kw in query_lower]
+        if matched_override:
+            print(f"✅ [Level 4] Matched override keywords: {matched_override}")
+            return 'override'
+        
+        # Summary keywords
+        summary_keywords = ['summary', 'show', 'strategies', 'current', 'plan', 'display']
+        matched_summary = [kw for kw in summary_keywords if kw in query_lower]
+        if matched_summary:
+            print(f"✅ [Level 4] Matched summary keywords: {matched_summary}")
+            return 'summary'
+        
+        # Query keywords - explicit questions only
+        question_keywords = ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'explain', 'help', '?']
+        matched_query = [kw for kw in question_keywords if kw in query_lower]
+        if matched_query:
+            print(f"✅ [Level 4] Matched query keywords: {matched_query}")
+            return 'query'
+        
+        # Default to proceed for short unrecognized patterns (likely affirmative)
+        if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
+            print(f"🔄 [Level 4] Short response (≤5 chars), defaulting to 'proceed'")
+            return 'proceed'
+        
+        print(f"🔄 [Level 4] No keywords matched, defaulting to 'query'")
+        return 'query'
 
     def _classify_in_phase_intent(self, query: str) -> str:
         """
