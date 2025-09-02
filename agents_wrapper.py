@@ -406,15 +406,27 @@ class PreprocessingAgentWrapper:
                         # Run outlier analysis
                         print("🔍 Running outlier detection...")
                         
-                        from preprocessing_agent_impl import analyze_outliers_single_batch, get_llm_from_state
+                        from preprocessing_agent_impl import (
+                            initialize_dataset_analysis,
+                            analyze_outliers_single_batch,
+                            get_llm_from_state,
+                            SequentialState
+                        )
                         
-                        # Get LLM for analysis
-                        llm = get_llm_from_state(state)
-                        print(f"🔧 DEBUG: Using model: {llm.model}")
-                        print(f"🔧 DEBUG: Using {type(llm).__name__} with model: {llm.model}")
+                        # Create a proper SequentialState for the preprocessing functions
+                        sequential_state = SequentialState(
+                            df=state.raw_data,
+                            df_path=df_path,
+                            target_column=state.target_column,
+                            model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                        )
+                        
+                        # Initialize dataset analysis
+                        print("📊 Initializing dataset analysis...")
+                        sequential_state = initialize_dataset_analysis(sequential_state)
                         
                         # Run outlier analysis
-                        outlier_results = analyze_outliers_single_batch(df_path, target_column, llm)
+                        outlier_results = analyze_outliers_single_batch(sequential_state)
                         
                         print(f"🔍 DEBUG: outlier_results type: {type(outlier_results)}")
                         print(f"🔍 DEBUG: outlier_results content: {outlier_results}")
