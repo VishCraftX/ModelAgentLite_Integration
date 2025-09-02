@@ -1142,11 +1142,18 @@ Please specify a valid column name."""
                 return self._prepare_response(processed_state, "Continue command processed.")
             
             # Check if we're in an active preprocessing phase and route to preprocessing agent
-            elif state.preprocessing_state and state.preprocessing_state.get('current_phase') in ['outliers', 'missing_values', 'encoding', 'transformations']:
-                # Route to preprocessing agent for phase-specific handling
-                from agents_wrapper import preprocessing_agent
+            else:
+                # Get current phase from either preprocessing_state or interactive_session
+                current_phase = None
+                if state.preprocessing_state and state.preprocessing_state.get('current_phase'):
+                    current_phase = state.preprocessing_state.get('current_phase')
+                elif state.interactive_session and state.interactive_session.get('current_phase'):
+                    current_phase = state.interactive_session.get('current_phase')
                 
-                current_phase = state.preprocessing_state.get('current_phase')
+                # Check if we're in any preprocessing phase (including overview)
+                if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
+                    # Route to preprocessing agent for phase-specific handling
+                    from agents_wrapper import preprocessing_agent
                 print(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
                 
                 # 4-Level Classification Flow:
@@ -1196,6 +1203,9 @@ Please specify a valid column name."""
                 self._save_session_state(processed_state.session_id, processed_state)
                 
                 return self._prepare_response(processed_state, f"Processed in {current_phase} phase.")
+                else:
+                    # Not in a preprocessing phase, handle as general query
+                    print(f"🔍 Not in active preprocessing phase (current: {current_phase}), treating as general query")
             
             elif 'summary' in query_lower:
                 summary_msg = f"""📋 **Preprocessing Status**
