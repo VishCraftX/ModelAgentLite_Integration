@@ -1363,10 +1363,10 @@ What would you like to do?"""
                 print(f"🧠 [Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
                 
                 action_definitions = {
-                    "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this",
+                    "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this, go ahead, go ahead with this, go ahead in preprocessing, go ahead with current, go ahead and proceed, go ahead with analysis, move ahead, carry on, keep going, continue ahead, go forward, advance ahead, proceed ahead, go on, go through, go with this, go with current, let's proceed, let's continue, let's go ahead, let's move forward, start processing, begin processing, start analysis, begin analysis",
                     "skip_action": "skip current phase, skip this step, bypass current analysis, move to next phase, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, pass on this, ignore this step, skip to next, move on, bypass this, no thanks to this step",
                     "override_action": "change strategy, modify approach, use different method, apply different strategy, override current, alter this approach, use median for age, apply mean imputation, change to winsorize, modify outlier treatment, use different encoding, apply one-hot, change transformation, use standard scaling, apply robust scaling",
-                    "query_action": "what is this strategy, explain current approach, how does this work, why this recommendation, what happens to columns, how does imputation work, explain outlier detection, what is encoding, how does transformation work, what does this mean, help me understand, why median imputation",
+                    "query_action": "what is this strategy, explain current approach, how does this work, why this recommendation, what happens to columns, how does imputation work, explain outlier detection, what is encoding, how does transformation work, what does this mean, help me understand, why median imputation, why are you applying, why applying, why use this, why this strategy, why this treatment, why this method, why winsorization, why winsorize, why are you using, why do you recommend, why is this recommended, explain why, tell me why, why this choice, why this approach, what's the reason, what's the reasoning, why specifically, why particularly, why for this column, why this column, explain the reason, explain reasoning, why did you choose, why was this chosen, how come this strategy, how come you chose, justify this choice, justify this strategy, reasoning behind this, reason for this, rationale behind, rationale for this",
                     "summary_action": "show current strategies, display current plan, what's planned, show me current approach, current strategy summary, what are we doing, show strategies for all columns, current preprocessing plan"
                 }
                 
@@ -1416,16 +1416,35 @@ What would you like to do?"""
         query_lower = query.lower().strip()
         print(f"🔍 [Level 4] Normalized query: '{query_lower}'")
         
-        # Skip keywords (check first - higher priority for commands like "skip next phase")
+        # Query keywords - check FIRST for highest priority (questions should override other keywords)
+        # Use more precise matching to avoid "how" matching in "show"
+        question_keywords = ['what', 'when', 'where', 'which', 'who', 'explain', 'help', '?', 'why are you', 'why applying', 'why use', 'why this', 'reasoning', 'rationale']
+        
+        # Check for "how" more precisely (avoid matching in "show")
+        if ' how ' in f' {query_lower} ' or query_lower.startswith('how ') or query_lower.endswith(' how'):
+            print(f"✅ [Level 4] Matched precise 'how' query pattern")
+            return 'query'
+        
+        # Check for "why" more precisely 
+        if ' why ' in f' {query_lower} ' or query_lower.startswith('why ') or query_lower.endswith(' why'):
+            print(f"✅ [Level 4] Matched precise 'why' query pattern")
+            return 'query'
+            
+        matched_query = [kw for kw in question_keywords if kw in query_lower]
+        if matched_query:
+            print(f"✅ [Level 4] Matched query keywords: {matched_query}")
+            return 'query'
+        
+        # Skip keywords (check second - higher priority for commands like "skip next phase")
         skip_keywords = ['skip', 'pass', 'ignore', 'no thanks', 'bypass', 'move on']
         matched_skip = [kw for kw in skip_keywords if kw in query_lower]
         if matched_skip:
             print(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
             return 'skip'
         
-        # Proceed keywords
-        proceed_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good',
-                           'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve']
+        # Proceed keywords (enhanced with "go ahead" variations)
+        proceed_keywords = ['proceed', 'continue', 'next', 'go ahead', 'go', 'yes', 'ok', 'cool', 'sure', 'good',
+                           'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve', 'carry on', 'keep going', 'move ahead', 'go forward', 'go through', 'go with', 'let\'s go', 'let\'s proceed', 'start', 'begin']
         matched_proceed = [kw for kw in proceed_keywords if kw in query_lower]
         if matched_proceed:
             print(f"✅ [Level 4] Matched proceed keywords: {matched_proceed}")
@@ -1444,13 +1463,6 @@ What would you like to do?"""
         if matched_summary:
             print(f"✅ [Level 4] Matched summary keywords: {matched_summary}")
             return 'summary'
-        
-        # Query keywords - explicit questions only
-        question_keywords = ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'explain', 'help', '?']
-        matched_query = [kw for kw in question_keywords if kw in query_lower]
-        if matched_query:
-            print(f"✅ [Level 4] Matched query keywords: {matched_query}")
-            return 'query'
         
         # Default to proceed for short unrecognized patterns (likely affirmative)
         if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
