@@ -370,10 +370,131 @@ class PreprocessingAgentWrapper:
                 return state
             elif command.lower() == 'continue':
                 print("🔄 Applying LLM recommendations and moving to next phase")
-                current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
+                # Get current phase from either preprocessing_state or interactive_session
+                if state.preprocessing_state and 'current_phase' in state.preprocessing_state:
+                    current_phase = state.preprocessing_state.get('current_phase')
+                elif state.interactive_session and 'current_phase' in state.interactive_session:
+                    current_phase = state.interactive_session.get('current_phase')
+                else:
+                    current_phase = 'overview'  # default
                 print(f"🔧 DEBUG: Current phase for continue: {current_phase}")
 
-                if current_phase == 'outliers':
+                if current_phase == 'overview':
+                    # Start preprocessing workflow - begin with outliers phase
+                    print("🚀 Starting preprocessing workflow with outliers phase")
+                    print("🔧 Running preprocessing agent for outlier analysis...")
+                    
+                    # Initialize dataset analysis
+                    try:
+                        from preprocessing_agent_impl import initialize_dataset_analysis
+                        
+                        # Save raw data to temp file for analysis
+                        import tempfile
+                        import os
+                        
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+                            df_path = f.name
+                            state.raw_data.to_csv(df_path, index=False)
+                        
+                        # Initialize analysis with target column
+                        target_column = state.target_column
+                        print(f"🔧 DEBUG: Target column: {target_column}")
+                        print(f"🔧 DEBUG: Target column type: {type(target_column)}")
+                        print(f"🔧 DEBUG: Target column is None: {target_column is None}")
+                        print(f"🔧 DEBUG: Target column is empty string: {target_column == ''}")
+                        
+                        # Run outlier analysis
+                        print("🔍 Running outlier detection...")
+                        
+                        from preprocessing_agent_impl import analyze_outliers_single_batch, get_llm_from_state
+                        
+                        # Get LLM for analysis
+                        llm = get_llm_from_state(state)
+                        print(f"🔧 DEBUG: Using model: {llm.model}")
+                        print(f"🔧 DEBUG: Using {type(llm).__name__} with model: {llm.model}")
+                        
+                        # Run outlier analysis
+                        outlier_results = analyze_outliers_single_batch(df_path, target_column, llm)
+                        
+                        print(f"🔍 DEBUG: outlier_results type: {type(outlier_results)}")
+                        print(f"🔍 DEBUG: outlier_results content: {outlier_results}")
+                        
+                        # Send results to Slack
+                        if hasattr(state, '_slack_manager') and state._slack_manager and state.chat_session:
+                            slack_manager = state._slack_manager
+                            
+                            if isinstance(outlier_results, dict) and 'llm_recommendations' in outlier_results:
+                                # Group recommendations by treatment type
+                                treatment_groups = {}
+                                for column, details in outlier_results['llm_recommendations'].items():
+                                    treatment = details.get('treatment', 'unknown')
+                                    if treatment not in treatment_groups:
+                                        treatment_groups[treatment] = []
+                                    treatment_groups[treatment].append(column)
+                                
+                                # Create concise message
+                                treatment_text = []
+                                for treatment, columns in treatment_groups.items():
+                                    if len(columns) <= 3:
+                                        col_text = ", ".join(columns)
+                                    else:
+                                        col_text = f"{', '.join(columns[:3])} (+{len(columns)-3} more)"
+                                    
+                                    treatment_display = {
+                                        'winsorize': '📊 Winsorize',
+                                        'keep': '✅ Keep as-is', 
+                                        'clip': '✂️ Clip',
+                                        'remove': '🗑️ Remove'
+                                    }.get(treatment, f'🔧 {treatment.title()}')
+                                    
+                                    treatment_text.append(f"**{treatment_display}:** {col_text}")
+                                
+                                message = f"""🚨 **Outliers Analysis Complete!**
+
+**📊 Outlier Columns Found:** {len(outlier_results.get('outlier_columns', []))} columns
+
+**🔧 Recommended Treatments:**
+{chr(10).join(treatment_text)}
+
+**🔄 Ready for Next Step:**
+• `continue` - Apply treatments and move to missing values
+• `skip outliers` - Skip to missing values phase  
+• `summary` - Show current preprocessing status"""
+                            else:
+                                message = f"""🚨 **Outliers Analysis Complete!**
+
+**📊 Analysis Results:**
+{outlier_results}
+
+**🔄 Ready for Next Step:**
+• `continue` - Apply treatments and move to missing values
+• `skip outliers` - Skip to missing values phase
+• `summary` - Show current preprocessing status"""
+                            
+                            slack_manager.send_message(state.chat_session, message)
+                        
+                        # Update state with outlier results
+                        state.preprocessing_state.update({
+                            "current_phase": "outliers",
+                            "outlier_results": outlier_results,
+                            "status": "analysis_complete"
+                        })
+                        
+                        # Clean up temp file
+                        try:
+                            os.unlink(df_path)
+                        except:
+                            pass
+                        
+                        return state
+                        
+                    except Exception as e:
+                        print(f"❌ Outlier analysis failed: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        return state
+
+                elif current_phase == 'outliers':
                     # Apply outlier treatments and move to missing_values
                     print("🔧 Applying outlier treatments...")
                     
