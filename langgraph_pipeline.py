@@ -1352,8 +1352,13 @@ What would you like to do?"""
                     for intent_name, definition in action_definitions.items():
                         intent_embedding = orchestrator._get_embedding(definition)
                         if intent_embedding is not None:
-                            similarity = orchestrator._calculate_similarity(query_embedding, intent_embedding)
-                            similarities[intent_name] = similarity
+                            # Use cosine similarity directly (same as orchestrator does)
+                            from sklearn.metrics.pairwise import cosine_similarity
+                            similarity = cosine_similarity(
+                                query_embedding.reshape(1, -1),
+                                intent_embedding.reshape(1, -1)
+                            )[0][0]
+                            similarities[intent_name] = float(similarity)
                     
                     if similarities:
                         # Show all similarity scores for debugging
