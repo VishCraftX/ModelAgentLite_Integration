@@ -165,20 +165,63 @@ class MultiAgentMLPipeline:
         
         progress_tracker.update(state, f"Routed to {selected_agent}: {explanation}")
         
-        # Send a friendly next-steps hint via Slack
+        # Send agent-specific next-steps message via Slack
         try:
             slack_manager = self.slack_manager
             if slack_manager and state.chat_session:
-                next_hint = {
-                    'preprocessing': "Type `proceed` to begin preprocessing, or `help` for options.",
-                    'feature_selection': "Type `proceed` to begin feature selection, or `help` for options.",
-                    'model_building': "Type `proceed` to begin model building, or `help` for options.",
-                    'general_response': "You can ask a question or say `help` for options.",
-                    'code_execution': "Type your code question or `help` for options.",
-                }.get(selected_agent, "Type `help` for options.")
-                slack_manager.send_message(state.chat_session, f"{explanation}\n\n{next_hint}")
+                if selected_agent == 'preprocessing':
+                    # Send comprehensive preprocessing menu when first routed
+                    preprocessing_menu = f"""🧹 **Sequential Preprocessing Agent**
+
+📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target Column:** {state.target_column if state.target_column else '❌ Not detected'}
+
+**🔄 Preprocessing Phases Overview:**
+
+**Phase 1: 📊 Overview** - Dataset analysis and summary
+• Analyze data types, distributions, and patterns
+• Identify preprocessing needs across all columns
+
+**Phase 2: 🚨 Outliers** - Detect and handle outliers  
+• Use IQR and Z-score methods for detection
+• Recommend winsorize/clip/keep strategies
+
+**Phase 3: 🗑️ Missing Values** - Handle missing data
+• Identify missing data patterns
+• Apply mean/median/mode imputation strategies
+
+**Phase 4: 🏷️ Encoding** - Categorical variable encoding
+• Convert categorical to numeric (one-hot, label, target)
+• Handle high-cardinality categories
+
+**Phase 5: 🔄 Transformations** - Feature transformations
+• Apply log/sqrt/standardization for skewed data
+• Improve model convergence and performance
+
+**💬 Your Options:**
+• `proceed` - Start preprocessing workflow (begins with Overview)
+• `skip overview` - Skip directly to outlier detection
+• `explain [phase]` - Learn about specific phase (e.g., `explain outliers`)
+• `summary` - Show current preprocessing status
+• `help` - Get detailed guidance
+
+💡 **Smart Approach:** Each phase shows exactly what will be applied to which columns, then waits for your approval.
+
+💬 **What would you like to do?**"""
+                    
+                    slack_manager.send_message(state.chat_session, preprocessing_menu)
+                    print("✅ Sent comprehensive preprocessing menu to Slack")
+                else:
+                    # Send simple hint for other agents
+                    next_hint = {
+                        'feature_selection': "Type `proceed` to begin feature selection, or `help` for options.",
+                        'model_building': "Type `proceed` to begin model building, or `help` for options.",
+                        'general_response': "You can ask a question or say `help` for options.",
+                        'code_execution': "Type your code question or `help` for options.",
+                    }.get(selected_agent, "Type `help` for options.")
+                    slack_manager.send_message(state.chat_session, f"{explanation}\n\n{next_hint}")
         except Exception as e:
-            print(f"⚠️ Failed to send orchestrator next-steps hint: {e}")
+            print(f"⚠️ Failed to send orchestrator message: {e}")
         
         return state
     
@@ -1128,8 +1171,14 @@ Please specify a valid column name."""
                     mapped = 'override ' + query
                     print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'override {query}' command")
                 elif action_intent == 'skip':
-                    mapped = query  # allows 'skip encoding' etc.
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (preserves specific skip)")
+                    # Check if it's a specific phase skip (skip outliers, skip encoding, etc.)
+                    specific_skips = ['skip outliers', 'skip missing', 'skip encoding', 'skip transformations']
+                    if any(skip_cmd in query.lower() for skip_cmd in specific_skips):
+                        mapped = query  # preserve specific skip commands
+                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (specific phase skip)")
+                    else:
+                        mapped = 'skip'  # generic skip for other skip variations
+                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'skip' command (generic skip)")
                 elif action_intent == 'query':
                     mapped = query  # query/help pass through
                     print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (query passthrough)")
@@ -1390,6 +1439,13 @@ What would you like to do?"""
         query_lower = query.lower().strip()
         print(f"🔍 [Level 4] Normalized query: '{query_lower}'")
         
+        # Skip keywords (check first - higher priority for commands like "skip next phase")
+        skip_keywords = ['skip', 'pass', 'ignore', 'no thanks', 'bypass', 'move on']
+        matched_skip = [kw for kw in skip_keywords if kw in query_lower]
+        if matched_skip:
+            print(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
+            return 'skip'
+        
         # Proceed keywords
         proceed_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good',
                            'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve']
@@ -1397,13 +1453,6 @@ What would you like to do?"""
         if matched_proceed:
             print(f"✅ [Level 4] Matched proceed keywords: {matched_proceed}")
             return 'proceed'
-        
-        # Skip keywords  
-        skip_keywords = ['skip', 'pass', 'ignore', 'no thanks', 'bypass', 'move on']
-        matched_skip = [kw for kw in skip_keywords if kw in query_lower]
-        if matched_skip:
-            print(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
-            return 'skip'
         
         # Override keywords
         override_keywords = ['use', 'set', 'change', 'override', 'apply', 'modify', 'alter']
