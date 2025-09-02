@@ -1170,11 +1170,19 @@ Please specify a valid column name."""
             
 
             # Check if we're in an active preprocessing phase and route to preprocessing agent
-            elif state.preprocessing_state and state.preprocessing_state.get('current_phase') in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
+            current_phase = None
+            if state.preprocessing_state and 'current_phase' in state.preprocessing_state:
+                current_phase = state.preprocessing_state.get('current_phase')
+            elif state.interactive_session and 'current_phase' in state.interactive_session:
+                current_phase = state.interactive_session.get('current_phase')
+            print(f"🔧 DEBUG: Checking 4-Level BGE routing - current_phase: '{current_phase}'")
+            print(f"🔧 DEBUG: preprocessing_state current_phase: {state.preprocessing_state.get('current_phase') if state.preprocessing_state else 'N/A'}")
+            print(f"🔧 DEBUG: interactive_session current_phase: {state.interactive_session.get('current_phase') if state.interactive_session else 'N/A'}")
+            
+            if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
                 # Route to preprocessing agent for phase-specific handling
                 from agents_wrapper import preprocessing_agent
                 
-                current_phase = state.preprocessing_state.get('current_phase')
                 print(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
                 
                 # 4-Level Classification Flow:
