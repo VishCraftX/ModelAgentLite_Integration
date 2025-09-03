@@ -360,7 +360,7 @@ class DataProcessor:
     
     @staticmethod
     def load_and_clean_data(session: UserSession) -> bool:
-        """Load data and perform initial cleaning"""
+        """Load data and perform intelligent cleaning with numeric conversion"""
         try:
             # Load data
             df = pd.read_csv(session.file_path)
@@ -368,20 +368,56 @@ class DataProcessor:
             
             print(f"📊 Original dataset: {df.shape[0]} rows, {df.shape[1]} columns")
             
-            # Remove single value columns
+            # Step 1: Remove single value columns
             single_value_cols = []
             for col in df.columns:
                 if df[col].nunique() <= 1:
                     single_value_cols.append(col)
             
-            # Remove object columns (non-numeric)
-            non_numeric_cols = []
-            for col in df.columns:
-                if col not in single_value_cols and df[col].dtype == 'object':
-                    non_numeric_cols.append(col)
+            print(f"🔍 Found {len(single_value_cols)} single-value columns to remove")
             
-            # Create clean dataset
-            cols_to_remove = single_value_cols + non_numeric_cols
+            # Step 2: Smart object column handling - try to convert to numeric first
+            object_cols = [col for col in df.columns if col not in single_value_cols and df[col].dtype == 'object']
+            converted_cols = []
+            failed_conversion_cols = []
+            
+            print(f"🔍 Found {len(object_cols)} object columns, attempting numeric conversion...")
+            
+            for col in object_cols:
+                try:
+                    # Try to convert to numeric, handling common string number formats
+                    # This handles cases like: "123", "45.67", "1,234", etc.
+                    original_series = df[col].copy()
+                    
+                    # First, try direct conversion
+                    converted = pd.to_numeric(original_series, errors='coerce')
+                    
+                    # If that fails for many values, try cleaning common string formats
+                    if converted.isna().sum() > len(original_series) * 0.5:  # More than 50% NaN
+                        # Try removing commas, spaces, and other common formatting
+                        cleaned_series = original_series.astype(str).str.replace(',', '').str.replace(' ', '').str.strip()
+                        converted = pd.to_numeric(cleaned_series, errors='coerce')
+                    
+                    # If conversion is successful for most values (less than 20% NaN)
+                    non_null_before = original_series.notna().sum()
+                    non_null_after = converted.notna().sum()
+                    
+                    if non_null_after >= non_null_before * 0.8:  # At least 80% successfully converted
+                        df[col] = converted
+                        converted_cols.append(col)
+                        print(f"   ✅ Converted '{col}' to numeric ({non_null_after}/{non_null_before} values)")
+                    else:
+                        failed_conversion_cols.append(col)
+                        print(f"   ❌ Failed to convert '{col}' (only {non_null_after}/{non_null_before} values convertible)")
+                        
+                except Exception as e:
+                    failed_conversion_cols.append(col)
+                    print(f"   ❌ Error converting '{col}': {str(e)[:50]}")
+            
+            print(f"📈 Conversion summary: {len(converted_cols)} converted, {len(failed_conversion_cols)} remained as objects")
+            
+            # Step 3: Remove remaining non-numeric columns
+            cols_to_remove = single_value_cols + failed_conversion_cols
             clean_df = df.drop(columns=cols_to_remove)
             
             session.current_df = clean_df.copy()
@@ -389,27 +425,33 @@ class DataProcessor:
             
             # Add cleaning step to pipeline
             cleaning_step = AnalysisStep(
-                type="data_cleaning",
+                type="intelligent_data_cleaning",
                 parameters={"removed_cols": cols_to_remove},
                 features_before=df.shape[1],
                 features_after=clean_df.shape[1],
                 timestamp=datetime.now().isoformat(),
                 metadata={
                     "single_value_cols": single_value_cols,
-                    "non_numeric_cols": non_numeric_cols
+                    "converted_to_numeric": converted_cols,
+                    "failed_conversion_cols": failed_conversion_cols,
+                    "conversion_strategy": "smart_numeric_conversion"
                 }
             )
             session.analysis_chain.append(cleaning_step)
             
-            # Create initial snapshot
+            # Create initial snapshot - this is the clean starting state for revert
             session.snapshots["after_cleaning"] = {
                 "df": clean_df.copy(),
                 "features": list(clean_df.columns),
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(f"✅ Cleaned dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
-            print(f"   Removed: {len(single_value_cols)} single-value + {len(non_numeric_cols)} object columns")
+            print(f"✅ Intelligently cleaned dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
+            print(f"   📊 Summary:")
+            print(f"   • Removed: {len(single_value_cols)} single-value columns")
+            print(f"   • Converted: {len(converted_cols)} object → numeric columns")
+            print(f"   • Removed: {len(failed_conversion_cols)} non-convertible object columns")
+            print(f"   • Final: {clean_df.shape[1]} numeric columns ready for analysis")
             
             return True
             
@@ -753,24 +795,32 @@ class AnalysisEngine:
     def run_vif_analysis(session: UserSession, threshold: float = 5.0):
         """Run Variance Inflation Factor (VIF) analysis"""
         try:
+            print(f"🔧 DEBUG VIF ENGINE: Starting VIF analysis with threshold {threshold}")
             from statsmodels.stats.outliers_influence import variance_inflation_factor
             from sklearn.preprocessing import StandardScaler
             
             # Get numeric features only (exclude target)
             numeric_features = [f for f in session.current_features if f != session.target_column]
+            print(f"🔧 DEBUG VIF ENGINE: Found {len(numeric_features)} numeric features")
             
             if len(numeric_features) < 2:
-                return {"error": "Need at least 2 features for VIF analysis"}
+                error_msg = "Need at least 2 features for VIF analysis"
+                print(f"🔧 DEBUG VIF ENGINE: ERROR - {error_msg}")
+                return {"error": error_msg}
             
             # Prepare data
             df = session.current_df[numeric_features].copy()
+            print(f"🔧 DEBUG VIF ENGINE: Data shape: {df.shape}")
             
             # Handle missing values
+            missing_before = df.isnull().sum().sum()
             df = df.fillna(df.mean())
+            print(f"🔧 DEBUG VIF ENGINE: Filled {missing_before} missing values")
             
             # Scale features for stability
             scaler = StandardScaler()
             df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
+            print(f"🔧 DEBUG VIF ENGINE: Scaled data shape: {df_scaled.shape}")
             
             # Calculate VIF for each feature
             vif_scores = {}
@@ -780,16 +830,21 @@ class AnalysisEngine:
                 try:
                     vif_value = variance_inflation_factor(df_scaled.values, i)
                     vif_scores[feature] = vif_value
+                    print(f"🔧 DEBUG VIF ENGINE: {feature} VIF = {vif_value:.4f}")
                     
                     if vif_value > threshold:
                         features_to_remove.append(feature)
-                except:
+                        print(f"🔧 DEBUG VIF ENGINE: {feature} marked for removal (VIF {vif_value:.4f} > {threshold})")
+                except Exception as e:
+                    print(f"🔧 DEBUG VIF ENGINE: Error calculating VIF for {feature}: {e}")
                     vif_scores[feature] = float('inf')
                     features_to_remove.append(feature)
             
             # Update session
             features_before = len(session.current_features)
             remaining_cols = [col for col in session.current_features if col not in features_to_remove]
+            print(f"🔧 DEBUG VIF ENGINE: Features before: {features_before}, removing: {len(features_to_remove)}, remaining: {len(remaining_cols)}")
+            
             session.current_df = session.current_df[remaining_cols]
             session.current_features = remaining_cols
             
@@ -803,6 +858,7 @@ class AnalysisEngine:
                 metadata={"vif_scores": vif_scores, "removed_features": features_to_remove}
             )
             session.analysis_chain.append(analysis_step)
+            print(f"🔧 DEBUG VIF ENGINE: Added analysis step to pipeline")
             
             # Create snapshot
             session.snapshots[f"after_vif"] = {
@@ -810,16 +866,23 @@ class AnalysisEngine:
                 "df": session.current_df.copy(),
                 "step": len(session.analysis_chain) - 1
             }
+            print(f"🔧 DEBUG VIF ENGINE: Created snapshot")
             
-            return {
+            result = {
                 "success": True,
                 "features_removed": len(features_to_remove),
                 "remaining_features": len(remaining_cols),
                 "vif_scores": vif_scores
             }
+            print(f"🔧 DEBUG VIF ENGINE: Returning success result: {result}")
+            return result
             
         except Exception as e:
-            return {"error": str(e)}
+            error_msg = f"VIF analysis failed: {str(e)}"
+            print(f"🔧 DEBUG VIF ENGINE: EXCEPTION - {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return {"error": error_msg}
 
     @staticmethod
     def run_shap_analysis(session: UserSession, threshold: float = 0.01, model_type: str = "randomforest", top_n: int = None):
@@ -1418,7 +1481,10 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
             except:
                 pass
             
+            print(f"🔧 DEBUG VIF: About to run VIF analysis with threshold {threshold}")
             result = AnalysisEngine.run_vif_analysis(session, threshold)
+            print(f"🔧 DEBUG VIF: Analysis result: {result}")
+            
             if result.get("success"):
                 vif_scores = result.get("vif_scores", {})
                 top_features = sorted(vif_scores.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -1437,9 +1503,16 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                         response += f"{chr(10)}• {feature}: {score:.4f}"
                 
                 response += f"\n\n🎯 **Analysis added to pipeline!**"
+                print(f"🔧 DEBUG VIF: Sending success response to Slack")
                 say(response)
+            elif result.get("error"):
+                error_msg = f"❌ VIF Analysis failed: {result.get('error', 'Unknown error')}"
+                print(f"🔧 DEBUG VIF: Sending error response to Slack: {error_msg}")
+                say(error_msg)
             else:
-                say(f"❌ VIF Analysis failed: {result.get('error', 'Unknown error')}")
+                error_msg = f"❌ VIF Analysis failed: Unexpected result format: {result}"
+                print(f"🔧 DEBUG VIF: Sending unexpected result error to Slack: {error_msg}")
+                say(error_msg)
                 
         elif analysis_type == "shap":
             # Handle SHAP analysis as a direct tool
