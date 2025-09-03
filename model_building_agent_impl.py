@@ -866,10 +866,7 @@ def semantic_classify_model_intent(query: str) -> str:
         import sys
         import os
         sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from orchestrator import Orchestrator
-        
-        # Create temporary orchestrator for semantic classification
-        temp_orchestrator = Orchestrator()
+        from toolbox import pattern_classifier
         
         # Define model-specific intent definitions
         model_intent_definitions = {
@@ -877,38 +874,20 @@ def semantic_classify_model_intent(query: str) -> str:
             "new_model": "Train new model, build new classifier, create new predictor, develop new algorithm, train fresh model, build from scratch, new model training, create classifier, develop predictor, train algorithm, build new, create new, fresh training, new machine learning model, model development, algorithm training"
         }
         
-        # Set up semantic classification
-        temp_orchestrator.intent_definitions = model_intent_definitions
-        temp_orchestrator._initialize_intent_embeddings()
+        # Use universal pattern classifier from toolbox
+        result, method_used = pattern_classifier.classify_pattern(
+            query,
+            model_intent_definitions,
+            use_case="model_sub_classification"
+        )
         
-        if temp_orchestrator._intent_embeddings:
-            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query)
-            print(f"[ModelAgent] Semantic model intent: {intent} (confidence: {confidence_info['max_score']:.3f})")
-            
-            # Use moderate threshold for model intent classification
-            if confidence_info.get("max_score", 0) > 0.3:
-                return intent
-            else:
-                print(f"[ModelAgent] Semantic confidence too low, trying LLM fallback")
+        print(f"[ModelAgent] Model intent classification: {result} (method: {method_used})")
+        return result
         
     except Exception as e:
-        print(f"[ModelAgent] Semantic classification error: {e}, trying LLM fallback")
-    
-    # Step 2: LLM fallback
-    try:
-        print(f"[ModelAgent] 🤖 Using LLM for model intent classification")
-        llm_intent = llm_classify_model_intent(query)
-        if llm_intent and llm_intent in ["use_existing", "new_model"]:
-            print(f"[ModelAgent] LLM model intent: {llm_intent}")
-            return llm_intent
-        else:
-            print(f"[ModelAgent] LLM classification failed, using keyword fallback")
-    except Exception as e:
-        print(f"[ModelAgent] LLM classification error: {e}, using keyword fallback")
-    
-    # Step 3: Keyword fallback
-    print(f"[ModelAgent] ⚡ Using keyword fallback for model intent")
-    return fallback_classify_intent_keywords(query)
+        print(f"[ModelAgent] Universal classifier error: {e}, using keyword fallback")
+        return fallback_classify_intent_keywords(query)
+
 
 def llm_classify_model_intent(query: str) -> str:
     """LLM-based classification for model-specific intents"""
@@ -1008,11 +987,8 @@ def semantic_detect_plot_request(query: str) -> bool:
     """Semantic detection of plot/visualization requests"""
     
     try:
-        # Import orchestrator for semantic classification
-        from orchestrator import Orchestrator
-        
-        # Create temporary orchestrator for semantic classification
-        temp_orchestrator = Orchestrator()
+        # Import pattern classifier from toolbox
+        from toolbox import pattern_classifier
         
         # Define plot detection intent definitions
         plot_intent_definitions = {
@@ -1020,50 +996,29 @@ def semantic_detect_plot_request(query: str) -> bool:
             "no_plot": "Train model, build classifier, create predictor, develop algorithm, model training, algorithm development, machine learning, predictive modeling, classification, regression, model building, model creation"
         }
         
-        # Set up semantic classification
-        temp_orchestrator.intent_definitions = plot_intent_definitions
-        temp_orchestrator._initialize_intent_embeddings()
+        # Use universal pattern classifier from toolbox
+        result, method_used = pattern_classifier.classify_pattern(
+            query,
+            plot_intent_definitions,
+            use_case="feature_detection"
+        )
         
-        if temp_orchestrator._intent_embeddings:
-            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query)
-            print(f"[ModelAgent] Semantic plot detection: {intent} (confidence: {confidence_info['max_score']:.3f})")
-            
-            # Use moderate threshold for plot detection
-            if confidence_info.get("max_score", 0) > 0.4:
-                return intent == "plot_request"
-            else:
-                print(f"[ModelAgent] Plot detection confidence too low, trying LLM fallback")
+        print(f"[ModelAgent] Plot detection: {result} (method: {method_used})")
+        return result == "plot_request"
         
     except Exception as e:
-        print(f"[ModelAgent] Semantic plot detection error: {e}, trying LLM fallback")
-    
-    # Step 2: LLM fallback
-    try:
-        print(f"[ModelAgent] 🤖 Using LLM for plot detection")
-        llm_result = llm_detect_plot_request(query)
-        if llm_result is not None:
-            print(f"[ModelAgent] LLM plot detection: {llm_result}")
-            return llm_result
-        else:
-            print(f"[ModelAgent] LLM plot detection failed, using keyword fallback")
-    except Exception as e:
-        print(f"[ModelAgent] LLM plot detection error: {e}, using keyword fallback")
-    
-    # Step 3: Keyword fallback
-    print(f"[ModelAgent] ⚡ Using keyword fallback for plot detection")
-    plot_keywords = ['show', 'plot', 'visualize', 'display']
-    tree_keywords = ['tree', 'decision tree', 'model']
-    return any(pk in query.lower() for pk in plot_keywords) and any(tk in query.lower() for tk in tree_keywords)
+        print(f"[ModelAgent] Universal classifier plot detection error: {e}, using keyword fallback")
+        # Keyword fallback
+        plot_keywords = ['show', 'plot', 'visualize', 'display']
+        tree_keywords = ['tree', 'decision tree', 'model']
+        return any(pk in query.lower() for pk in plot_keywords) and any(tk in query.lower() for tk in tree_keywords)
 
 def semantic_detect_financial_analysis(query: str) -> bool:
     """Semantic detection of financial analysis/rank ordering requests"""
     
     try:
-        # Import orchestrator for semantic classification
-        from orchestrator import Orchestrator
-        
-        # Create temporary orchestrator for semantic classification
-        temp_orchestrator = Orchestrator()
+        # Import pattern classifier from toolbox
+        from toolbox import pattern_classifier
         
         # Define financial analysis intent definitions
         financial_intent_definitions = {
@@ -1071,39 +1026,21 @@ def semantic_detect_financial_analysis(query: str) -> bool:
             "regular_modeling": "Train model, build classifier, create predictor, develop algorithm, model training, algorithm development, machine learning, predictive modeling, classification, regression, model building, model creation, model development"
         }
         
-        # Set up semantic classification
-        temp_orchestrator.intent_definitions = financial_intent_definitions
-        temp_orchestrator._initialize_intent_embeddings()
+        # Use universal pattern classifier from toolbox
+        result, method_used = pattern_classifier.classify_pattern(
+            query,
+            financial_intent_definitions,
+            use_case="feature_detection"
+        )
         
-        if temp_orchestrator._intent_embeddings:
-            intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query)
-            print(f"[ModelAgent] Semantic financial analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
-            
-            # Use moderate threshold for financial analysis detection
-            if confidence_info.get("max_score", 0) > 0.4:
-                return intent == "financial_analysis"
-            else:
-                print(f"[ModelAgent] Financial analysis confidence too low, trying LLM fallback")
+        print(f"[ModelAgent] Financial analysis detection: {result} (method: {method_used})")
+        return result == "financial_analysis"
         
     except Exception as e:
-        print(f"[ModelAgent] Semantic financial analysis error: {e}, trying LLM fallback")
-    
-    # Step 2: LLM fallback
-    try:
-        print(f"[ModelAgent] 🤖 Using LLM for financial analysis detection")
-        llm_result = llm_detect_financial_analysis(query)
-        if llm_result is not None:
-            print(f"[ModelAgent] LLM financial analysis: {llm_result}")
-            return llm_result
-        else:
-            print(f"[ModelAgent] LLM financial analysis failed, using keyword fallback")
-    except Exception as e:
-        print(f"[ModelAgent] LLM financial analysis error: {e}, using keyword fallback")
-    
-    # Step 3: Keyword fallback
-    print(f"[ModelAgent] ⚡ Using keyword fallback for financial analysis")
-    financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
-    return any(fk in query.lower() for fk in financial_keywords)
+        print(f"[ModelAgent] Universal classifier financial analysis error: {e}, using keyword fallback")
+        # Keyword fallback
+        financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
+        return any(fk in query.lower() for fk in financial_keywords)
 
 def llm_detect_plot_request(query: str) -> bool:
     """LLM-based detection of plot/visualization requests"""

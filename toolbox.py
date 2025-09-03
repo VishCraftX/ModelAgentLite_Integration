@@ -18,6 +18,23 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
+# Pattern Classification imports (optional)
+try:
+    import ollama
+    from sklearn.metrics.pairwise import cosine_similarity
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    EMBEDDINGS_AVAILABLE = False
+
+# Text normalization imports (optional)
+try:
+    from nltk.stem import WordNetLemmatizer
+    import nltk
+    lemmatizer = WordNetLemmatizer()
+    LEMMATIZER_AVAILABLE = True
+except ImportError:
+    LEMMATIZER_AVAILABLE = False
+
 # Slack integration (optional)
 try:
     from slack_sdk import WebClient
@@ -297,6 +314,232 @@ class ProgressTracker:
             state.update_progress(message, state.current_agent)
 
 
+class UniversalPatternClassifier:
+    """Standalone Universal Pattern Classifier - Semantic → LLM → Keyword for all pattern detection"""
+    
+    # Predefined threshold profiles for different use cases
+    THRESHOLD_PROFILES = {
+        "critical_routing": {
+            "semantic_threshold": 0.50,      # Conservative - avoid misrouting
+            "confidence_threshold": 0.12,    # Need clear winner
+            "description": "High-stakes routing decisions"
+        },
+        "intent_classification": {
+            "semantic_threshold": 0.4,       # Balanced
+            "confidence_threshold": 0.08,    # Moderate confidence
+            "description": "Main intent classification"
+        },
+        "skip_patterns": {
+            "semantic_threshold": 0.45,      # Slightly conservative
+            "confidence_threshold": 0.10,    # Clear skip intent needed
+            "description": "Workflow skip detection"
+        },
+        "session_continuation": {
+            "semantic_threshold": 0.35,      # Liberal - better to continue wrongly than break flow
+            "confidence_threshold": 0.06,    # Low confidence OK
+            "description": "Interactive session flow"
+        },
+        "feature_detection": {
+            "semantic_threshold": 0.3,       # Liberal - plot/visualization detection
+            "confidence_threshold": 0.05,    # Low confidence OK
+            "description": "Feature/plot/analysis detection"
+        },
+        "educational_queries": {
+            "semantic_threshold": 0.4,       # Balanced
+            "confidence_threshold": 0.08,    # Moderate confidence
+            "description": "Educational vs action intent"
+        },
+        "model_sub_classification": {
+            "semantic_threshold": 0.35,      # Liberal - within model building context
+            "confidence_threshold": 0.07,    # Low confidence OK
+            "description": "Model building sub-classifications"
+        }
+    }
+    
+    def __init__(self):
+        self._embedding_cache = {}
+        self.default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
+        
+    def classify_pattern(self, query: str, pattern_definitions: dict, 
+                        use_case: str = "intent_classification",
+                        context_adjustments: dict = None) -> tuple:
+        """
+        Universal pattern classification: Semantic → LLM → Keyword
+        Returns: (classification_result, method_used)
+        """
+        # Get base thresholds for use case
+        if use_case not in self.THRESHOLD_PROFILES:
+            print(f"⚠️ Unknown use case '{use_case}', using 'intent_classification'")
+            use_case = "intent_classification"
+            
+        base_thresholds = self.THRESHOLD_PROFILES[use_case]
+        semantic_threshold = base_thresholds["semantic_threshold"]
+        confidence_threshold = base_thresholds["confidence_threshold"]
+        
+        # Apply context-based adjustments
+        if context_adjustments:
+            semantic_threshold += context_adjustments.get("semantic_adjust", 0)
+            confidence_threshold += context_adjustments.get("confidence_adjust", 0)
+            
+        # Clamp to reasonable bounds
+        semantic_threshold = max(0.2, min(0.7, semantic_threshold))
+        confidence_threshold = max(0.03, min(0.2, confidence_threshold))
+        
+        print(f"🎯 Pattern classification for {use_case}: semantic={semantic_threshold:.3f}, confidence={confidence_threshold:.3f}")
+        
+        # Step 1: Semantic Classification
+        if EMBEDDINGS_AVAILABLE:
+            semantic_result = self._semantic_classify(
+                query, pattern_definitions, semantic_threshold, confidence_threshold
+            )
+            if semantic_result:
+                print(f"🧠 Semantic pattern classification used (use_case: {use_case})")
+                return semantic_result, "semantic"
+        
+        # Step 2: LLM Classification  
+        llm_result = self._llm_classify(query, pattern_definitions, use_case)
+        if llm_result:
+            print(f"🤖 LLM pattern classification used (use_case: {use_case})")
+            return llm_result, "llm"
+            
+        # Step 3: Keyword Fallback
+        print(f"⚡ Keyword pattern fallback used (use_case: {use_case})")
+        keyword_result = self._keyword_classify(query, pattern_definitions)
+        return keyword_result, "keyword"
+    
+    def _get_embedding(self, text: str):
+        """Get embedding for text using Ollama with caching"""
+        if not EMBEDDINGS_AVAILABLE:
+            return None
+            
+        # Check cache first
+        if text in self._embedding_cache:
+            return self._embedding_cache[text]
+            
+        # Try different embedding models in order of preference
+        embedding_models = ["bge-large", "mxbai-embed-large", "nomic-embed-text", "all-minilm"]
+        
+        for model in embedding_models:
+            try:
+                response = ollama.embeddings(model=model, prompt=text)
+                embedding = np.array(response["embedding"])
+                self._embedding_cache[text] = embedding
+                return embedding
+            except Exception as e:
+                continue
+                
+        print(f"⚠️ Failed to get embedding for text: {text[:50]}...")
+        return None
+    
+    def _semantic_classify(self, query: str, pattern_definitions: dict, 
+                          semantic_threshold: float, confidence_threshold: float) -> Optional[str]:
+        """Semantic classification using embeddings"""
+        try:
+            query_embedding = self._get_embedding(query)
+            if query_embedding is None:
+                return None
+                
+            similarities = {}
+            for pattern_name, pattern_description in pattern_definitions.items():
+                pattern_embedding = self._get_embedding(pattern_description)
+                if pattern_embedding is not None:
+                    similarity = cosine_similarity([query_embedding], [pattern_embedding])[0][0]
+                    similarities[pattern_name] = similarity
+            
+            if not similarities:
+                return None
+                
+            # Find best and second best
+            sorted_similarities = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
+            best_pattern, best_score = sorted_similarities[0]
+            second_score = sorted_similarities[1][1] if len(sorted_similarities) > 1 else 0
+            
+            score_diff = best_score - second_score
+            
+            print(f"[Semantic] Best: {best_pattern} (score: {best_score:.3f}, diff: {score_diff:.3f})")
+            
+            # Check both thresholds
+            if best_score > semantic_threshold and score_diff > confidence_threshold:
+                return best_pattern
+                
+            print(f"[Semantic] Below threshold - score: {best_score:.3f} < {semantic_threshold:.3f} or diff: {score_diff:.3f} < {confidence_threshold:.3f}")
+            return None
+            
+        except Exception as e:
+            print(f"[Semantic] Error in semantic classification: {e}")
+            return None
+    
+    def _llm_classify(self, query: str, pattern_definitions: dict, use_case: str) -> Optional[str]:
+        """LLM classification with context-aware prompts"""
+        try:
+            # Create context-aware prompt based on use case
+            if use_case == "skip_patterns":
+                system_prompt = """You are a workflow pattern classifier. Analyze the user query and determine if they want to skip certain steps in the ML pipeline."""
+            elif use_case == "session_continuation":
+                system_prompt = """You are a session flow classifier. Determine if the user wants to continue their current task or start something new."""
+            elif use_case == "educational_queries":
+                system_prompt = """You are an intent classifier. Determine if the user wants to learn about something or take an action."""
+            else:
+                system_prompt = """You are a pattern classifier. Analyze the user query and classify it according to the provided patterns."""
+            
+            pattern_list = "\n".join([f"- {name}: {desc[:100]}..." for name, desc in pattern_definitions.items()])
+            
+            prompt = f"""{system_prompt}
+
+Available patterns:
+{pattern_list}
+
+User query: "{query}"
+
+Respond with ONLY the pattern name that best matches the query. If none match well, respond with "uncertain"."""
+
+            # Try Ollama 
+            try:
+                response = ollama.chat(
+                    model=self.default_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=False,
+                    options={"temperature": 0.1}
+                )
+                
+                if response and "message" in response and "content" in response["message"]:
+                    result = response["message"]["content"].strip().lower()
+                    
+                    # Validate that response is one of the valid patterns
+                    for pattern_name in pattern_definitions.keys():
+                        if pattern_name.lower() == result:
+                            return pattern_name
+            except Exception as e:
+                print(f"[LLM] Ollama error: {e}")
+                        
+            return None
+            
+        except Exception as e:
+            print(f"[LLM] Error in LLM classification: {e}")
+            return None
+    
+    def _keyword_classify(self, query: str, pattern_definitions: dict) -> str:
+        """Keyword-based classification fallback"""
+        query_lower = query.lower()
+        
+        # Convert pattern definitions to keyword lists (simplified approach)
+        pattern_scores = {}
+        
+        for pattern_name, pattern_description in pattern_definitions.items():
+            # Extract keywords from description (simple word matching)
+            keywords = pattern_description.lower().split()
+            score = sum(1 for keyword in keywords if keyword in query_lower)
+            pattern_scores[pattern_name] = score
+            
+        # Return pattern with highest score, or first pattern if tie
+        if pattern_scores:
+            best_pattern = max(pattern_scores, key=pattern_scores.get)
+            return best_pattern
+        
+        # Fallback to first pattern
+        return list(pattern_definitions.keys())[0]
+
+
 class UserDirectoryManager:
     """Manages user directory structure like in ModelBuildingAgent"""
     
@@ -574,11 +817,12 @@ artifact_manager = ArtifactManager()
 progress_tracker = ProgressTracker(slack_manager)
 execution_agent = ExecutionAgent()
 user_directory_manager = UserDirectoryManager()
+pattern_classifier = UniversalPatternClassifier()
 
 
 def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None):
     """Initialize global toolbox with custom configuration"""
-    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager
+    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager, pattern_classifier
     
     if slack_token:
         slack_manager = SlackManager(slack_token)
@@ -590,7 +834,10 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
     if user_data_dir:
         user_directory_manager = UserDirectoryManager(user_data_dir)
     
-    print("🧰 Global toolbox initialized")
+    # Initialize universal pattern classifier
+    pattern_classifier = UniversalPatternClassifier()
+    
+    print("🧰 Global toolbox initialized with Universal Pattern Classifier")
     print(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
     print(f"   Artifacts: {artifact_manager.base_dir}")
     print(f"   User Data: {user_directory_manager.base_data_dir}")
