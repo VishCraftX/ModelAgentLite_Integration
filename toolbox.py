@@ -902,9 +902,19 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
     """Initialize global toolbox with custom configuration"""
     global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager, pattern_classifier
     
-    if slack_token:
+    if slack_token and not hasattr(slack_manager, 'client'):
+        # Only create new SlackManager if one doesn't exist yet
         slack_manager = SlackManager(slack_token)
         progress_tracker = ProgressTracker(slack_manager)
+        print("🔧 Created new SlackManager instance")
+    elif slack_token and hasattr(slack_manager, 'client'):
+        # Reuse existing SlackManager to preserve session channels
+        print(f"🔄 Reusing existing SlackManager (has {len(slack_manager.session_channels)} sessions)")
+    elif slack_token:
+        # Fallback - create new one
+        slack_manager = SlackManager(slack_token)
+        progress_tracker = ProgressTracker(slack_manager)
+        print("🔧 Created fallback SlackManager instance")
     
     if artifacts_dir:
         artifact_manager = ArtifactManager(artifacts_dir)

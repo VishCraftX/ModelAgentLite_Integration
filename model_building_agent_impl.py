@@ -1742,8 +1742,11 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                 # Set up file upload for the plot
                 plot_path = result['plot_path']
                 if os.path.exists(plot_path):
+                    # Store in both state and result for compatibility
                     state["artifacts"] = state.get("artifacts", {})
-                    state["artifacts"]["files"] = [{"path": plot_path, "title": "Generated Plot", "type": "plot"}]
+                    state["artifacts"]["files"] = [{"path": plot_path, "title": "Decision Tree Plot", "type": "plot"}]
+                    # Also add to result so wrapper can access it
+                    result["artifacts"] = {"files": [{"path": plot_path, "title": "Decision Tree Plot", "type": "plot"}]}
                     print(f"📊 Plot ready for upload: {plot_path}")
                 else:
                     print(f"⚠️ Plot file not found: {plot_path}")
