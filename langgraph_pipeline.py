@@ -911,10 +911,44 @@ class MultiAgentMLPipeline:
                 elif agent_type == 'feature_selection':
                     fs_continuations = [
                         'proceed', 'continue', 'finish', 'complete', 'done', 'finalize',
-                        'run iv', 'do iv', 'iv analysis', 'run csi', 'do csi', 'csi analysis',
-                        'run correlation', 'correlation analysis', 'run shap', 'do shap', 'shap analysis',
-                        'run vif', 'do vif', 'vif analysis', 'run lasso', 'lasso selection', 'run pca', 'pca analysis',
-                        'filter features', 'select features', 'analyze features', 'what is', 'explain',
+                        # IV Analysis patterns
+                        'run iv', 'do iv', 'iv analysis', 'implement iv', 'apply iv', 'iv filtering', 'iv value', 'iv cutoff',
+                        'information value', 'iv threshold', 'iv greater than', 'iv less than', 'filter by iv',
+                        'with iv', 'iv >', 'iv <', 'iv >=', 'iv <=', 'filter all values', 'filter values',
+                        # CSI Analysis patterns  
+                        'run csi', 'do csi', 'csi analysis', 'implement csi', 'apply csi', 'csi filtering',
+                        'characteristic stability', 'stability index', 'csi threshold', 'csi cutoff',
+                        # Correlation Analysis patterns
+                        'run correlation', 'correlation analysis', 'implement correlation', 'apply correlation', 'correlation filtering',
+                        'correlation with target', 'target correlation', 'correlate with target', 'correlation cutoff',
+                        'highly correlated', 'remove correlated', 'correlation threshold', 'corr analysis',
+                        'show correlation', 'correlation between', 'correlation matrix', 'correlation scores',
+                        'feature correlation', 'correlation values', 'correlation results',
+                        # SHAP Analysis patterns
+                        'run shap', 'do shap', 'shap analysis', 'implement shap', 'apply shap', 'shap filtering',
+                        'shap values', 'shap value', 'shap importance', 'feature importance', 'shap cutoff', 'shap threshold',
+                        'top shap features', 'top shap', 'shap ranking', 'importance ranking', 'feature ranking',
+                        # VIF Analysis patterns
+                        'run vif', 'do vif', 'vif analysis', 'implement vif', 'apply vif', 'vif filtering',
+                        'variance inflation', 'multicollinearity', 'vif threshold', 'vif cutoff', 'vif greater than',
+                        # Other ML techniques
+                        'run lasso', 'lasso selection', 'implement lasso', 'apply lasso', 'lasso regularization',
+                        'run pca', 'pca analysis', 'principal component', 'dimensionality reduction',
+                        'random forest importance', 'tree importance', 'model importance',
+                        # General feature selection patterns
+                        'filter features', 'select features', 'analyze features', 'filtering with', 'cutoff', 'threshold',
+                        'remove features', 'keep features', 'feature subset', 'top features', 'best features',
+                        'rank features', 'score features', 'evaluate features', 'assess features',
+                        'filter all', 'filter with', 'values with', 'greater than', 'less than', 'equal to',
+                        '>', '<', '>=', '<=', '==', '!=', '0.01', '0.05', '0.1', '0.2', '0.3', '0.5',
+                        # Action words
+                        'implement', 'apply', 'execute', 'perform', 'calculate', 'compute', 'run analysis',
+                        'do analysis', 'start analysis', 'begin analysis', 'conduct analysis',
+                        # Query patterns
+                        'what is', 'explain', 'how does', 'show me', 'tell me about', 'describe',
+                        'what are', 'what are the', 'which are', 'which are the', 'give me', 'list',
+                        'top 5', 'top 10', 'top 20', 'top 30', 'top 50', 'best 5', 'best 10', 'best 20',
+                        'highest', 'lowest', 'most important', 'least important', 'value features',
                         'how many features', 'current state', 'summary', 'show progress', 
                         'revert', 'reset', 'restore', 'undo', 'go back', 'back to original', 'back to cleaned',
                         'revert to cleaned', 'restore original', 'reset features', 'undo analysis', 'restore features',
