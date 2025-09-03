@@ -191,6 +191,8 @@ IMPORTANT DISTINCTION:
 - "filter features with correlation > 0.8" = STANDARD_ANALYSIS (removes correlated feature pairs)
 - "show me top 10 SHAP features" or "give me IV scores" = STANDARD_ANALYSIS_QUERY (query built-in analysis results)
 - "top 20 features by correlation with target" or "correlation with target column" = QUERY (needs code execution)
+- "top 20 correlation pairs" or "show correlation pairs" = QUERY (needs code execution - displays info only)
+- "correlation matrix" or "feature correlation pairs" = QUERY (needs code execution - displays info only)
 - "which features correlate most with target" or "correlation scores with target" = QUERY (needs code execution)  
 - "train decision tree and show importance" or "feature importance from model" = QUERY (computational analysis)
 - "keep only top 10 SHAP features" or "filter with SHAP > 0.01" = CUSTOM_ANALYSIS (custom filtering)
@@ -201,6 +203,8 @@ IMPORTANT DISTINCTION:
 CORRELATION ANALYSIS TYPES:
 - "correlation analysis" = finds correlated FEATURE PAIRS for removal (STANDARD_ANALYSIS)
 - "correlation with target" = ranks features by TARGET relationship (QUERY - needs code)
+- "correlation pairs" or "correlation matrix" = shows correlation information (QUERY - needs code)
+- "top X correlation pairs" = displays highest correlations (QUERY - needs code)
 
 CLASSIFICATION EXAMPLES:
 
@@ -223,6 +227,12 @@ CLASSIFICATION EXAMPLES:
 - "correlation with target column" → QUERY
 - "which features correlate most with target" → QUERY
 - "show me correlation scores with target" → QUERY
+- "top 20 correlation pairs" → QUERY
+- "show correlation pairs" → QUERY
+- "highest correlation pairs" → QUERY
+- "correlation matrix" → QUERY
+- "feature correlation pairs" → QUERY
+- "most correlated features" → QUERY
 - "train a decision tree and tell me feature importance" → QUERY
 - "give me top 10 important features after training decision tree" → QUERY
 - "show me feature importance from random forest" → QUERY
@@ -343,6 +353,10 @@ IMPORTANT: Respond with ONLY the JSON object. No explanations, no additional tex
                 # Set reasonable defaults
                 defaults = {"iv": 0.05, "correlation": 0.8, "csi": 0.2}
                 result["threshold"] = defaults.get(result["analysis_type"], 0.05)
+            elif "threshold" in result and result["threshold"] == 0 and result.get("analysis_type") == "correlation":
+                # Safety check: Never use 0 threshold for correlation (would remove all features)
+                print("⚠️ WARNING: Correlation threshold was 0, setting to safe default 0.8")
+                result["threshold"] = 0.8
                 
             return result
             
@@ -605,6 +619,11 @@ class AnalysisEngine:
     def run_correlation_analysis(session: UserSession, threshold: float = 0.8) -> Dict[str, Any]:
         """Run correlation analysis"""
         try:
+            # Safety check: Ensure threshold is reasonable
+            if threshold <= 0 or threshold >= 1:
+                print(f"⚠️ WARNING: Invalid correlation threshold {threshold}, using default 0.8")
+                threshold = 0.8
+            
             df = session.current_df
             feature_cols = [col for col in df.columns if col != session.target_column]
             
