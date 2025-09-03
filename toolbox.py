@@ -289,8 +289,13 @@ class ProgressTracker:
             return
         self._last_message = full_message
         
-        # Send to Slack if enabled and manager available
-        if send_to_slack and self.slack_manager and state.chat_session:
+        # Filter out internal routing/technical messages from Slack
+        routing_keywords = ["routed to", "routing to", "generating conversational", "generating educational", 
+                           "pipeline summary", "orchestrator", "classifier", "semantic classification"]
+        is_internal_message = any(keyword in message.lower() for keyword in routing_keywords)
+        
+        # Send to Slack only if not internal and enabled
+        if send_to_slack and not is_internal_message and self.slack_manager and state.chat_session:
             if stage:
                 self.slack_manager.send_progress_update(state.chat_session, stage, message)
             else:

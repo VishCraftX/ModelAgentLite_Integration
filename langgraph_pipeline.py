@@ -163,7 +163,10 @@ class MultiAgentMLPipeline:
         state.artifacts = state.artifacts or {}
         state.artifacts["routing_decision"] = selected_agent
         
-        progress_tracker.update(state, f"Routed to {selected_agent}: {explanation}")
+        # Log routing decision (console only, not Slack)
+        print(f"🔀 [Orchestrator] Routed to {selected_agent}: {explanation}")
+        
+        # Don't send routing details to Slack - user doesn't need to see internal routing
         
         return state
     
@@ -189,6 +192,7 @@ class MultiAgentMLPipeline:
     def _general_response_node(self, state: PipelineState) -> PipelineState:
         """General response node - handles conversational queries using LLM"""
         print(f"\n💬 [General Response] Generating conversational response")
+        # Note: No progress update to Slack - user doesn't need routing details
         
         try:
             # Import LLM functionality

@@ -257,11 +257,18 @@ Just upload your data and start asking questions in natural language! 🎉"""
             
             # Create progress callback for real-time updates
             def progress_callback(message: str, stage: str = ""):
-                """Send progress updates to Slack"""
-                if stage:
-                    say(f"⏳ *{stage}:* {message}", thread_ts=thread_ts)
-                else:
-                    say(f"⏳ {message}", thread_ts=thread_ts)
+                """Send progress updates to Slack (filtering out internal routing messages)"""
+                # Filter out internal routing/technical messages from Slack
+                routing_keywords = ["routed to", "routing to", "generating conversational", "generating educational", 
+                                   "pipeline summary", "orchestrator", "classifier", "semantic classification"]
+                is_internal_message = any(keyword in message.lower() for keyword in routing_keywords)
+                
+                # Only send user-relevant progress updates to Slack
+                if not is_internal_message:
+                    if stage:
+                        say(f"⏳ *{stage}:* {message}", thread_ts=thread_ts)
+                    else:
+                        say(f"⏳ {message}", thread_ts=thread_ts)
             
             # Process query through ML pipeline
             result = self.ml_pipeline.process_query(
@@ -274,12 +281,13 @@ Just upload your data and start asking questions in natural language! 🎉"""
             response_text = result["response"]
             say(response_text, thread_ts=thread_ts)
             
-            # Send additional information if available
+            # Pipeline summary moved to logs only - user doesn't need technical details
             if result.get("data_summary"):
                 summary = result["data_summary"]
-                if any(summary.values()):  # If any data is available
+                if any(summary.values()):  # Log data summary for debugging
                     summary_text = self._format_pipeline_summary(summary)
-                    say(summary_text, thread_ts=thread_ts)
+                    print(f"📋 [DEBUG] Pipeline Summary: {summary_text}")
+                    # Note: Not sending to Slack - user doesn't need technical pipeline details
             
         except Exception as e:
             error_msg = f"❌ Sorry, I encountered an error processing your request: {str(e)}"
