@@ -311,13 +311,19 @@ class UniversalClassifierTester:
             ("visualize model tree structure", "use_existing"),
             ("display tree plot", "use_existing"),
             ("generate model visualization", "use_existing"),
-            ("create rank order table", "use_existing"),
-            ("build deciles using model", "use_existing"),
-            ("generate buckets", "use_existing"),
-            ("create segments", "use_existing"),
+            ("create rank order table using existing model", "use_existing"),  # Context-aware
+            ("build deciles using current model", "use_existing"),           # Context-aware
+            ("generate buckets with this model", "use_existing"),           # Context-aware
+            ("create segments using trained model", "use_existing"),        # Context-aware
             ("score this data", "use_existing"),
             ("predict using model", "use_existing"),
             ("classify new records", "use_existing"),
+            
+            # Context-less cases (should still work based on definitions)
+            ("create rank order table", "use_existing"),    # Should work with enhanced definitions
+            ("create segments", "use_existing"),            # Should work with enhanced definitions  
+            ("generate buckets", "use_existing"),           # Should work with enhanced definitions
+            ("build deciles", "use_existing"),              # Should work with enhanced definitions
             
             # Build new model 
             ("train new random forest", "new_model"),

@@ -557,8 +557,10 @@ Respond with ONLY the pattern name that best matches the query. If none match we
                 score += 5
             elif pattern_name == "no_skip" and any(existing in query_lower for existing in ["use this model", "use existing", "apply existing", "current model", "existing model"]):
                 score += 10  # High priority for existing model usage
-            elif pattern_name == "action" and any(action in query_lower for action in ["what is", "how does", "explain", "tell me", "what are"]):
-                score -= 5  # Penalize action for educational phrases
+            elif pattern_name == "action" and any(action in query_lower for action in ["what is", "how does", "explain", "tell me", "what are", "different methods", "different techniques", "types of", "kinds of"]):
+                score -= 8  # Strong penalty for action when educational language detected
+            elif pattern_name == "educational" and any(edu in query_lower for edu in ["different methods", "different techniques", "types of", "kinds of", "what are different", "various methods", "various techniques"]):
+                score += 8  # Strong bonus for educational when asking about methods/techniques
                 
             pattern_scores[pattern_name] = score
             

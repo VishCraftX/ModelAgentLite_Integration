@@ -589,16 +589,26 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         
         has_skip_language = any(indicator in query.lower() for indicator in skip_indicators)
         
-        # For model_building intent with existing model references,
-        # skip patterns are usually not needed (let ModelBuildingAgent handle it)
-        has_existing_model_ref = any(ref in query.lower() for ref in [
-            "use this model", "use existing model", "use the model",
-            "with this model", "apply this model", "existing model"
-        ])
+        # CRITICAL: Enhanced existing model detection to prevent misclassification
+        existing_model_indicators = [
+            "use this model", "use existing model", "use the model", "use current model",
+            "with this model", "apply this model", "existing model", "current model",
+            "apply existing", "apply current", "use trained", "apply trained",
+            "this classifier", "existing classifier", "current classifier",
+            "this predictor", "existing predictor", "current predictor",
+            "saved model", "built model", "previous model", 
+            "apply this", "use this", "apply the model", "apply current model"
+        ]
         
-        # Only apply skip patterns for explicit skip requests
-        # Don't apply for existing model usage (that's ModelBuildingAgent's job)
-        return has_skip_language and not has_existing_model_ref
+        has_existing_model_ref = any(ref in query.lower() for ref in existing_model_indicators)
+        
+        # CRITICAL: If query has existing model language, NEVER analyze skip patterns
+        if has_existing_model_ref:
+            print(f"[Skip Analysis] Skipping pattern analysis - existing model detected: '{query}'")
+            return False
+            
+        # Only apply skip patterns for explicit skip requests without existing model references
+        return has_skip_language
 
     def _classify_skip_patterns(self, query: str) -> str:
         """
