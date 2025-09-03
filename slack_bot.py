@@ -252,22 +252,26 @@ Just upload your data and start asking questions in natural language! 🎉"""
     def _handle_text_query(self, text: str, session_id: str, say, thread_ts: str):
         """Handle text queries"""
         try:
-            # Working message
-            say("🤔 Working on your request...", thread_ts=thread_ts)
+            # Removed "Working on your request" message - user doesn't need it
             
             # Create progress callback for real-time updates
             def progress_callback(message: str, stage: str = ""):
                 """Send progress updates to Slack (filtering out internal routing messages)"""
-                # Filter out internal routing/technical messages from Slack
-                routing_keywords = ["routed to", "routing to", "generating conversational", "generating educational", 
-                                   "pipeline summary", "orchestrator", "classifier", "semantic classification"]
+                # Enhanced filter for internal routing/technical messages
+                routing_keywords = [
+                    "routed to", "routing to", "generating conversational", "generating educational", 
+                    "pipeline summary", "orchestrator", "classifier", "semantic classification",
+                    "intent classification", "request routing", "code generation", "code execution", 
+                    "processing results", "setting up execution", "executing your code", "running your code",
+                    "executing generated code", "completed", "finished", "analysis completed"
+                ]
                 is_internal_message = any(keyword in message.lower() for keyword in routing_keywords)
                 
-                # Only send user-relevant progress updates to Slack
+                # Don't send any internal progress to Slack - only final results
                 if not is_internal_message:
-                    if stage:
+                    if stage and stage.lower() not in ["orchestrator", "code execution", "processing results"]:
                         say(f"⏳ *{stage}:* {message}", thread_ts=thread_ts)
-                    else:
+                    elif not stage:
                         say(f"⏳ {message}", thread_ts=thread_ts)
             
             # Process query through ML pipeline

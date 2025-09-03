@@ -101,15 +101,12 @@ class SlackManager:
             if not thread_ts:
                 thread_ts = self.session_threads.get(session_id)
             
-            print(f"🔍 DEBUG SlackManager.send_message:")
-            print(f"  Session ID: {session_id}")
-            print(f"  Channel: {channel}")
-            print(f"  Thread TS: {thread_ts}")
-            print(f"  Available sessions: {list(self.session_channels.keys())}")
-            print(f"  Session channels: {self.session_channels}")
-            
-            # Final check - if no channel available, we cannot send to Slack
+            # Only show debug for actual failures, not all messages
             if not channel:
+                print(f"🔍 DEBUG SlackManager.send_message - SESSION NOT FOUND:")
+                print(f"  Session ID: {session_id}")
+                print(f"  Available sessions: {list(self.session_channels.keys())}")
+                print(f"  Session channels: {self.session_channels}")
                 print(f"❌ No channel available for session {session_id} - message will be logged to console only")
                 print(f"[Slack:{session_id}] {text}")
                 return
