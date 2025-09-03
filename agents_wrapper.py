@@ -217,7 +217,7 @@ class PreprocessingAgentWrapper:
                     # Import the preprocessing functions
                     from preprocessing_agent_impl import (
                         initialize_dataset_analysis,
-                        analyze_outliers_single_batch,
+                        analyze_outliers_with_confidence,
                         get_llm_from_state,
                         SequentialState
                     )
@@ -234,9 +234,9 @@ class PreprocessingAgentWrapper:
                     print("📊 Initializing dataset analysis...")
                     sequential_state = initialize_dataset_analysis(sequential_state)
                     
-                    # Run outlier detection
-                    print("🔍 Running outlier detection...")
-                    outlier_results = analyze_outliers_single_batch(sequential_state)
+                    # Run outlier detection with confidence-based approach
+                    print("🔍 Running confidence-based outlier detection...")
+                    outlier_results = analyze_outliers_with_confidence(sequential_state)
                     
                     # Debug: Check what we got back
                     print(f"🔍 DEBUG: outlier_results type: {type(outlier_results)}")
@@ -248,10 +248,14 @@ class PreprocessingAgentWrapper:
                     
                     # Handle different possible return types from outlier analysis
                     if isinstance(outlier_results, dict):
-                        # Check if it has the expected structure with 'outlier_columns'
-                        if 'outlier_columns' in outlier_results:
+                        # Check for new confidence-based structure first
+                        if 'outliers_columns' in outlier_results:
+                            # New confidence-based format
+                            outlier_columns = outlier_results['outliers_columns']
+                            total_outliers = len(outlier_columns)  # Count of columns with outliers
+                        elif 'outlier_columns' in outlier_results:
+                            # Old format
                             outlier_columns = outlier_results['outlier_columns']
-                            # Calculate total outliers from analysis_details
                             total_outliers = 0
                             if 'analysis_details' in outlier_results:
                                 for col, details in outlier_results['analysis_details'].items():
@@ -277,38 +281,76 @@ class PreprocessingAgentWrapper:
                         slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
-                        # Build the outlier details based on the type
-                        if isinstance(outlier_results, dict):
-                            if 'analysis_details' in outlier_results:
-                                # New structure with analysis_details
-                                outlier_details = []
-                                for col in outlier_columns[:5]:
-                                    if col in outlier_results['analysis_details']:
-                                        details = outlier_results['analysis_details'][col]
-                                        outlier_count = details.get('outliers_iqr_count', 0)
-                                        outlier_percentage = details.get('outliers_iqr_percentage', 0)
-                                        outlier_details.append(f'• {col}: {outlier_count:,} outliers ({outlier_percentage:.1f}%)')
-                                    else:
-                                        outlier_details.append(f'• {col}: outliers detected')
-                                outlier_details = chr(10).join(outlier_details)
-                            else:
-                                # Old structure
-                                outlier_details = chr(10).join([f'• {col}: {outlier_results[col].get("outlier_count", 0):,} outliers ({outlier_results[col].get("outlier_percentage", 0):.1f}%)' for col in outlier_columns[:5]])
-                        elif isinstance(outlier_results, list):
-                            outlier_details = chr(10).join([f'• {col}: outliers detected' for col in outlier_columns[:5]])
+                        # Build concise outlier summary for new confidence-based format
+                        if isinstance(outlier_results, dict) and 'llm_recommendations' in outlier_results:
+                            # New confidence-based format - show strategy summary
+                            recommendations = outlier_results['llm_recommendations']
+                            strategy_counts = {}
+                            
+                            for col, rec in recommendations.items():
+                                strategy = rec.get('treatment', 'unknown')
+                                strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
+                            
+                            # Create concise strategy summary
+                            strategy_summary = []
+                            for strategy, count in strategy_counts.items():
+                                if strategy == 'keep':
+                                    strategy_summary.append(f"**Keep as-is**: {count} columns")
+                                elif strategy == 'winsorize':
+                                    strategy_summary.append(f"**Winsorize**: {count} columns")
+                                elif strategy == 'remove':
+                                    strategy_summary.append(f"**Remove**: {count} columns")
+                                else:
+                                    strategy_summary.append(f"**{strategy.title()}**: {count} columns")
+                            
+                            outlier_details = chr(10).join(strategy_summary) if strategy_summary else "• No outlier treatment needed"
+                            
+                            # Confidence stats removed from display per user request
+                            
+                        elif isinstance(outlier_results, dict) and 'analysis_details' in outlier_results:
+                            # Old format with analysis_details
+                            outlier_details = []
+                            for col in outlier_columns[:5]:
+                                if col in outlier_results['analysis_details']:
+                                    details = outlier_results['analysis_details'][col]
+                                    outlier_count = details.get('outliers_iqr_count', 0)
+                                    outlier_percentage = details.get('outliers_iqr_percentage', 0)
+                                    outlier_details.append(f'• {col}: {outlier_count:,} outliers ({outlier_percentage:.1f}%)')
+                                else:
+                                    outlier_details.append(f'• {col}: outliers detected')
+                            outlier_details = chr(10).join(outlier_details)
                         else:
+                            # Fallback
                             outlier_details = "• Analysis completed"
                         
-                        # Build LLM recommendations summary
-                        llm_recommendations = ""
+                        # Create appropriate message based on format
                         if isinstance(outlier_results, dict) and 'llm_recommendations' in outlier_results:
-                            recommendations = outlier_results['llm_recommendations']
-                            llm_recommendations = "\n**🤖 LLM Recommendations:**\n"
-                            for col, rec in recommendations.items():
-                                if col in outlier_columns:
-                                    llm_recommendations += f"• **{col}**: {rec.get('treatment', 'keep')} ({rec.get('severity', 'unknown')} severity)\n"
-                        
-                        message = f"""🔍 **Outlier Analysis Complete!**
+                            # New confidence-based format
+                            analyzed_columns = len(outlier_results.get('llm_recommendations', {}))
+                            columns_needing_treatment = len([col for col, rec in outlier_results.get('llm_recommendations', {}).items() 
+                                                           if rec.get('treatment', 'keep') != 'keep'])
+                            
+                            message = f"""🔍 **Outlier Analysis Complete!**
+
+📊 **Dataset Overview:**
+• Total rows: {state.raw_data.shape[0]:,}
+• Total columns: {state.raw_data.shape[1]}
+• Target column: {state.target_column}
+
+🎯 **Analysis Results:**
+• Columns analyzed: {analyzed_columns}
+• Columns needing treatment: {columns_needing_treatment}
+
+**🔧 Recommended Treatments:**
+{outlier_details}
+
+**💬 Next Steps:**
+• `continue` - Apply recommendations and move to missing values
+• `skip outliers` - Move to missing values analysis
+• `summary` - Show current preprocessing status"""
+                        else:
+                            # Old format
+                            message = f"""🔍 **Outlier Analysis Complete!**
 
 📊 **Dataset Overview:**
 • Total rows: {state.raw_data.shape[0]:,}
@@ -321,17 +363,11 @@ class PreprocessingAgentWrapper:
 
 **📋 Columns with Outliers:**
 {outlier_details}{'...' if len(outlier_columns) > 5 else ''}
-{llm_recommendations}
-**💬 Next Steps:**
-• `continue` - Apply LLM recommendations and move to missing values
-• `skip outliers` - Move to missing values analysis
-• `summary` - Show current status
-• `explain [column]` - Get detailed analysis for a specific column
 
-**🔧 Available Actions:**
-• `remove outliers` - Remove all outliers
-• `cap outliers` - Cap outliers to 95th percentile
-• `keep outliers` - Keep outliers as-is"""
+**💬 Next Steps:**
+• `continue` - Apply recommendations and move to missing values
+• `skip outliers` - Move to missing values analysis
+• `summary` - Show current preprocessing status"""
                         
                         slack_manager.send_message(state.chat_session, message)
                     
@@ -408,7 +444,7 @@ class PreprocessingAgentWrapper:
                         
                         from preprocessing_agent_impl import (
                             initialize_dataset_analysis,
-                            analyze_outliers_single_batch,
+                            analyze_outliers_with_confidence,
                             get_llm_from_state,
                             SequentialState
                         )
@@ -425,8 +461,9 @@ class PreprocessingAgentWrapper:
                         print("📊 Initializing dataset analysis...")
                         sequential_state = initialize_dataset_analysis(sequential_state)
                         
-                        # Run outlier analysis
-                        outlier_results = analyze_outliers_single_batch(sequential_state)
+                        # Run outlier analysis with confidence-based approach
+                        print("🔍 Running confidence-based outlier detection...")
+                        outlier_results = analyze_outliers_with_confidence(sequential_state)
                         
                         print(f"🔍 DEBUG: outlier_results type: {type(outlier_results)}")
                         print(f"🔍 DEBUG: outlier_results content: {outlier_results}")
@@ -463,7 +500,7 @@ class PreprocessingAgentWrapper:
                                 
                                 message = f"""🚨 **Outliers Analysis Complete!**
 
-**📊 Outlier Columns Found:** {len(outlier_results.get('outlier_columns', []))} columns
+**📊 Outlier Columns Found:** {len(outlier_results.get('outliers_columns', []))} columns
 
 **🔧 Recommended Treatments:**
 {chr(10).join(treatment_text)}
@@ -518,21 +555,22 @@ class PreprocessingAgentWrapper:
                     
                     # Apply treatments based on LLM recommendations
                     df = state.raw_data.copy()
-                    applied_treatments = []
+                    treatment_counts = {}
                     
                     if isinstance(outlier_results, dict) and 'llm_recommendations' in outlier_results:
                         for col, recommendation in outlier_results['llm_recommendations'].items():
                             raw_treatment = recommendation.get('treatment', 'winsorize')
                             treatment = str(raw_treatment).lower().replace('-', '_')
                             if treatment == 'winsorize':
+                                treatment_counts['Winsorized'] = treatment_counts.get('Winsorized', 0) + 1
                                 # Apply winsorization
                                 lower_percentile = 1
                                 upper_percentile = 99
                                 lower_val = df[col].quantile(lower_percentile / 100)
                                 upper_val = df[col].quantile(upper_percentile / 100)
                                 df[col] = df[col].clip(lower=lower_val, upper=upper_val)
-                                applied_treatments.append(f"• {col}: Winsorized ({lower_percentile}st-{upper_percentile}th percentile)")
                             elif treatment == 'remove':
+                                treatment_counts['Outliers removed'] = treatment_counts.get('Outliers removed', 0) + 1
                                 # Remove outliers using IQR method
                                 Q1 = df[col].quantile(0.25)
                                 Q3 = df[col].quantile(0.75)
@@ -540,8 +578,8 @@ class PreprocessingAgentWrapper:
                                 lower_bound = Q1 - 1.5 * IQR
                                 upper_bound = Q3 + 1.5 * IQR
                                 df = df[(df[col] >= lower_bound) & (df[col] <= upper_bound)]
-                                applied_treatments.append(f"• {col}: Outliers removed (IQR method)")
                             elif treatment == 'mark_missing':
+                                treatment_counts['Marked as missing'] = treatment_counts.get('Marked as missing', 0) + 1
                                 # Mark detected outliers as NaN for later imputation
                                 Q1 = df[col].quantile(0.25)
                                 Q3 = df[col].quantile(0.75)
@@ -550,9 +588,13 @@ class PreprocessingAgentWrapper:
                                 upper_bound = Q3 + 1.5 * IQR
                                 outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
                                 df.loc[outlier_mask, col] = np.nan
-                                applied_treatments.append(f"• {col}: Outliers marked as missing")
                             elif treatment == 'keep':
-                                applied_treatments.append(f"• {col}: Kept outliers as-is")
+                                treatment_counts['Kept as-is'] = treatment_counts.get('Kept as-is', 0) + 1
+                    
+                    # Create concise treatment summary
+                    applied_treatments = []
+                    for treatment, count in treatment_counts.items():
+                        applied_treatments.append(f"**{treatment}**: {count} columns")
                     
                     # Update state with processed data
                     state.cleaned_data = df
@@ -712,7 +754,7 @@ class PreprocessingAgentWrapper:
                         
                         # Import missing values functions
                         from preprocessing_agent_impl import (
-                            analyze_missing_values_single_batch,
+                            analyze_missing_values_with_confidence,
                             get_llm_from_state,
                             SequentialState
                         )
@@ -738,8 +780,8 @@ class PreprocessingAgentWrapper:
                             )
                             
                             # Run missing values analysis
-                            print("🔍 Running missing values analysis...")
-                            missing_results = analyze_missing_values_single_batch(sequential_state, data_to_analyze)
+                            print("🔍 Running confidence-based missing values analysis...")
+                            missing_results = analyze_missing_values_with_confidence(sequential_state)
                             
                             # Send results to Slack
                             slack_manager = getattr(state, '_slack_manager', None)
@@ -749,7 +791,54 @@ class PreprocessingAgentWrapper:
                             
                             if slack_manager and state.chat_session:
                                 # Build missing values details and LLM recommendations
-                                if isinstance(missing_results, dict) and 'missing_columns' in missing_results:
+                                if isinstance(missing_results, dict) and 'missing_values_columns' in missing_results:
+                                    # New confidence-based format
+                                    missing_columns = missing_results['missing_values_columns']
+                                    llm_recommendations = missing_results.get('llm_recommendations', {})
+                                    
+                                    if missing_columns and llm_recommendations:
+                                        # Group columns by strategy for concise display
+                                        strategy_counts = {}
+                                        for col, rec in llm_recommendations.items():
+                                            strategy = rec.get('strategy', 'unknown')
+                                            strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
+                                        
+                                        # Build concise strategy summary
+                                        strategy_summary = []
+                                        for strategy, count in strategy_counts.items():
+                                            if strategy == 'drop_column':
+                                                strategy_summary.append(f"**Drop columns**: {count} columns")
+                                            elif strategy == 'drop_missing':
+                                                strategy_summary.append(f"**Drop missing rows**: {count} columns")
+                                            else:
+                                                strategy_summary.append(f"**{strategy.title()} imputation**: {count} columns")
+                                        
+                                        strategy_text = "\n".join(strategy_summary)
+                                        
+                                        # Confidence stats removed from display per user request
+                                        
+                                        message = f"""🔍 **Missing Values Analysis Complete!**
+
+**📊 Missing Values Found:** {len(missing_columns)} columns
+
+**🔧 Recommended Strategies:**
+{strategy_text}
+
+**🔄 Ready for Next Step:**
+• `continue` - Apply missing values treatments and move to encoding
+• `skip missing` - Move directly to encoding phase
+• `summary` - Show current preprocessing status"""
+                                    else:
+                                        message = f"""🔍 **Missing Values Analysis Complete!**
+
+**📊 No missing values found** - Dataset is complete!
+
+**🔄 Ready for Next Step:**
+• `continue` - Move to encoding phase
+• `summary` - Show current preprocessing status"""
+                                
+                                elif isinstance(missing_results, dict) and 'missing_columns' in missing_results:
+                                    # Old format
                                     missing_columns = missing_results['missing_columns']
                                     llm_recommendations = missing_results.get('llm_recommendations', {})
                                     
@@ -784,10 +873,10 @@ class PreprocessingAgentWrapper:
 • `skip missing` - Move directly to encoding phase
 • `summary` - Show current preprocessing status"""
                                 else:
+                                    # Fallback - avoid showing raw JSON
                                     message = f"""🔍 **Missing Values Analysis Complete!**
 
-**📊 Analysis Results:**
-{missing_results}
+**📊 Analysis completed successfully**
 
 **🔄 Ready for Next Step:**
 • `continue` - Apply missing values treatments and move to encoding
@@ -941,7 +1030,7 @@ class PreprocessingAgentWrapper:
                         
                         # Import encoding functions
                         from preprocessing_agent_impl import (
-                            analyze_encoding_single_batch,
+                            analyze_encoding_with_confidence,
                             get_llm_from_state,
                             SequentialState
                         )
@@ -966,9 +1055,9 @@ class PreprocessingAgentWrapper:
                                 model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
                             )
                             
-                            # Run encoding analysis
-                            print("🔍 Running encoding analysis...")
-                            encoding_results = analyze_encoding_single_batch(sequential_state, data_to_analyze)
+                            # Run encoding analysis with confidence-based approach
+                            print("🔍 Running confidence-based encoding analysis...")
+                            encoding_results = analyze_encoding_with_confidence(sequential_state)
                             
                             print(f"🔍 DEBUG: encoding_results type: {type(encoding_results)}")
                             print(f"🔍 DEBUG: encoding_results content: {encoding_results}")
@@ -980,8 +1069,59 @@ class PreprocessingAgentWrapper:
                                 slack_manager = global_slack_manager
                             
                             if slack_manager and state.chat_session:
-                                # Build encoding details and LLM recommendations
-                                if isinstance(encoding_results, dict) and 'categorical_columns' in encoding_results:
+                                # Handle new confidence-based format
+                                if isinstance(encoding_results, dict) and 'encoding_columns' in encoding_results and 'llm_recommendations' in encoding_results:
+                                    # New confidence-based format
+                                    encoding_columns = encoding_results['encoding_columns']
+                                    llm_recommendations = encoding_results['llm_recommendations']
+                                    
+                                    if encoding_columns and llm_recommendations:
+                                        # Group columns by encoding strategy for concise display
+                                        strategy_counts = {}
+                                        for col, rec in llm_recommendations.items():
+                                            strategy = rec.get('strategy', 'unknown')
+                                            strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
+                                        
+                                        # Build concise strategy summary
+                                        strategy_summary = []
+                                        for strategy, count in strategy_counts.items():
+                                            if strategy == 'label_encoding':
+                                                strategy_summary.append(f"**Label encoding**: {count} columns")
+                                            elif strategy == 'onehot_encoding':
+                                                strategy_summary.append(f"**One-hot encoding**: {count} columns")
+                                            elif strategy == 'target_encoding':
+                                                strategy_summary.append(f"**Target encoding**: {count} columns")
+                                            elif strategy == 'binary_encoding':
+                                                strategy_summary.append(f"**Binary encoding**: {count} columns")
+                                            else:
+                                                strategy_summary.append(f"**{strategy.replace('_', ' ').title()}**: {count} columns")
+                                        
+                                        strategy_text = "\n".join(strategy_summary)
+                                        
+                                        # Confidence stats removed from display per user request
+                                        
+                                        message = f"""🔍 **Encoding Analysis Complete!**
+
+**📊 Categorical Columns Found:** {len(encoding_columns)} columns
+
+**🔧 Recommended Strategies:**
+{strategy_text}
+
+**🔄 Ready for Next Step:**
+• `continue` - Apply encoding treatments and move to transformations
+• `skip encoding` - Move directly to transformations phase
+• `summary` - Show current preprocessing status"""
+                                    else:
+                                        message = f"""🔍 **Encoding Analysis Complete!**
+
+**📊 No categorical columns found** - All columns are numeric!
+
+**🔄 Ready for Next Step:**
+• `continue` - Move to transformations phase
+• `summary` - Show current preprocessing status"""
+                                
+                                elif isinstance(encoding_results, dict) and 'categorical_columns' in encoding_results:
+                                    # Old format fallback
                                     categorical_columns = encoding_results['categorical_columns']
                                     llm_recommendations = encoding_results.get('llm_recommendations', {})
                                     
@@ -1012,10 +1152,7 @@ class PreprocessingAgentWrapper:
                                     # Build concise encoding summary
                                     encoding_summary = []
                                     for encoding_type, cols in encoding_groups.items():
-                                        cols_str = ', '.join(cols[:5])  # Show first 5 columns
-                                        if len(cols) > 5:
-                                            cols_str += f" (+{len(cols)-5} more)"
-                                        encoding_summary.append(f"**{encoding_type} encoding:** {cols_str}")
+                                        encoding_summary.append(f"**{encoding_type} encoding**: {len(cols)} columns")
                                     
                                     encoding_text = "\n".join(encoding_summary)
                                     
@@ -1031,10 +1168,10 @@ class PreprocessingAgentWrapper:
 • `skip encoding` - Move directly to transformations phase
 • `summary` - Show current preprocessing status"""
                                 else:
+                                    # Fallback - avoid showing raw JSON
                                     message = f"""🔍 **Encoding Analysis Complete!**
 
-**📊 Analysis Results:**
-{encoding_results}
+**📊 Analysis completed successfully**
 
 **🔄 Ready for Next Step:**
 • `continue` - Apply encoding treatments and move to transformations
@@ -1166,7 +1303,7 @@ class PreprocessingAgentWrapper:
                         
                         # Import transformations functions
                         from preprocessing_agent_impl import (
-                            analyze_transformations_single_batch,
+                            analyze_transformations_with_confidence,
                             get_llm_from_state,
                             SequentialState
                         )
@@ -1191,9 +1328,9 @@ class PreprocessingAgentWrapper:
                                 model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
                             )
                             
-                            # Run transformations analysis
-                            print("🔍 Running transformations analysis...")
-                            transformation_results = analyze_transformations_single_batch(sequential_state, data_to_analyze)
+                            # Run transformations analysis with confidence-based approach
+                            print("🔍 Running confidence-based transformations analysis...")
+                            transformation_results = analyze_transformations_with_confidence(sequential_state)
                             
                             print(f"🔍 DEBUG: transformation_results type: {type(transformation_results)}")
                             print(f"🔍 DEBUG: transformation_results content: {transformation_results}")
@@ -1205,8 +1342,65 @@ class PreprocessingAgentWrapper:
                                 slack_manager = global_slack_manager
                             
                             if slack_manager and state.chat_session:
-                                # Build transformations details and LLM recommendations
-                                if isinstance(transformation_results, dict) and 'transformation_columns' in transformation_results:
+                                # Handle new confidence-based format
+                                if isinstance(transformation_results, dict) and 'transformations_columns' in transformation_results and 'llm_recommendations' in transformation_results:
+                                    # New confidence-based format
+                                    transformations_columns = transformation_results['transformations_columns']
+                                    llm_recommendations = transformation_results['llm_recommendations']
+                                    
+                                    if transformations_columns and llm_recommendations:
+                                        # Group columns by transformation strategy for concise display
+                                        strategy_counts = {}
+                                        for col, rec in llm_recommendations.items():
+                                            strategy = rec.get('strategy', 'none')
+                                            strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
+                                        
+                                        # Build concise strategy summary
+                                        strategy_summary = []
+                                        for strategy, count in strategy_counts.items():
+                                            if strategy == 'none':
+                                                strategy_summary.append(f"**No transformation needed**: {count} columns")
+                                            elif strategy == 'log':
+                                                strategy_summary.append(f"**Log transformation**: {count} columns")
+                                            elif strategy == 'log1p':
+                                                strategy_summary.append(f"**Log1p transformation**: {count} columns")
+                                            elif strategy == 'sqrt':
+                                                strategy_summary.append(f"**Square root transformation**: {count} columns")
+                                            elif strategy == 'box_cox':
+                                                strategy_summary.append(f"**Box-Cox transformation**: {count} columns")
+                                            elif strategy == 'yeo_johnson':
+                                                strategy_summary.append(f"**Yeo-Johnson transformation**: {count} columns")
+                                            elif strategy == 'quantile':
+                                                strategy_summary.append(f"**Quantile transformation**: {count} columns")
+                                            else:
+                                                strategy_summary.append(f"**{strategy.replace('_', ' ').title()} transformation**: {count} columns")
+                                        
+                                        strategy_text = "\n".join(strategy_summary)
+                                        
+                                        # Confidence stats removed from display per user request
+                                        
+                                        message = f"""🔍 **Transformations Analysis Complete!**
+
+**📊 Numerical Columns Analyzed:** {len(transformations_columns)} columns
+
+**🔧 Recommended Strategies:**
+{strategy_text}
+
+**🔄 Ready for Next Step:**
+• `continue` - Apply transformations and complete preprocessing
+• `skip transformations` - Complete preprocessing without transformations
+• `summary` - Show current preprocessing status"""
+                                    else:
+                                        message = f"""🔍 **Transformations Analysis Complete!**
+
+**📊 No transformations needed** - All columns are well-distributed!
+
+**🔄 Ready for Next Step:**
+• `continue` - Complete preprocessing
+• `summary` - Show current preprocessing status"""
+                                
+                                elif isinstance(transformation_results, dict) and 'transformation_columns' in transformation_results:
+                                    # Old format fallback
                                     numerical_columns = transformation_results['transformation_columns']
                                     llm_recommendations = transformation_results.get('llm_recommendations', {})
                                     
@@ -1242,14 +1436,7 @@ class PreprocessingAgentWrapper:
                                     # Build concise transformation summary
                                     transformation_summary = []
                                     for transformation_type, cols in transformation_groups.items():
-                                        cols_str = ', '.join(cols[:5])  # Show first 5 columns
-                                        if len(cols) > 5:
-                                            cols_str += f" (+{len(cols)-5} more)"
-                                        # For the friendly label, avoid appending the word 'transformation' for 'No transformation needed'
-                                        if transformation_type == 'No transformation needed':
-                                            transformation_summary.append(f"**{transformation_type}:** {cols_str}")
-                                        else:
-                                            transformation_summary.append(f"**{transformation_type}:** {cols_str}")
+                                        transformation_summary.append(f"**{transformation_type}**: {len(cols)} columns")
                                     
                                     transformation_text = "\n".join(transformation_summary)
                                     
@@ -1265,10 +1452,10 @@ class PreprocessingAgentWrapper:
 • `skip transformations` - Complete preprocessing without transformations
 • `summary` - Show current preprocessing status"""
                                 else:
+                                    # Fallback - avoid showing raw JSON
                                     message = f"""🔍 **Transformations Analysis Complete!**
 
-**📊 Analysis Results:**
-{transformation_results}
+**📊 Analysis completed successfully**
 
 **🔄 Ready for Next Step:**
 • `continue` - Apply transformations and complete preprocessing
