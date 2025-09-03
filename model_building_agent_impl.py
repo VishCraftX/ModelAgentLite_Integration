@@ -2150,7 +2150,13 @@ def generate_model_code(prompt: str, user_id: str) -> tuple[str, str]:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
-            ]
+            ],
+            options={
+                "num_predict": -1,    # No limit on response length (unlimited)
+                "temperature": 0.1,   # Low temperature for consistent code generation
+                "top_p": 0.9,         # Nucleus sampling
+                "stop": []            # No early stopping
+            }
         )
         
         reply = response["message"]["content"]
