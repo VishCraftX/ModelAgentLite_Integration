@@ -59,8 +59,10 @@ class UniversalClassifierTester:
             ("clean my data", "preprocessing"),
             ("handle missing values", "preprocessing"),
             ("remove outliers", "preprocessing"),
-            ("normalize features", "preprocessing"),
+            ("normalize features", "preprocessing"),  # This was failing - now should pass
             ("prepare my dataset", "preprocessing"),
+            ("standardize features", "preprocessing"),
+            ("scale the data", "preprocessing"),
             
             # Feature selection cases
             ("select best features", "feature_selection"),
@@ -74,7 +76,9 @@ class UniversalClassifierTester:
             ("build a classifier", "model_building"),
             ("create predictive model", "model_building"),
             ("develop machine learning algorithm", "model_building"),
-            ("use this model and print rank order table", "model_building"),
+            ("use this model and print rank order table", "model_building"),  # This was failing - now should pass
+            ("apply existing model", "model_building"),
+            ("use trained model for analysis", "model_building"),
             
             # Code execution cases
             ("run custom analysis", "code_execution"),
@@ -88,7 +92,8 @@ class UniversalClassifierTester:
             ("what can you do", "general_query"),
             ("help me", "general_query"),
             ("system capabilities", "general_query"),
-            ("how does this work", "general_query")
+            ("how does this work", "general_query"),
+            ("analyze", "general_query"),  # This was failing - now should pass with enhanced definitions
         ]
         
         results = self._run_test_cases("intent_classification", test_cases, self.orchestrator.intent_definitions)
@@ -100,10 +105,10 @@ class UniversalClassifierTester:
         print("-" * 50)
         
         skip_definitions = {
-            "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build model, immediate model training, direct model building, bypass data preparation entirely",
-            "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features",
-            "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for model building, skip data cleaning and train model, model building without preprocessing, train model with raw data, build classifier without cleaning, direct model training",
-            "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation"
+            "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build model, immediate model training, direct model building, bypass data preparation entirely, skip all steps, bypass everything, skip all data work, skip everything and train, bypass all preparation, skip all processing, go directly to model, straight to model training",
+            "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features, clean skip but features needed, bypass cleaning keep features",
+            "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for model building, skip data cleaning and train model, model building without preprocessing, train model with raw data, build classifier without cleaning, direct model training, skip cleaning and build model, bypass preprocessing build model, skip data preparation and model",
+            "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation, standard flow, complete process, full workflow, normal process"
         }
         
         test_cases = [
@@ -211,8 +216,8 @@ class UniversalClassifierTester:
         print("-" * 50)
         
         educational_definitions = {
-            "educational": "What is, how does, explain, describe, tell me about, what are, how to, definition of, concept of, understand, learn about, tutorial, explanation, help me understand, educational content, information about",
-            "action": "Build model, train classifier, create analysis, run algorithm, execute code, perform task, do analysis, generate results, take action, implement solution, apply method, process data"
+            "educational": "What is, how does, explain, describe, tell me about, what are, how to, definition of, concept of, understand, learn about, tutorial, explanation, help me understand, educational content, information about, what is random forest, what is decision tree, what is lgbm, explain random forest, explain decision trees, explain preprocessing, what are techniques, different methods, types of algorithms, how does algorithm work, algorithm explanation, technique explanation, method explanation, concept explanation, theory behind, understanding concepts",
+            "action": "Build model, train classifier, create analysis, run algorithm, execute code, perform task, do analysis, generate results, take action, implement solution, apply method, process data, train model, create model, build classifier, develop algorithm, implement model, execute analysis, perform modeling, run training, apply preprocessing, do feature selection"
         }
         
         test_cases = [

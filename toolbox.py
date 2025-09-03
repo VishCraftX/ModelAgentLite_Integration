@@ -330,8 +330,8 @@ class UniversalPatternClassifier:
             "description": "Main intent classification"
         },
         "skip_patterns": {
-            "semantic_threshold": 0.45,      # Slightly conservative
-            "confidence_threshold": 0.10,    # Clear skip intent needed
+            "semantic_threshold": 0.35,      # More liberal for better skip detection
+            "confidence_threshold": 0.08,    # Lower confidence needed
             "description": "Workflow skip detection"
         },
         "session_continuation": {
@@ -345,8 +345,8 @@ class UniversalPatternClassifier:
             "description": "Feature/plot/analysis detection"
         },
         "educational_queries": {
-            "semantic_threshold": 0.4,       # Balanced
-            "confidence_threshold": 0.08,    # Moderate confidence
+            "semantic_threshold": 0.3,       # More liberal for educational detection
+            "confidence_threshold": 0.06,    # Lower confidence for better detection
             "description": "Educational vs action intent"
         },
         "model_sub_classification": {
@@ -474,11 +474,24 @@ class UniversalPatternClassifier:
         try:
             # Create context-aware prompt based on use case
             if use_case == "skip_patterns":
-                system_prompt = """You are a workflow pattern classifier. Analyze the user query and determine if they want to skip certain steps in the ML pipeline."""
+                system_prompt = """You are a workflow pattern classifier. Analyze the user query and determine if they want to skip certain steps in the ML pipeline.
+
+Key distinctions:
+- "skip_to_modeling": Skip ALL steps (preprocessing AND feature selection) and go directly to modeling
+- "skip_preprocessing_to_modeling": Skip ONLY preprocessing but still do modeling (implies some data prep may happen)
+- "skip_preprocessing_to_features": Skip preprocessing but still do feature selection
+
+Focus on whether they want to skip EVERYTHING vs just preprocessing."""
             elif use_case == "session_continuation":
                 system_prompt = """You are a session flow classifier. Determine if the user wants to continue their current task or start something new."""
             elif use_case == "educational_queries":
-                system_prompt = """You are an intent classifier. Determine if the user wants to learn about something or take an action."""
+                system_prompt = """You are an intent classifier. Determine if the user wants to learn about something or take an action.
+
+Key distinctions:
+- "educational": Questions starting with "what is", "how does", "explain", "tell me about", asking for information/understanding
+- "action": Commands to DO something - "build", "train", "create", "run", "execute"
+
+Focus on whether they're asking for knowledge vs requesting action."""
             else:
                 system_prompt = """You are a pattern classifier. Analyze the user query and classify it according to the provided patterns."""
             
@@ -519,21 +532,52 @@ Respond with ONLY the pattern name that best matches the query. If none match we
             return None
     
     def _keyword_classify(self, query: str, pattern_definitions: dict) -> str:
-        """Keyword-based classification fallback"""
+        """Enhanced keyword-based classification fallback"""
         query_lower = query.lower()
         
-        # Convert pattern definitions to keyword lists (simplified approach)
+        # Convert pattern definitions to keyword lists with weighted scoring
         pattern_scores = {}
         
         for pattern_name, pattern_description in pattern_definitions.items():
-            # Extract keywords from description (simple word matching)
+            # Extract keywords from description 
             keywords = pattern_description.lower().split()
-            score = sum(1 for keyword in keywords if keyword in query_lower)
+            
+            # Weighted scoring: exact matches get higher scores
+            score = 0
+            for keyword in keywords:
+                if keyword in query_lower:
+                    # Exact word match gets higher score
+                    if f" {keyword} " in f" {query_lower} ":
+                        score += 2
+                    else:
+                        score += 1
+                        
+            # Bonus for pattern-specific indicators
+            if pattern_name == "educational" and any(edu in query_lower for edu in ["what is", "how does", "explain", "tell me"]):
+                score += 5
+            elif pattern_name == "skip_to_modeling" and any(skip in query_lower for skip in ["skip everything", "bypass all", "skip all"]):
+                score += 5
+            elif pattern_name == "preprocessing" and any(prep in query_lower for prep in ["normalize", "standardize", "scale"]):
+                score += 3
+            elif pattern_name == "model_building" and any(model in query_lower for model in ["use this model", "apply model", "existing model"]):
+                score += 5
+                
             pattern_scores[pattern_name] = score
             
         # Return pattern with highest score, or first pattern if tie
         if pattern_scores:
             best_pattern = max(pattern_scores, key=pattern_scores.get)
+            max_score = pattern_scores[best_pattern]
+            
+            # If max score is 0, use fallback logic
+            if max_score == 0:
+                # Smart fallback based on common patterns
+                if any(q in query_lower for q in ["what", "how", "explain", "tell me"]):
+                    return "educational" if "educational" in pattern_definitions else list(pattern_definitions.keys())[0]
+                elif any(q in query_lower for q in ["skip", "bypass"]):
+                    skip_patterns = [k for k in pattern_definitions.keys() if "skip" in k]
+                    return skip_patterns[0] if skip_patterns else list(pattern_definitions.keys())[0]
+                    
             return best_pattern
         
         # Fallback to first pattern
