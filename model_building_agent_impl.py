@@ -417,6 +417,10 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
     print(f"🔍 ExecutionAgent called with verbose={verbose}, max_retries={max_retries}")
     print(f"🔍 Tiered LLM error fixing is ENABLED")
     
+    # Send progress update
+    if progress_callback:
+        progress_callback("Setting up execution environment...", "Code Execution")
+    
     # Initialize environment with data and current model if it exists
     env = {
         "pd": pd, 
@@ -540,6 +544,13 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
     
     # Execute code with retries
     for attempts in range(1, max_retries + 1):
+        # Send progress update for execution attempt
+        if progress_callback:
+            if attempts == 1:
+                progress_callback("Executing your code...", "Code Execution")
+            else:
+                progress_callback(f"Retrying code execution (attempt {attempts})...", "Code Execution")
+        
         try:
             if verbose:
                 print(f"🔄 Execution attempt {attempts}/{max_retries}")
@@ -586,6 +597,10 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                 exec(code, env)
                 print("🔍 exec() completed successfully!")
             
+            # Send progress update for successful execution
+            if progress_callback:
+                progress_callback("Code executed successfully! Processing results...", "Processing Results")
+            
             # Get result
             if 'result' not in env:
                 result = "Code executed successfully but no 'result' variable was set"
@@ -630,6 +645,10 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             # Single line execution success
             result_info = f"Dict: {len(result)} keys" if isinstance(result, dict) else f"Type: {type(result).__name__}"
             print(f"✅ EXEC SUCCESS [{user_id}] {result_info}")
+            
+            # Send final progress update
+            if progress_callback:
+                progress_callback("Analysis completed successfully!", "Completed")
             
             return result
             
@@ -1278,9 +1297,12 @@ def model_building_agent(state: AgentState) -> AgentState:
     """
     print(f"🏗️ MODEL BUILDING AGENT - Processing: {state['routing_decision']}")
     
-    # Send progress update based on routing decision
+    # Get progress callback from state
     progress_callback = state.get("progress_callback")
     routing_decision = state.get("routing_decision", "")
+    
+    if progress_callback:
+        progress_callback("Starting model building process...", "Model Building")
     
     if progress_callback:
         if routing_decision == "build_new_model":
@@ -1577,6 +1599,8 @@ else:
 
         try:
             print("🤔 Generating code for general analysis...")
+            if progress_callback:
+                progress_callback("Generating analysis code using AI...", "Code Generation")
             reply, code = generate_model_code(code_prompt, user_id)
             
             if not code.strip():
@@ -1708,6 +1732,8 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
     # Generate code using LLM
     try:
         print("🤔 Generating code...")
+        if progress_callback:
+            progress_callback("Generating model building code using AI...", "Code Generation")
         reply, code = generate_model_code(modified_prompt, user_id)
         
         if not code.strip():
@@ -2285,54 +2311,54 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             is_classification = any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score', 'roc_auc'])
             is_regression = any(key in result for key in ['r2_score', 'mean_squared_error', 'mean_absolute_error'])
             
-            # Format header with model name
-            response_parts = [f"✅ **{model_emoji} {model_type} Model Training Completed Successfully!**\n"]
+            # Format header with model name (clean style like original)
+            response_parts = [f"✅ {model_emoji} {model_type} Model Training Completed Successfully!"]
             
             if is_classification:
-                response_parts.append(f"📊 **Classification Performance:**")
+                response_parts.append(f"📊 Classification Performance:")
             elif is_regression:
-                response_parts.append(f"📊 **Regression Performance:**")
+                response_parts.append(f"📊 Regression Performance:")
             else:
-                response_parts.append(f"📊 **{model_emoji} {model_type} Model Performance:**")
+                response_parts.append(f"📊 {model_emoji} {model_type} Model Performance:")
             
-            # Add classification metrics
+            # Add classification metrics (clean format)
             if 'accuracy' in result:
-                response_parts.append(f"• **Accuracy:** {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
+                response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
             if 'precision' in result:
-                response_parts.append(f"• **Precision:** {result['precision']:.4f}")
+                response_parts.append(f"• Precision: {result['precision']:.4f}")
             if 'recall' in result:
-                response_parts.append(f"• **Recall:** {result['recall']:.4f}")
+                response_parts.append(f"• Recall: {result['recall']:.4f}")
             if 'f1_score' in result:
-                response_parts.append(f"• **F1 Score:** {result['f1_score']:.4f}")
+                response_parts.append(f"• F1 Score: {result['f1_score']:.4f}")
             if 'roc_auc' in result:
-                response_parts.append(f"• **ROC AUC:** {result['roc_auc']:.4f}")
+                response_parts.append(f"• ROC AUC: {result['roc_auc']:.4f}")
             if 'specificity' in result:
-                response_parts.append(f"• **Specificity:** {result['specificity']:.4f}")
+                response_parts.append(f"• Specificity: {result['specificity']:.4f}")
             
-            # Add regression metrics
+            # Add regression metrics (clean format)
             if 'r2_score' in result:
-                response_parts.append(f"• **R² Score:** {result['r2_score']:.4f} ({result['r2_score']*100:.2f}% variance explained)")
+                response_parts.append(f"• R² Score: {result['r2_score']:.4f} ({result['r2_score']*100:.2f}% variance explained)")
             if 'mean_absolute_error' in result:
-                response_parts.append(f"• **Mean Absolute Error (MAE):** {result['mean_absolute_error']:.4f}")
+                response_parts.append(f"• Mean Absolute Error (MAE): {result['mean_absolute_error']:.4f}")
             if 'mean_squared_error' in result:
-                response_parts.append(f"• **Mean Squared Error (MSE):** {result['mean_squared_error']:.4f}")
+                response_parts.append(f"• Mean Squared Error (MSE): {result['mean_squared_error']:.4f}")
             if 'root_mean_squared_error' in result:
-                response_parts.append(f"• **Root Mean Squared Error (RMSE):** {result['root_mean_squared_error']:.4f}")
+                response_parts.append(f"• Root Mean Squared Error (RMSE): {result['root_mean_squared_error']:.4f}")
             elif 'mean_squared_error' in result:
                 # Calculate RMSE if not provided
                 import math
                 rmse = math.sqrt(result['mean_squared_error'])
-                response_parts.append(f"• **Root Mean Squared Error (RMSE):** {rmse:.4f}")
+                response_parts.append(f"• Root Mean Squared Error (RMSE): {rmse:.4f}")
             if 'mean_absolute_percentage_error' in result:
-                response_parts.append(f"• **Mean Absolute Percentage Error (MAPE):** {result['mean_absolute_percentage_error']:.4f}%")
+                response_parts.append(f"• Mean Absolute Percentage Error (MAPE): {result['mean_absolute_percentage_error']:.4f}%")
             
-            # Add confusion matrix if available
+            # Add confusion matrix if available (clean format)
             if 'confusion_matrix' in result:
                 cm = result['confusion_matrix']
                 if isinstance(cm, list) and len(cm) == 2 and len(cm[0]) == 2:
                     tn, fp = cm[0]
                     fn, tp = cm[1]
-                    response_parts.append(f"\n📋 **Confusion Matrix:**")
+                    response_parts.append(f"\n📋 Confusion Matrix:")
                     response_parts.append(f"```")
                     response_parts.append(f"         Predicted")
                     response_parts.append(f"Actual   0     1")
@@ -2340,19 +2366,19 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     response_parts.append(f"   1   {fn:4}  {tp:4}")
                     response_parts.append(f"```")
             
-            # Add model save information
+            # Add model save information (clean format)
             if 'model_path' in result and result['model_path']:
-                response_parts.append(f"\n💾 **Model saved:** `{result['model_path'].split('/')[-1]}`")
+                response_parts.append(f"\n💾 Model saved: {result['model_path'].split('/')[-1]}")
             
             response_parts.append(f"\n🎯 You can now use this model for predictions, visualizations, or further analysis!")
             
             return "\n".join(response_parts)
         
         elif routing_decision == "use_existing_model":
-            return "✅ **Existing Model Operation Completed!**\n\n🎯 Your existing model has been used successfully for the requested operation."
+            return "✅ Existing Model Operation Completed!\n\n🎯 Your existing model has been used successfully for the requested operation."
         
         elif routing_decision == "execute_code":
-            return "✅ **Code Execution Completed!**\n\n📊 Your custom analysis has been executed successfully. Check the results above."
+            return "✅ Code Execution Completed!\n\n📊 Your custom analysis has been executed successfully. Check the results above."
         
         else:
             # Generic success for other cases
