@@ -80,9 +80,13 @@ class SlackManager:
     
     def register_session(self, session_id: str, channel: str, thread_ts: str = None):
         """Register a new session with channel and thread information"""
+        print(f"🔍 DEBUG SlackManager.register_session:")
+        print(f"  Before: session_channels = {self.session_channels}")
         self.session_channels[session_id] = channel
         if thread_ts:
             self.session_threads[session_id] = thread_ts
+        print(f"  After: session_channels = {self.session_channels}")
+        print(f"  Registered session {session_id} with channel {channel}")
     
     def send_message(self, session_id: str, text: str, channel: str = None, thread_ts: str = None):
         """Send message to specific session"""
@@ -142,6 +146,7 @@ class SlackManager:
         """Send formatted success message"""
         success_text = f"✅ {message}"
         self.send_message(session_id, success_text)
+    
     
     def upload_file(self, session_id: str, file_path: str, title: str = None, comment: str = None):
         """Upload file to Slack thread"""

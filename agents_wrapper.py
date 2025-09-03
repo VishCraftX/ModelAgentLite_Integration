@@ -167,6 +167,12 @@ class PreprocessingAgentWrapper:
                 "phase": phase
             }
             
+            # Set appropriate response for the pipeline
+            if phase == "need_target":
+                state.last_response = "🎯 Please specify your target column to begin preprocessing."
+            else:
+                state.last_response = "🧹 Interactive preprocessing session started. Please follow the menu options sent to Slack."
+            
             print("✅ Interactive preprocessing session started - user will interact via Slack")
             return state
             
@@ -415,6 +421,27 @@ class ModelBuildingAgentWrapper:
                         "method": "langgraph_interactive",
                         "metrics": result['metrics']
                     }
+                
+                # Handle file uploads (plots, etc.)
+                if 'artifacts' in result and 'files' in result['artifacts']:
+                    try:
+                        from toolbox import slack_manager
+                        for file_info in result['artifacts']['files']:
+                            if isinstance(file_info, dict) and 'path' in file_info:
+                                file_path = file_info['path']
+                                title = file_info.get('title', 'Generated Plot')
+                                if os.path.exists(file_path):
+                                    print(f"📤 Uploading {title}: {file_path}")
+                                    slack_manager.upload_file(
+                                        session_id=state.chat_session,
+                                        file_path=file_path,
+                                        title=title,
+                                        comment=f"Generated {title.lower()}"
+                                    )
+                                else:
+                                    print(f"⚠️ File not found for upload: {file_path}")
+                    except Exception as e:
+                        print(f"❌ Failed to upload files: {e}")
             
             print("✅ Model building completed")
             return state
