@@ -592,9 +592,22 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             return "preprocessing"
         
         elif intent == "feature_selection":
+            # ✅ DIRECT FEATURE SELECTION FIX: Allow feature selection with raw data only for explicit keywords
             if state.cleaned_data is None and state.raw_data is not None:
-                print("[Orchestrator] Need to preprocess data first")
-                return "preprocessing"
+                # Check for explicit direct feature selection keywords
+                query_lower = (state.user_query or "").lower()
+                direct_fs_keywords = [
+                    "direct feature selection", "skip preprocessing", "raw data", "without preprocessing",
+                    "bypass preprocessing", "use raw data", "no preprocessing", "direct fs"
+                ]
+                
+                # Only bypass preprocessing if user explicitly requests it
+                if any(keyword in query_lower for keyword in direct_fs_keywords):
+                    print("[Orchestrator] 🚀 Direct feature selection requested - using raw data")
+                    return "feature_selection"
+                else:
+                    print("[Orchestrator] Need to preprocess data first")
+                    return "preprocessing"
             return "feature_selection"
         
         elif intent == "model_building":

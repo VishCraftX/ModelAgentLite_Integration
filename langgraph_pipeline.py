@@ -214,7 +214,7 @@ class MultiAgentMLPipeline:
                 else:
                     # Send simple hint for other agents
                     next_hint = {
-                        'feature_selection': "Type `proceed` to begin feature selection, or `help` for options.",
+                        'feature_selection': "Feature selection menu and options are displayed above. Choose an analysis to begin.",
                         'model_building': "Type `proceed` to begin model building, or `help` for options.",
                         'general_response': "You can ask a question or say `help` for options.",
                         'code_execution': "Type your code question or `help` for options.",
@@ -233,6 +233,20 @@ class MultiAgentMLPipeline:
     def _feature_selection_node(self, state: PipelineState) -> PipelineState:
         """Feature selection node"""
         print(f"\n🎯 [Feature Selection] Starting feature selection")
+        
+        # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
+        slack_manager = self.slack_manager
+        
+        print(f"🔧 [FS Node] Using slack_manager id: {id(slack_manager)}")
+        print(f"🔧 [FS Node] Slack manager has {len(slack_manager.session_channels)} channels")
+        
+        state.slack_session_info = {
+            'channels': dict(slack_manager.session_channels),
+            'threads': dict(slack_manager.session_threads)
+        }
+        state._slack_manager = slack_manager
+        print(f"💾 [FS Node] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+        
         return feature_selection_agent.run(state)
     
     def _model_building_node(self, state: PipelineState) -> PipelineState:
@@ -645,6 +659,18 @@ class MultiAgentMLPipeline:
         if agent_type == AgentType.PREPROCESSING.value:
             return preprocessing_agent.run(state)
         elif agent_type == AgentType.FEATURE_SELECTION.value:
+            # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
+            slack_manager = self.slack_manager
+            
+            print(f"🔧 [Execute Agent] Using slack_manager id: {id(slack_manager)}")
+            print(f"🔧 [Execute Agent] Slack manager has {len(slack_manager.session_channels)} channels")
+            
+            state.slack_session_info = {
+                'channels': dict(slack_manager.session_channels),
+                'threads': dict(slack_manager.session_threads)
+            }
+            state._slack_manager = slack_manager
+            print(f"💾 [Execute Agent] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
             return feature_selection_agent.run(state)
         elif agent_type == AgentType.MODEL_BUILDING.value:
             return model_building_agent.run(state)
@@ -834,20 +860,19 @@ class MultiAgentMLPipeline:
                 # Phase 3: Semantic continuation classification
                 try:
                     continuation_definitions = {
-                        'preprocessing': {
-                            'continue_preprocessing': "Continue preprocessing workflow, advance preprocessing stage, data cleaning continuation, preprocessing workflow advancement, outlier detection phase, missing values handling, encoding step, transformation phase, target column specification, data preparation, proceed with preprocessing, continue data cleaning, advance preprocessing, next preprocessing step, move forward in preprocessing, skip current step, proceed to next phase, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, fine continue preprocessing, sure proceed now, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, precisely continue workflow, indeed proceed now, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now",
-                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent, go to feature selection, move to model training, exit preprocessing"
-                        },
-                        'feature_selection': {
-                            'continue_feature_selection': "Continue feature selection workflow, advance feature analysis, feature selection continuation, variable selection advancement, correlation analysis phase, SHAP analysis step, information value calculation, VIF analysis phase, CSI analysis step, feature ranking process, proceed with feature selection, continue feature analysis, advance selection, next feature step, move forward in feature selection, do analysis with IV values 0.02, run SHAP with 100 samples, execute correlation analysis, perform VIF calculation, run CSI analysis, calculate information value 0.1, analyze with IV threshold 0.05, run SHAP analysis now, perform correlation with threshold 0.8, execute VIF analysis, do feature importance analysis, skip correlation analysis, skip SHAP step, skip current analysis, bypass feature ranking, cool, proceed, continue, next, go ahead, yes, yeah, ok, fine, good, sure, alright, agreed, approve, sounds good, let's proceed, move forward",
-                            'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing, go to preprocessing, move to model training, exit feature selection"
-                        }
+                    'preprocessing': {
+                        'continue_preprocessing': "Continue preprocessing workflow, advance preprocessing stage, data cleaning continuation, preprocessing workflow advancement, outlier detection phase, missing values handling, encoding step, transformation phase, target column specification, data preparation, proceed with preprocessing, continue data cleaning, advance preprocessing, next preprocessing step, move forward in preprocessing, skip current step, proceed to next phase, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation, datetime column specification, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification, out of time month, date format specification, timestamp format, datetime format, date column format, time column format, date specification, time specification, datetime info, date info, time info, column datetime, column date, column time, date column name, time column name, datetime column name, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, fine continue preprocessing, sure proceed now, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, precisely continue workflow, indeed proceed now, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now",
+                        'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent, go to feature selection, move to model training, exit preprocessing"
+                    },
+                    'feature_selection': {
+                        'continue_feature_selection': "Continue feature selection workflow, advance feature analysis, feature selection continuation, variable selection advancement, correlation analysis phase, SHAP analysis step, information value calculation, VIF analysis phase, CSI analysis step, feature ranking process, proceed with feature selection, continue feature analysis, advance selection, next feature step, move forward in feature selection, do analysis with IV values 0.02, run SHAP with 100 samples, execute correlation analysis, perform VIF calculation, run CSI analysis, calculate information value 0.1, analyze with IV threshold 0.05, run SHAP analysis now, perform correlation with threshold 0.8, execute VIF analysis, do feature importance analysis, skip correlation analysis, skip SHAP step, skip current analysis, bypass feature ranking, datetime column specification for CSI, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification, out of time month specification for CSI analysis, date format specification for CSI, timestamp format for CSI, datetime format for CSI, date column format for CSI, time column format for CSI, date specification for CSI, time specification for CSI, datetime info for CSI, date info for CSI, time info for CSI, column datetime for CSI, column date for CSI, column time for CSI, date column name for CSI, time column name for CSI, datetime column name for CSI, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, revert to cleaned dataset, restore original features, reset feature selection, undo feature analysis, go back to cleaned data, revert feature changes, restore initial features, reset to clean state, undo feature filtering, back to cleaned dataset, restore feature set, reset analysis chain, undo analysis steps, revert all analysis, restore previous features, reset feature pipeline, undo feature removal, go back to start, revert selection, restore backup features, reset everything, undo modifications, revert to original, restore clean state, cool, proceed, continue, next, go ahead, yes, yeah, ok, fine, good, sure, alright, agreed, approve, sounds good, let's proceed, move forward",
+                        'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing, go to preprocessing, move to model training, exit feature selection"
                     }
-                    
+                }
+                
                     if agent_type in continuation_definitions:
                         # Use semantic similarity to classify continuation vs new request
                         from orchestrator import Orchestrator
-                        temp_orchestrator = Orchestrator()
                         
                         # Create temporary intent definitions for this context
                         context_intents = continuation_definitions[agent_type]
@@ -885,9 +910,28 @@ class MultiAgentMLPipeline:
                 
                 elif agent_type == 'feature_selection':
                     fs_continuations = [
-                        'skip analysis', 'run iv', 'run shap', 'select features'
+                        'proceed', 'continue', 'finish', 'complete', 'done', 'finalize',
+                        'run iv', 'do iv', 'iv analysis', 'run csi', 'do csi', 'csi analysis',
+                        'run correlation', 'correlation analysis', 'run shap', 'do shap', 'shap analysis',
+                        'run vif', 'do vif', 'vif analysis', 'run lasso', 'lasso selection', 'run pca', 'pca analysis',
+                        'filter features', 'select features', 'analyze features', 'what is', 'explain',
+                        'how many features', 'current state', 'summary', 'show progress', 
+                        'revert', 'reset', 'restore', 'undo', 'go back', 'back to original', 'back to cleaned',
+                        'revert to cleaned', 'restore original', 'reset features', 'undo analysis', 'restore features',
+                        'reset analysis', 'undo changes', 'go back to start', 'restore backup', 'reset everything',
+                        'undo modifications', 'revert changes', 'restore clean state', 'reset to clean',
+                        'datetime', 'date column', 'time column', 'timestamp', 'oot month', 'out of time',
+                        'date format', 'time format', 'datetime format', 'datetime column', 'date_column',
+                        'transaction_date', 'order_date', 'created_at', 'timestamp_column', 'date_time',
+                        'datetime specification', 'date specification', 'time specification', 'column datetime',
+                        'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is'
                     ]
-                    return any(cmd in query_lower for cmd in fs_continuations)
+                    is_fs_continuation = any(cmd in query_lower for cmd in fs_continuations)
+                    print(f"🔧 DEBUG FS CONTINUATION: Query='{query_lower}', Is continuation={is_fs_continuation}")
+                    if is_fs_continuation:
+                        matched_keywords = [cmd for cmd in fs_continuations if cmd in query_lower]
+                        print(f"🔧 DEBUG FS CONTINUATION: Matched keywords={matched_keywords}")
+                    return is_fs_continuation
                 
                 return False
             
@@ -907,6 +951,10 @@ class MultiAgentMLPipeline:
             print(f"  Semantic continuation: {semantic_continuation}")
             print(f"  Keyword new request: {keyword_new_request}")
             print(f"  Final decision - New request: {is_new_request}, Continuation: {is_continuation}")
+            print(f"🔧 DEBUG SESSION: Has interactive_session: {state.interactive_session is not None}")
+            if state.interactive_session:
+                print(f"🔧 DEBUG SESSION: Interactive session: {state.interactive_session}")
+            print(f"🔧 DEBUG SESSION: Query: '{query}'")
             
             # Handle conflicts: if both detected, prioritize based on context
             if is_new_request and is_continuation:
@@ -923,15 +971,38 @@ class MultiAgentMLPipeline:
                 state.interactive_session = None
             elif is_continuation or is_target_specification:
                 print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
+                print(f"🔧 DEBUG CONTINUATION: Query='{query}', Agent={state.interactive_session['agent_type']}")
+                print(f"🔧 DEBUG CONTINUATION: Session ID={state.chat_session}")
+                print(f"🔧 DEBUG CONTINUATION: Interactive session details={state.interactive_session}")
                 
                 # Route to the appropriate agent to continue the interactive session
                 agent_type = state.interactive_session['agent_type']
                 if agent_type == "preprocessing":
+                    print("🔧 DEBUG: Routing to preprocessing interactive handler")
                     # Handle preprocessing commands directly
                     return self._handle_preprocessing_interaction(state, query)
                 elif agent_type == "feature_selection":
+                    print("🔧 DEBUG: Routing to feature selection interactive handler")
+                    
+                    # ✅ CRITICAL FIX: Ensure slack_manager is passed to state before calling handler
+                    slack_manager = self.slack_manager
+                    print(f"🔧 [Interactive FS] Using slack_manager id: {id(slack_manager)}")
+                    print(f"🔧 [Interactive FS] Slack manager has {len(slack_manager.session_channels)} channels")
+                    
+                    state._slack_manager = slack_manager
+                    state.slack_session_info = {
+                        'channels': dict(slack_manager.session_channels),
+                        'threads': dict(slack_manager.session_threads)
+                    }
+                    print(f"💾 [Interactive FS] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+                    
                     from agents_wrapper import feature_selection_agent
-                    return self._prepare_response(feature_selection_agent.run(state))
+                    # Use interactive command handler for feature selection
+                    result = feature_selection_agent.handle_interactive_command(state, query)
+                    print(f"🔧 DEBUG: Feature selection handler returned: {type(result)}")
+                    return self._prepare_response(result)
+                else:
+                    print(f"❌ DEBUG: Unknown agent type for continuation: {agent_type}")
                 # Add other interactive agents as needed
         
         # Add raw data if provided
@@ -1366,6 +1437,7 @@ What would you like to do?"""
                     "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this, go ahead, go ahead with this, go ahead in preprocessing, go ahead with current, go ahead and proceed, go ahead with analysis, move ahead, carry on, keep going, continue ahead, go forward, advance ahead, proceed ahead, go on, go through, go with this, go with current, let's proceed, let's continue, let's go ahead, let's move forward, start processing, begin processing, start analysis, begin analysis",
                     "skip_action": "skip current phase, skip this step, bypass current analysis, move to next phase, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, pass on this, ignore this step, skip to next, move on, bypass this, no thanks to this step",
                     "override_action": "change strategy, modify approach, use different method, apply different strategy, override current, alter this approach, use median for age, apply mean imputation, change to winsorize, modify outlier treatment, use different encoding, apply one-hot, change transformation, use standard scaling, apply robust scaling",
+                    "datetime_action": "datetime column specification, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification, out of time month specification, date format specification, timestamp format specification, datetime format specification, date column format, time column format, date specification, time specification, datetime info, date info, time info, column datetime, column date, column time, date column name, time column name, datetime column name, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, target column specification, target is, target column is, column target, target column name, target variable, target variable is, dependent variable, dependent variable is, outcome variable, outcome variable is, response variable, response variable is, label column, label column is, label variable, label variable is",
                     "query_action": "what is this strategy, explain current approach, how does this work, why this recommendation, what happens to columns, how does imputation work, explain outlier detection, what is encoding, how does transformation work, what does this mean, help me understand, why median imputation, why are you applying, why applying, why use this, why this strategy, why this treatment, why this method, why winsorization, why winsorize, why are you using, why do you recommend, why is this recommended, explain why, tell me why, why this choice, why this approach, what's the reason, what's the reasoning, why specifically, why particularly, why for this column, why this column, explain the reason, explain reasoning, why did you choose, why was this chosen, how come this strategy, how come you chose, justify this choice, justify this strategy, reasoning behind this, reason for this, rationale behind, rationale for this",
                     "summary_action": "show current strategies, display current plan, what's planned, show me current approach, current strategy summary, what are we doing, show strategies for all columns, current preprocessing plan"
                 }
@@ -1464,6 +1536,22 @@ What would you like to do?"""
             print(f"✅ [Level 4] Matched summary keywords: {matched_summary}")
             return 'summary'
         
+        # Datetime/Target keywords
+        datetime_keywords = [
+            'datetime', 'date column', 'time column', 'timestamp', 'oot month', 'out of time',
+            'date format', 'time format', 'datetime format', 'datetime column', 'date_column',
+            'transaction_date', 'order_date', 'created_at', 'timestamp_column', 'date_time',
+            'datetime specification', 'date specification', 'time specification', 'column datetime',
+            'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is',
+            'target', 'target column', 'target is', 'column target', 'target variable', 'dependent variable',
+            'outcome variable', 'response variable', 'label column', 'label variable',
+            '2023m08', '2024m01', '2023m12', '2022m', '2021m', '2020m', 'month 2023', 'month 2024'
+        ]
+        matched_datetime = [kw for kw in datetime_keywords if kw in query_lower]
+        if matched_datetime:
+            print(f"✅ [Level 4] Matched datetime/target keywords: {matched_datetime}")
+            return 'datetime'
+        
         # Default to proceed for short unrecognized patterns (likely affirmative)
         if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
             print(f"🔄 [Level 4] Short response (≤5 chars), defaulting to 'proceed'")
@@ -1471,6 +1559,155 @@ What would you like to do?"""
         
         print(f"🔄 [Level 4] No keywords matched, defaulting to 'query'")
         return 'query'
+
+    def _classify_feature_selection_action(self, query: str) -> str:
+        """
+        Level 4: Classify specific feature selection actions using BGE with keyword fallbacks.
+        
+        Args:
+            query: User's input query
+            
+        Returns:
+            Classified action: 'proceed', 'analysis', 'query', 'summary', 'revert'
+        """
+        print(f"🔍 [FS Level 4] Processing query: '{query}'")
+        
+        try:
+            # BGE-based classification using orchestrator's embeddings (same as Levels 1-3)
+            from orchestrator import orchestrator
+            if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
+                print(f"🧠 [FS Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
+                
+                action_definitions = {
+                    "proceed_action": "proceed with final summary, finish analysis, complete the analysis, I'm done, finalize, okay looks good, looks good, looks great, that's perfect, this is fine, go ahead, all set, perfect, good to go, proceed with final, finish feature selection, complete feature selection, done with analysis, ready to finish, wrap up analysis, finalize selection, end analysis, conclude analysis, complete this, finish this, done here, all done, looks perfect, this looks good, satisfied with results, happy with selection, ready to proceed, ready to continue, ready to move on",
+                    "analysis_action": "run IV analysis, do CSI analysis, apply correlation filter, run SHAP analysis, do VIF filtering, run LASSO selection, apply PCA, run feature importance, do correlation analysis, filter features, select features, analyze features, run analysis, do analysis, apply analysis, execute analysis, perform analysis, start analysis, begin analysis, conduct analysis, carry out analysis, run standard analysis, do standard analysis, apply standard analysis, run custom analysis, do custom analysis, filter with threshold, analyze with cutoff, run with parameters, do with settings, apply with criteria, execute with threshold, perform with cutoff, IV analysis with threshold, CSI analysis with cutoff, correlation analysis with threshold, SHAP analysis with cutoff, VIF filtering with threshold, LASSO with parameters, PCA with components",
+                    "datetime_action": "datetime column specification for CSI analysis, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification for CSI, out of time month specification, date format specification, timestamp format specification, datetime format specification, date column format, time column format, date specification, time specification, datetime info, date info, time info, column datetime, column date, column time, date column name, time column name, datetime column name, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, CSI datetime column, CSI date column, CSI time column, CSI oot month, CSI out of time month, datetime for CSI, date for CSI, time for CSI",
+                    "query_action": "what can you do, what are your capabilities, explain IV analysis, what is CSI, how does correlation work, what is SHAP, explain VIF, what is LASSO, how does PCA work, what is feature selection, how many features remain, current state, what analyses have been done, current dataset info, show me results, give me scores, display values, show analysis results, what are the scores, how many features, which features, what happened, show me features, display features, tell me about features, explain results, help me understand, what does this mean, why these features, how does this work, what's the process, explain the analysis, describe the method, tell me more, show me more, give me details, provide information, current status, analysis status, feature status, selection status, progress status",
+                    "summary_action": "current summary, show me pipeline summary, what analyses have I done, current state, pipeline status, show current progress, display analysis chain, show me what's done, current pipeline, analysis summary, feature selection summary, what have we accomplished, show progress, display status, current analysis state, show analysis history, display pipeline, show completed analyses, what's been done, analysis progress, selection progress, current results summary, show results summary, pipeline progress, analysis chain summary, completed steps, finished analyses, done analyses",
+                    "revert_action": "revert to original, go back to initial state, start from start, reset to beginning, go back to clean data, restart from cleaned dataset, undo all changes, back to square one, return to initial, reset everything, start over, go back to beginning, undo changes, reverse changes, reset analysis, clear analysis, restart analysis, back to original data, return to original, reset to start, go to initial state, restore original, reset pipeline, clear pipeline, undo pipeline, reverse pipeline, start fresh, begin again, reset selection, clear selection, undo selection"
+                }
+                
+                # Use orchestrator's embedding system (same as main pipeline)
+                query_embedding = orchestrator._get_embedding(query)
+                if query_embedding is not None:
+                    print(f"✅ [FS Level 4] Query embedding generated successfully via orchestrator")
+                    similarities = {}
+                    for intent_name, definition in action_definitions.items():
+                        intent_embedding = orchestrator._get_embedding(definition)
+                        if intent_embedding is not None:
+                            # Use cosine similarity directly (same as orchestrator does)
+                            from sklearn.metrics.pairwise import cosine_similarity
+                            similarity = cosine_similarity(
+                                query_embedding.reshape(1, -1),
+                                intent_embedding.reshape(1, -1)
+                            )[0][0]
+                            similarities[intent_name] = float(similarity)
+                    
+                    if similarities:
+                        # Show all similarity scores for debugging
+                        print(f"🔍 [FS Level 4] BGE similarity scores:")
+                        for intent, score in sorted(similarities.items(), key=lambda x: x[1], reverse=True):
+                            action_name = intent.replace('_action', '')
+                            print(f"   {action_name}: {score:.3f}")
+                        
+                        best_intent = max(similarities.items(), key=lambda x: x[1])
+                        action_intent = best_intent[0].replace('_action', '')  # Remove _action suffix
+                        print(f"🎯 [FS Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
+                        
+                        if best_intent[1] > 0.3:  # Confidence threshold
+                            print(f"✅ [FS Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
+                            return action_intent
+                        else:
+                            print(f"⚠️ [FS Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
+                else:
+                    print(f"❌ [FS Level 4] Failed to generate query embedding via orchestrator")
+            else:
+                print(f"⚠️ [FS Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
+        
+        except Exception as e:
+            print(f"❌ [FS Level 4] BGE classification error: {e}")
+            print(f"🔄 [FS Level 4] Falling back to keyword classification")
+        
+        # Keyword fallback classification
+        print(f"🔑 [FS Level 4] Starting keyword fallback classification...")
+        query_lower = query.lower().strip()
+        print(f"🔍 [FS Level 4] Normalized query: '{query_lower}'")
+        
+        # Summary keywords - check FIRST for specific progress/status queries
+        summary_keywords = [
+            'summary', 'current state', 'pipeline status', 'show progress', 'analysis chain',
+            'what have i done', 'what analyses', 'current progress', 'pipeline summary',
+            'show current', 'display status', 'analysis summary', 'show current progress',
+            'display progress', 'current analysis state', 'show analysis history'
+        ]
+        
+        if any(keyword in query_lower for keyword in summary_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for SUMMARY intent")
+            return "summary"
+        
+        # Query keywords - check after summary for general questions
+        query_keywords = [
+            'what', 'how', 'why', 'explain', 'tell me', 'show me', 'help', '?', 'describe',
+            'what is', 'how does', 'what are', 'can you explain', 'help me understand',
+            'what does', 'how do', 'why do', 'why does', 'what happens', 'how come',
+            'tell me about', 'show me about', 'explain to me', 'describe to me'
+        ]
+        
+        if any(keyword in query_lower for keyword in query_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for QUERY intent")
+            return "query"
+        
+        # Analysis keywords (run/do/apply analysis)
+        analysis_keywords = [
+            'run iv', 'do iv', 'apply iv', 'iv analysis', 'run csi', 'do csi', 'apply csi', 'csi analysis',
+            'run correlation', 'do correlation', 'correlation analysis', 'run shap', 'do shap', 'shap analysis',
+            'run vif', 'do vif', 'vif analysis', 'run lasso', 'do lasso', 'lasso selection',
+            'run pca', 'do pca', 'pca analysis', 'filter features', 'select features', 'analyze features',
+            'run analysis', 'do analysis', 'apply analysis', 'execute analysis', 'perform analysis',
+            'start analysis', 'begin analysis', 'with threshold', 'with cutoff', 'with parameters'
+        ]
+        
+        if any(keyword in query_lower for keyword in analysis_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for ANALYSIS intent")
+            return "analysis"
+        
+        # Proceed keywords (finish/complete)
+        proceed_keywords = [
+            'proceed', 'finish', 'complete', 'done', 'finalize', 'looks good', 'looks great',
+            'perfect', 'good to go', 'all set', 'ready to proceed', 'wrap up', 'conclude'
+        ]
+        
+        if any(keyword in query_lower for keyword in proceed_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for PROCEED intent")
+            return "proceed"
+        
+        # Revert keywords
+        revert_keywords = [
+            'revert', 'reset', 'undo', 'go back', 'start over', 'begin again', 'clear',
+            'restore', 'return to original', 'back to beginning', 'start fresh'
+        ]
+        
+        if any(keyword in query_lower for keyword in revert_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for REVERT intent")
+            return "revert"
+        
+        # Datetime keywords for CSI analysis
+        datetime_keywords = [
+            'datetime', 'date column', 'time column', 'timestamp', 'oot month', 'out of time',
+            'date format', 'time format', 'datetime format', 'datetime column', 'date_column',
+            'transaction_date', 'order_date', 'created_at', 'timestamp_column', 'date_time',
+            'datetime specification', 'date specification', 'time specification', 'column datetime',
+            'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is',
+            '2023m08', '2024m01', '2023m12', '2022m', '2021m', '2020m', 'month 2023', 'month 2024'
+        ]
+        
+        if any(keyword in query_lower for keyword in datetime_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for DATETIME intent")
+            return "datetime"
+        
+        # Default fallback
+        print(f"🤷 [FS Level 4] No specific keyword matches found, defaulting to ANALYSIS")
+        return "analysis"
 
     def _classify_in_phase_intent(self, query: str) -> str:
         """

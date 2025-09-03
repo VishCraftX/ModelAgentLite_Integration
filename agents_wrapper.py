@@ -36,7 +36,8 @@ try:
         AgenticFeatureSelectionBot,
         UserSession,
         DataProcessor,
-        LLMManager
+        LLMManager,
+        MenuGenerator
     )
     FEATURE_SELECTION_AVAILABLE = True
     print("✅ Feature selection agent imported successfully")
@@ -196,6 +197,54 @@ class PreprocessingAgentWrapper:
             # Check current phase and handle accordingly
             current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
             print(f"🔧 DEBUG: Current phase: {current_phase}, Command: {command}")
+            
+            # ✅ COMPLETION PHASE HANDLER - Move to Feature Selection
+            if current_phase == 'completion' and state.preprocessing_state.get('completed', False):
+                print("🎯 Handling completion phase command...")
+                
+                # Check for feature selection intent using BGE (session continuation)
+                if command.startswith('PROCEED: ') or command.lower() in ['yes', 'proceed', 'continue', 'feature_selection', 'next']:
+                    print("🚀 Moving to feature selection phase...")
+                    
+                    # Initialize feature selection with cleaned data
+                    try:
+                        # Set interactive session to feature selection
+                        state.interactive_session = {
+                            "agent_type": "feature_selection",
+                            "session_active": True,
+                            "phase": "ready",
+                            "current_phase": "overview"
+                        }
+                        
+                        # Send confirmation message
+                        slack_manager = getattr(state, '_slack_manager', None)
+                        if not slack_manager:
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
+                        
+                        if slack_manager and state.chat_session:
+                            data_shape = state.cleaned_data.shape if state.cleaned_data is not None else state.raw_data.shape
+                            message = f"""🚀 **Feature Selection Started!**
+
+**✅ Using cleaned data from preprocessing**
+• Dataset: {data_shape[0]:,} rows × {data_shape[1]} columns
+• Target: {state.target_column}
+
+**🔍 Starting feature analysis...**
+Please wait while we analyze your features for selection."""
+                            
+                            slack_manager.send_message(state.chat_session, message)
+                        
+                        return state
+                        
+                    except Exception as e:
+                        print(f"❌ Error initializing feature selection: {e}")
+                        return state
+                
+                elif command.lower() in ['no', 'skip', 'stay', 'summary']:
+                    print("📊 Staying in preprocessing completion...")
+                    # Handle summary or other completion commands
+                    return state
             
             # Handle the command using the preprocessing agent's interactive system
             if command.lower() == 'proceed':
@@ -1286,16 +1335,35 @@ class PreprocessingAgentWrapper:
                             
                             slack_manager.send_message(state.chat_session, message)
                         
-                        # Update state for completion
+                        # ✅ COMPLETE PREPROCESSING - Mark as completed and prompt for feature selection
+                        from datetime import datetime
                         state.preprocessing_state.update({
+                            "completed": True,  # ✅ Mark preprocessing as completed
                             "current_phase": "completion",
                             "status": "preprocessing_complete",
+                            "timestamp": datetime.now().isoformat(),
                             "transformation_treatments_applied": applied_treatments
                         })
                         
                         if state.interactive_session:
                             state.interactive_session["current_phase"] = "completion"
                             state.interactive_session["phase"] = "complete"
+                        
+                        # 🔄 PROMPT FOR FEATURE SELECTION
+                        if slack_manager and state.chat_session:
+                            feature_selection_prompt = f"""🎯 **Ready for Next Phase!**
+
+**✅ Preprocessing Complete!**
+• Data has been cleaned and prepared
+• Final dataset: {df.shape[0]:,} rows × {df.shape[1]} columns
+
+**🚀 Would you like to move to feature selection?**
+• `yes` - Start feature selection with cleaned data
+• `no` - Stay in preprocessing for summary/export
+• `summary` - Show complete preprocessing summary"""
+                            
+                            slack_manager.send_message(state.chat_session, feature_selection_prompt)
+                        
                         return state
                     else:
                         # Start transformations analysis
@@ -2079,15 +2147,30 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 
                 print(f"🔧 DEBUG: Skipping from {current_phase} to {next_phase}")
                 
-                # Update state for next phase
-                state.preprocessing_state.update({
-                    "current_phase": next_phase,
-                    "status": "phase_skipped"
-                })
-                
-                if state.interactive_session:
-                    state.interactive_session["current_phase"] = next_phase
-                    state.interactive_session["phase"] = "ready"
+                # ✅ SPECIAL HANDLING FOR SKIP TO COMPLETION
+                if next_phase == 'completion':
+                    from datetime import datetime
+                    # Mark preprocessing as completed when skipping to completion
+                    state.preprocessing_state.update({
+                        "completed": True,  # ✅ Mark preprocessing as completed
+                        "current_phase": next_phase,
+                        "status": "preprocessing_complete",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+                    if state.interactive_session:
+                        state.interactive_session["current_phase"] = next_phase
+                        state.interactive_session["phase"] = "complete"
+                else:
+                    # Regular phase skip
+                    state.preprocessing_state.update({
+                        "current_phase": next_phase,
+                        "status": "phase_skipped"
+                    })
+                    
+                    if state.interactive_session:
+                        state.interactive_session["current_phase"] = next_phase
+                        state.interactive_session["phase"] = "ready"
                 
                 # Send confirmation message
                 slack_manager = getattr(state, '_slack_manager', None)
@@ -2096,7 +2179,22 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                     slack_manager = global_slack_manager
                 
                 if slack_manager and state.chat_session:
-                    message = f"""⏭️ **Phase Skipped!**
+                    if next_phase == 'completion':
+                        # ✅ COMPLETION MESSAGE WITH FEATURE SELECTION PROMPT
+                        final_data_shape = state.cleaned_data.shape if state.cleaned_data is not None else state.raw_data.shape
+                        message = f"""🎉 **Preprocessing Complete!**
+
+**✅ Skipped transformations - preprocessing finished!**
+• Final dataset: {final_data_shape[0]:,} rows × {final_data_shape[1]} columns
+• Data is ready for machine learning
+
+**🚀 Would you like to move to feature selection?**
+• `yes` - Start feature selection with cleaned data
+• `no` - Stay in preprocessing for summary/export
+• `summary` - Show complete preprocessing summary"""
+                    else:
+                        # Regular skip message
+                        message = f"""⏭️ **Phase Skipped!**
 
 **🔄 Moved from {current_phase} to {next_phase}**
 
@@ -2464,6 +2562,325 @@ class FeatureSelectionAgentWrapper:
             except Exception as e:
                 print(f"❌ Failed to initialize feature selection bot: {e}")
                 self.available = False
+
+    def handle_interactive_command(self, state: PipelineState, command: str) -> PipelineState:
+        """Handle interactive commands for feature selection with 4-level BGE classification"""
+        print(f"🔧 DEBUG FS HANDLER: Called with command='{command}'")
+        print(f"🔧 DEBUG FS HANDLER: Available={self.available}, Bot={self.bot is not None}")
+        print(f"🔧 DEBUG FS HANDLER: State chat_session={state.chat_session}")
+        print(f"🔧 DEBUG FS HANDLER: State interactive_session={state.interactive_session}")
+        
+        if not self.available or not self.bot:
+            print("❌ Feature selection agent not available")
+            return state
+        
+        print(f"🎯 Feature Selection Interactive Command: '{command}'")
+        
+        # Get slack_manager from state or fallback
+        slack_manager = getattr(state, '_slack_manager', None)
+        if not slack_manager:
+            from toolbox import slack_manager as global_slack_manager
+            slack_manager = global_slack_manager
+        print(f"🔧 DEBUG FS HANDLER: Using slack_manager id: {id(slack_manager)}")
+        print(f"🔧 DEBUG FS HANDLER: Slack manager has {len(slack_manager.session_channels)} channels")
+        
+        # Get or create session for this user
+        session_id = state.chat_session
+        if not session_id:
+            print("❌ No chat session ID available")
+            return state
+        
+        try:
+            # Check if session exists in bot
+            print(f"🔧 DEBUG FS HANDLER: Checking if session {session_id} exists in bot")
+            print(f"🔧 DEBUG FS HANDLER: Bot users keys: {list(self.bot.users.keys())}")
+            
+            if session_id not in self.bot.users:
+                print(f"🔧 Session {session_id} not found in bot users")
+                print(f"🔧 DEBUG FS HANDLER: Checking if this is a continuation with existing interactive session")
+                
+                # If we have an active interactive session, we should continue it, not create new
+                if (state.interactive_session and 
+                    state.interactive_session.get('agent_type') == 'feature_selection' and
+                    state.interactive_session.get('session_active', False)):
+                    
+                    print(f"🔧 Found active FS interactive session, recreating bot session from state")
+                    
+                    # Recreate the session from the pipeline state instead of calling run()
+                    if state.cleaned_data is None:
+                        print("❌ No cleaned data available to recreate session")
+                        return state
+                    
+                    # Create session for the working agent from existing state
+                    import tempfile
+                    import os
+                    temp_file = os.path.join(tempfile.gettempdir(), f"cleaned_data_{state.session_id}.csv")
+                    state.cleaned_data.to_csv(temp_file, index=False)
+                    
+                    # Use stored state if available, otherwise defaults
+                    stored_phase = "waiting_input"
+                    stored_features = list(state.cleaned_data.columns)
+                    
+                    if state.feature_selection_state:
+                        stored_phase = state.feature_selection_state.get('phase', stored_phase)
+                        stored_features = state.feature_selection_state.get('current_features', stored_features)
+                        print(f"🔧 Using stored FS state: phase={stored_phase}, features={len(stored_features)}")
+                    
+                    from feature_selection_agent_impl import UserSession, AnalysisStep
+                    from datetime import datetime
+                    import pandas as pd
+                    
+                    # ✅ INTELLIGENT CLEANING: Apply the same smart cleaning logic as load_and_clean_data
+                    print(f"🧠 Applying intelligent cleaning to pipeline data...")
+                    df = state.cleaned_data.copy()
+                    print(f"📊 Pipeline data: {df.shape[0]} rows, {df.shape[1]} columns")
+                    
+                    # Step 1: Remove single value columns
+                    single_value_cols = []
+                    for col in df.columns:
+                        if df[col].nunique() <= 1:
+                            single_value_cols.append(col)
+                    
+                    # Step 2: Smart object column handling - try to convert to numeric first
+                    object_cols = [col for col in df.columns if col not in single_value_cols and df[col].dtype == 'object']
+                    converted_cols = []
+                    failed_conversion_cols = []
+                    
+                    if object_cols:
+                        print(f"🔍 Found {len(object_cols)} object columns, attempting numeric conversion...")
+                        
+                        for col in object_cols:
+                            try:
+                                original_series = df[col].copy()
+                                
+                                # Try direct conversion
+                                converted = pd.to_numeric(original_series, errors='coerce')
+                                
+                                # If that fails, try cleaning string formats
+                                if converted.isna().sum() > len(original_series) * 0.5:
+                                    cleaned_series = original_series.astype(str).str.replace(',', '').str.replace(' ', '').str.strip()
+                                    converted = pd.to_numeric(cleaned_series, errors='coerce')
+                                
+                                # Check conversion success rate
+                                non_null_before = original_series.notna().sum()
+                                non_null_after = converted.notna().sum()
+                                
+                                if non_null_after >= non_null_before * 0.8:  # 80% success rate
+                                    df[col] = converted
+                                    converted_cols.append(col)
+                                    print(f"   ✅ Converted '{col}' to numeric ({non_null_after}/{non_null_before} values)")
+                                else:
+                                    failed_conversion_cols.append(col)
+                                    print(f"   ❌ Failed to convert '{col}' (only {non_null_after}/{non_null_before} values convertible)")
+                                    
+                            except Exception as e:
+                                failed_conversion_cols.append(col)
+                                print(f"   ❌ Error converting '{col}': {str(e)[:50]}")
+                    
+                    # Step 3: Remove remaining non-numeric columns
+                    cols_to_remove = single_value_cols + failed_conversion_cols
+                    if cols_to_remove:
+                        clean_df = df.drop(columns=cols_to_remove)
+                        print(f"📈 Removed {len(cols_to_remove)} columns: {len(single_value_cols)} single-value + {len(failed_conversion_cols)} non-convertible")
+                    else:
+                        clean_df = df.copy()
+                        print(f"📈 No columns needed removal - all data is numeric-ready")
+                    
+                    print(f"✅ Final clean dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
+                    
+                    # Update the temp file with cleaned data
+                    clean_df.to_csv(temp_file, index=False)
+                    
+                    session = UserSession(
+                        file_path=temp_file,
+                        file_name=f"cleaned_data_{state.session_id}.csv",
+                        user_id=session_id,
+                        target_column=state.target_column,
+                        original_df=state.cleaned_data.copy(),  # Keep original for reference
+                        current_df=clean_df.copy(),             # Use cleaned data
+                        current_features=list(clean_df.columns),  # Use cleaned features
+                        phase=stored_phase
+                    )
+                    
+                    # Add intelligent cleaning step to analysis chain
+                    if cols_to_remove or converted_cols:
+                        cleaning_step = AnalysisStep(
+                            type="intelligent_data_cleaning",
+                            parameters={"removed_cols": cols_to_remove},
+                            features_before=df.shape[1],
+                            features_after=clean_df.shape[1],
+                            timestamp=datetime.now().isoformat(),
+                            metadata={
+                                "single_value_cols": single_value_cols,
+                                "converted_to_numeric": converted_cols,
+                                "failed_conversion_cols": failed_conversion_cols,
+                                "conversion_strategy": "smart_numeric_conversion",
+                                "source": "pipeline_integration"
+                            }
+                        )
+                        session.analysis_chain.append(cleaning_step)
+                    
+                    # ✅ CRITICAL FIX: Create the "after_cleaning" snapshot with the cleaned data
+                    session.snapshots["after_cleaning"] = {
+                        "df": clean_df.copy(),
+                        "features": list(clean_df.columns),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    print(f"✅ Created 'after_cleaning' snapshot with {clean_df.shape[1]} numeric columns for revert functionality")
+                    
+                    # Store session in the working bot
+                    self.bot.users[session_id] = session
+                    print(f"🔧 Recreated bot session: phase={session.phase}, features={len(session.current_features)}")
+                else:
+                    print(f"🔧 No active FS interactive session, creating new session")
+                    # Initialize session if it doesn't exist
+                    return self.run(state)
+            
+            # Get existing session
+            session = self.bot.users[session_id]
+            print(f"📊 Existing session found: phase={session.phase}, features={len(session.current_features)}")
+            print(f"🔧 DEBUG FS HANDLER: Session target={session.target_column}, file={session.file_name}")
+            
+            # Create a mock Slack say function that sends to our pipeline (MOVED UP)
+            def mock_say(message, thread_ts=None):
+                print(f"🔧 DEBUG MOCK_SAY: Attempting to send message via slack_manager id: {id(slack_manager)}")
+                print(f"🔧 DEBUG MOCK_SAY: Session channels: {len(slack_manager.session_channels)}")
+                
+                if slack_manager and state.chat_session:
+                    slack_manager.send_message(state.chat_session, message)
+                else:
+                    print(f"[Mock Slack Response]: {message}")
+            
+            print(f"✅ Session loaded with {len(session.current_features)} clean features (cleaned at load time)")
+            
+            # ✅ 4-LEVEL BGE CLASSIFICATION FOR FEATURE SELECTION
+            print(f"🧠 [FS] Starting 4-level BGE intent classification...")
+            print(f"🔧 DEBUG FS BGE: Command to classify='{command}'")
+            
+            # Import pipeline to access the classification method
+            from langgraph_pipeline import MultiAgentMLPipeline
+            pipeline_instance = MultiAgentMLPipeline()
+            action_intent = pipeline_instance._classify_feature_selection_action(command)
+            print(f"🎯 [FS] 4-level BGE classified intent: '{action_intent}'")
+            print(f"🔧 DEBUG FS BGE: Classification result='{action_intent}'")
+            
+            # Handle BGE-classified intents with clear intent signals
+            if action_intent == 'proceed':
+                mapped_command = f'PROCEED: {command}'
+                print(f"🔄 [FS] Mapping 'proceed' → '{mapped_command}' command (BGE intent)")
+            elif action_intent == 'analysis':
+                mapped_command = f'ANALYSIS: {command}'
+                print(f"🔄 [FS] Mapping 'analysis' → '{mapped_command}' command (BGE intent)")
+            elif action_intent == 'query':
+                mapped_command = f'QUERY: {command}'
+                print(f"🔄 [FS] Mapping 'query' → '{mapped_command}' command (BGE intent)")
+            elif action_intent == 'summary':
+                mapped_command = f'SUMMARY: {command}'
+                print(f"🔄 [FS] Mapping 'summary' → '{mapped_command}' command (BGE intent)")
+            elif action_intent == 'revert':
+                mapped_command = f'REVERT: {command}'
+                print(f"🔄 [FS] Mapping 'revert' → '{mapped_command}' command (BGE intent)")
+            elif action_intent == 'datetime':
+                mapped_command = f'DATETIME: {command}'
+                print(f"🔄 [FS] Mapping 'datetime' → '{mapped_command}' command (BGE intent)")
+            else:
+                mapped_command = command  # Fallback
+                print(f"🔄 [FS] Mapping '{action_intent}' → '{command}' command (fallback)")
+            
+            # Handle BGE-classified intents
+            print(f"🔧 DEBUG FS INTENT: Mapped command='{mapped_command}'")
+            
+            if mapped_command.startswith('PROCEED: '):
+                actual_command = mapped_command[9:]  # Remove 'PROCEED: ' prefix
+                print("✅ Processing BGE-classified PROCEED command for feature selection...")
+                print(f"✅ DEBUG: BGE classified proceed: '{actual_command}'")
+                print(f"🔧 DEBUG FS PROCEED: Current session phase={session.phase}")
+                
+                # Proceed is a completion command - generate final summary
+                print(f"🔧 DEBUG FS PROCEED: Generating final summary (completion command)")
+                session.phase = "completed"
+                self.bot.generate_final_summary(session, mock_say)
+                
+            elif mapped_command.startswith('ANALYSIS: '):
+                actual_command = mapped_command[10:]  # Remove 'ANALYSIS: ' prefix
+                print("🔬 Processing BGE-classified ANALYSIS command for feature selection...")
+                print(f"🔬 DEBUG: BGE classified analysis: '{actual_command}'")
+                # Route to analysis handler
+                self.bot.handle_analysis_request(session, actual_command, mock_say)
+                
+            elif mapped_command.startswith('QUERY: '):
+                actual_command = mapped_command[7:]  # Remove 'QUERY: ' prefix
+                print("❓ Processing BGE-classified QUERY command for feature selection...")
+                print(f"❓ DEBUG: BGE classified query: '{actual_command}'")
+                # Route to query handler
+                self.bot.handle_analysis_request(session, actual_command, mock_say)
+                
+            elif mapped_command.startswith('SUMMARY: '):
+                actual_command = mapped_command[9:]  # Remove 'SUMMARY: ' prefix
+                print("📊 Processing BGE-classified SUMMARY command for feature selection...")
+                print(f"📊 DEBUG: BGE classified summary: '{actual_command}'")
+                # Route to summary handler
+                from feature_selection_agent_impl import MenuGenerator
+                MenuGenerator.show_crisp_summary(session, mock_say)
+                
+            elif mapped_command.startswith('REVERT: '):
+                actual_command = mapped_command[8:]  # Remove 'REVERT: ' prefix
+                print("↩️ Processing BGE-classified REVERT command for feature selection...")
+                print(f"↩️ DEBUG: BGE classified revert: '{actual_command}'")
+                # Route to revert handler
+                self.bot.handle_revert(session, mock_say)
+                
+            elif mapped_command.startswith('DATETIME: '):
+                actual_command = mapped_command[10:]  # Remove 'DATETIME: ' prefix
+                print("📅 Processing BGE-classified DATETIME command for feature selection...")
+                print(f"📅 DEBUG: BGE classified datetime: '{actual_command}'")
+                # Route to datetime handler - use the correct method name
+                self.bot.handle_datetime_setup(session, actual_command, mock_say)
+                
+            else:
+                # Fallback to regular processing
+                print(f"🔄 Processing regular command for feature selection: '{command}'")
+                if session.phase == "need_target":
+                    # Handle target selection
+                    self.bot.handle_target_selection(session, command, mock_say)
+                else:
+                    # Handle analysis requests
+                    self.bot.handle_analysis_request(session, command, mock_say)
+            
+            # Sync session state back to pipeline state
+            print(f"🔧 DEBUG FS HANDLER: Syncing session state back to pipeline state")
+            self._sync_session_to_state(session, state)
+            print(f"🔧 DEBUG FS HANDLER: State sync completed")
+            
+        except Exception as e:
+            print(f"❌ Error handling interactive command: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print(f"🔧 DEBUG FS HANDLER: Returning state, interactive_session={state.interactive_session}")
+        return state
+    
+    def _sync_session_to_state(self, session, state: PipelineState):
+        """Sync UserSession back to PipelineState"""
+        try:
+            # Update feature selection state
+            state.feature_selection_state.update({
+                "current_features": session.current_features,
+                "dropped_features": getattr(session, 'dropped_features', []),
+                "analysis_chain": [{"type": step.type, "parameters": step.parameters} for step in session.analysis_chain],
+                "phase": session.phase,
+                "session_active": True,
+                "current_feature_count": len(session.current_features)  # ✅ Add current feature count
+            })
+            
+            # Update selected features if analysis is complete
+            if session.phase == "completed":
+                state.selected_features = session.current_features.copy()
+            
+            print(f"🔄 Synced session state: {len(session.current_features)} features, phase={session.phase}")
+            
+        except Exception as e:
+            print(f"⚠️ Error syncing session state: {e}")
         
     def run(self, state: PipelineState) -> PipelineState:
         """Route to the actual working feature selection agent"""
@@ -2472,25 +2889,138 @@ class FeatureSelectionAgentWrapper:
             return state
             
         try:
+            # ✅ RAW DATA FALLBACK: Use raw_data if no cleaned_data available
             if state.cleaned_data is None:
-                print("❌ No cleaned data available for feature selection")
-                return state
+                if state.raw_data is not None:
+                    print("⚠️  No cleaned data found - using raw data for feature selection")
+                    state.cleaned_data = state.raw_data.copy()
+                    print(f"📊 Using raw data: {state.cleaned_data.shape}")
+                else:
+                    print("❌ No data available for feature selection (no raw_data or cleaned_data)")
+                    
+                    # Send helpful message to user
+                    slack_manager = getattr(state, '_slack_manager', None)
+                    if not slack_manager:
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
+                    
+                    if slack_manager and state.chat_session:
+                        message = """❌ **No Data Available for Feature Selection**
+
+**Please provide data first:**
+• Upload a CSV file to Slack
+• Or run preprocessing first with your data
+
+**Example:**
+• Upload `data.csv` file
+• Or say: "preprocess my data" first"""
+                        slack_manager.send_message(state.chat_session, message)
+                    
+                    return state
                 
+            # ✅ INTELLIGENT CLEANING: Apply smart cleaning at data load time
+            print(f"🧠 Applying intelligent cleaning at data load...")
+            df = state.cleaned_data.copy()
+            original_shape = df.shape
+            print(f"📊 Original pipeline data: {df.shape[0]} rows, {df.shape[1]} columns")
+            
+            # Step 1: Remove single value columns (excluding target)
+            single_value_cols = []
+            for col in df.columns:
+                if col != state.target_column and df[col].nunique() <= 1:
+                    single_value_cols.append(col)
+            
+            # Step 2: Smart object column handling - try to convert to numeric first
+            object_cols = [col for col in df.columns if col != state.target_column and df[col].dtype == 'object']
+            converted_cols = []
+            failed_conversion_cols = []
+            
+            if object_cols:
+                print(f"🔍 Found {len(object_cols)} object columns, attempting numeric conversion...")
+                
+                for col in object_cols:
+                    try:
+                        original_series = df[col].copy()
+                        
+                        # Try direct conversion
+                        converted = pd.to_numeric(original_series, errors='coerce')
+                        
+                        # If that fails, try cleaning string formats
+                        if converted.isna().sum() > len(original_series) * 0.5:
+                            cleaned_series = original_series.astype(str).str.replace(',', '').str.replace(' ', '').str.strip()
+                            converted = pd.to_numeric(cleaned_series, errors='coerce')
+                        
+                        # Check conversion success rate
+                        non_null_before = original_series.notna().sum()
+                        non_null_after = converted.notna().sum()
+                        
+                        if non_null_after >= non_null_before * 0.8:  # 80% success rate
+                            df[col] = converted
+                            converted_cols.append(col)
+                            print(f"   ✅ Converted '{col}' to numeric ({non_null_after}/{non_null_before} values)")
+                        else:
+                            failed_conversion_cols.append(col)
+                            print(f"   ❌ Failed to convert '{col}' (only {non_null_after}/{non_null_before} values convertible)")
+                            
+                    except Exception as e:
+                        failed_conversion_cols.append(col)
+                        print(f"   ❌ Error converting '{col}': {str(e)[:50]}")
+            
+            # Step 3: Remove remaining non-numeric columns (excluding target)
+            cols_to_remove = single_value_cols + failed_conversion_cols
+            if cols_to_remove:
+                clean_df = df.drop(columns=cols_to_remove)
+                print(f"📈 Removed {len(cols_to_remove)} columns: {len(single_value_cols)} single-value + {len(failed_conversion_cols)} non-convertible")
+            else:
+                clean_df = df.copy()
+                print(f"📈 No columns needed removal - all data is numeric-ready")
+            
+            print(f"✅ Final clean dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
+            
             # Save cleaned data to temp file
             temp_file = os.path.join(tempfile.gettempdir(), f"cleaned_data_{state.session_id}.csv")
-            state.cleaned_data.to_csv(temp_file, index=False)
+            clean_df.to_csv(temp_file, index=False)
             
-            # Create session for the working agent
+            # Create session for the working agent with clean data
             session = UserSession(
                 file_path=temp_file,
                 file_name=f"cleaned_data_{state.session_id}.csv",
                 user_id=state.chat_session,
                 target_column=state.target_column,
-                original_df=state.cleaned_data.copy(),
-                current_df=state.cleaned_data.copy(),
-                current_features=list(state.cleaned_data.columns),
-                phase="waiting_input"  # Ready for analysis
+                original_df=state.cleaned_data.copy(),  # Keep original for reference
+                current_df=clean_df.copy(),             # Use cleaned data
+                current_features=list(clean_df.columns),  # Use cleaned features
+                # ✅ PHASE FIX: Set correct phase based on target column availability
+                phase="waiting_input" if state.target_column else "need_target"
             )
+            
+            # Add intelligent cleaning step to analysis chain
+            if cols_to_remove or converted_cols:
+                from feature_selection_agent_impl import AnalysisStep
+                from datetime import datetime
+                cleaning_step = AnalysisStep(
+                    type="intelligent_data_cleaning_at_load",
+                    parameters={"removed_cols": cols_to_remove},
+                    features_before=original_shape[1],
+                    features_after=clean_df.shape[1],
+                    timestamp=datetime.now().isoformat(),
+                    metadata={
+                        "single_value_cols": single_value_cols,
+                        "converted_to_numeric": converted_cols,
+                        "failed_conversion_cols": failed_conversion_cols,
+                        "conversion_strategy": "smart_numeric_conversion_at_load",
+                        "source": "data_load_time"
+                    }
+                )
+                session.analysis_chain.append(cleaning_step)
+            
+            # ✅ Create the "after_cleaning" snapshot for revert functionality
+            session.snapshots["after_cleaning"] = {
+                "df": clean_df.copy(),
+                "features": list(clean_df.columns),
+                "timestamp": datetime.now().isoformat()
+            }
+            print(f"✅ Created 'after_cleaning' snapshot with {clean_df.shape[1]} clean features for revert functionality")
             
             print(f"🚀 Launching actual feature selection agent")
             print(f"📊 Data shape: {state.cleaned_data.shape}")
@@ -2498,6 +3028,175 @@ class FeatureSelectionAgentWrapper:
             
             # Store session in the working bot
             self.bot.users[state.chat_session] = session
+            
+            # ✅ DISPLAY INITIAL MENU: Show menu to guide user
+            try:
+                
+                if state.target_column:
+                    print(f"🔧 DEBUG TARGET: Target column found: {state.target_column}")
+                    
+                    # Target column known, show main menu
+                    menu = MenuGenerator.generate_main_menu(session)
+                    session.last_menu = menu
+                    print(f"🔧 DEBUG MENU: Generated menu with {len(menu)} characters")
+                    
+                    # Send menu via slack - FIX SESSION CHANNEL ISSUE
+                    slack_manager = getattr(state, '_slack_manager', None)
+                    if not slack_manager:
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
+                    
+                    # ✅ CRITICAL FIX: Store slack_manager in state for consistency
+                    state._slack_manager = slack_manager
+                    
+                    # ✅ STORE SESSION INFO: Backup current session info in state
+                    state.slack_session_info = {
+                        'channels': dict(slack_manager.session_channels),
+                        'threads': dict(slack_manager.session_threads)
+                    }
+                    print(f"💾 BACKUP: Stored session info in state: {state.slack_session_info}")
+                    
+                    # ✅ EMERGENCY FIX: If slack_manager is empty, try to recover from state
+                    if not slack_manager.session_channels and hasattr(state, 'slack_session_info'):
+                        print(f"🚨 EMERGENCY RECOVERY: Restoring session info from state")
+                        slack_manager.session_channels.update(state.slack_session_info.get('channels', {}))
+                        slack_manager.session_threads.update(state.slack_session_info.get('threads', {}))
+                        print(f"🚨 RECOVERED: {slack_manager.session_channels}")
+                    
+                    # ✅ FINAL FALLBACK: If still empty, create the session entry directly
+                    if state.chat_session not in slack_manager.session_channels:
+                        print(f"🚨 FINAL FALLBACK: Creating session entry directly")
+                        # Try to infer channel from any available session with same user
+                        user_id = state.chat_session.split('_')[0] if '_' in state.chat_session else state.chat_session
+                        fallback_channel = None
+                        
+                        # Check stored session info first
+                        if hasattr(state, 'slack_session_info'):
+                            for session_id, channel in state.slack_session_info.get('channels', {}).items():
+                                if user_id in session_id:
+                                    fallback_channel = channel
+                                    break
+                        
+                        # If still no channel, check current slack_manager
+                        if not fallback_channel:
+                            for session_id, channel in slack_manager.session_channels.items():
+                                if user_id in session_id:
+                                    fallback_channel = channel
+                                    break
+                        
+                        # If we found a channel, use it
+                        if fallback_channel:
+                            print(f"🚨 FALLBACK: Using channel {fallback_channel} for session {state.chat_session}")
+                            slack_manager.session_channels[state.chat_session] = fallback_channel
+                        else:
+                            print(f"❌ FALLBACK FAILED: No channel found for user {user_id}")
+                    
+                    print(f"🔧 DEBUG SLACK: slack_manager available: {slack_manager is not None}")
+                    print(f"🔧 DEBUG SLACK: state.chat_session: {state.chat_session}")
+                    
+                    if slack_manager and state.chat_session:
+                        print(f"🔧 DEBUG SLACK: Current session channels: {list(slack_manager.session_channels.keys())}")
+                        print(f"🔧 DEBUG SLACK: Current session threads: {list(slack_manager.session_threads.keys())}")
+                        
+                        # Check if session is already registered
+                        if state.chat_session in slack_manager.session_channels:
+                            channel = slack_manager.session_channels[state.chat_session]
+                            thread = slack_manager.session_threads.get(state.chat_session)
+                            print(f"🔧 DEBUG SLACK: Session already registered - Channel: {channel}, Thread: {thread}")
+                        else:
+                            print(f"⚠️ DEBUG SLACK: Session {state.chat_session} not in channels")
+                            print(f"🔧 DEBUG SLACK: Available channels: {slack_manager.session_channels}")
+                            
+                            # Try to find the channel from other active sessions
+                            found_channel = False
+                            for session_id, channel in slack_manager.session_channels.items():
+                                user_part = state.chat_session.split('_')[0] if '_' in state.chat_session else state.chat_session
+                                if session_id.startswith(user_part):
+                                    print(f"🔧 DEBUG SLACK: Found matching channel {channel} from session {session_id}")
+                                    slack_manager.session_channels[state.chat_session] = channel
+                                    if session_id in slack_manager.session_threads:
+                                        slack_manager.session_threads[state.chat_session] = slack_manager.session_threads[session_id]
+                                        print(f"🔧 DEBUG SLACK: Copied thread {slack_manager.session_threads[session_id]}")
+                                    found_channel = True
+                                    break
+                            
+                            if not found_channel:
+                                print(f"❌ DEBUG SLACK: No matching channel found for {state.chat_session}")
+                                
+                                # ✅ LAST RESORT: Try to find ANY active channel for this user
+                                user_id = state.chat_session.split('_')[0] if '_' in state.chat_session else state.chat_session
+                                for session_id, channel in list(slack_manager.session_channels.items()):
+                                    if user_id in session_id:
+                                        print(f"🔧 DEBUG SLACK: LAST RESORT - Found channel {channel} from any session with user {user_id}")
+                                        slack_manager.session_channels[state.chat_session] = channel
+                                        # Don't copy thread - let it create new thread
+                                        found_channel = True
+                                        break
+                                
+                                if not found_channel:
+                                    print(f"❌ DEBUG SLACK: No channel found at all - menu will not be sent to Slack!")
+                                    print(f"❌ DEBUG SLACK: Available channels: {list(slack_manager.session_channels.items())}")
+                                    print(f"❌ DEBUG SLACK: User ID extracted: {user_id}")
+                        
+                        print(f"🔧 DEBUG MENU SEND: About to send menu...")
+                        slack_manager.send_message(state.chat_session, menu)
+                        print(f"✅ Feature selection menu sent to Slack")
+                        
+                        # Add a concise action prompt (no duplicate analysis options)
+                        action_prompt = """🎯 **Ready to start feature selection!**
+
+**Or ask questions:**
+• `how many features do we have?`
+• `what analysis should I run first?`
+• `explain IV analysis`
+
+**When finished with all analyses:**
+• `proceed` - Complete feature selection and show final results
+
+💬 **What would you like to do first?**"""
+                        
+                        print(f"🔧 DEBUG PROMPT SEND: About to send action prompt...")
+                        slack_manager.send_message(state.chat_session, action_prompt)
+                        print(f"✅ Action prompt sent to guide user interaction")
+                    else:
+                        print(f"❌ DEBUG SLACK: Cannot send menu - slack_manager: {slack_manager is not None}, chat_session: {state.chat_session}")
+                else:
+                    print(f"🔧 DEBUG TARGET: No target column found, will show target selection prompt")
+                    # Need target column, send target selection prompt
+                    slack_manager = getattr(state, '_slack_manager', None)
+                    if not slack_manager:
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
+                        
+                    if slack_manager and state.chat_session:
+                        print(f"🔧 DEBUG: Sending target prompt to session {state.chat_session}")
+                        
+                        # Ensure session is registered properly for target prompt too
+                        if state.chat_session not in slack_manager.session_channels:
+                            print(f"⚠️ Session {state.chat_session} not in channels, attempting to find channel...")
+                            for session_id, channel in slack_manager.session_channels.items():
+                                if session_id.startswith(state.chat_session.split('_')[0]):
+                                    print(f"🔧 Found channel {channel} from similar session {session_id}")
+                                    slack_manager.session_channels[state.chat_session] = channel
+                                    if session_id in slack_manager.session_threads:
+                                        slack_manager.session_threads[state.chat_session] = slack_manager.session_threads[session_id]
+                                    break
+                        available_cols = ', '.join(session.current_features[:5])
+                        target_prompt = f"""🎯 **Target Column Selection**
+
+Please specify your target column for feature selection analysis.
+
+📋 **Available columns**: {available_cols}{'...' if len(session.current_features) > 5 else ''}
+
+💬 **How to specify**: 
+• Type: `target column_name`
+• Or just: `column_name`
+
+Example: `target is_fraud` or `is_fraud`"""
+                        slack_manager.send_message(state.chat_session, target_prompt)
+                        
+            except Exception as e:
+                print(f"⚠️ Could not display initial menu: {e}")
             
             # The working agent will handle all Slack interactions from here
             # It will show menus, process user input, run analyses, etc.
@@ -2507,16 +3206,28 @@ class FeatureSelectionAgentWrapper:
                 "completed": False,
                 "timestamp": datetime.now().isoformat(),
                 "method": "agentic_interactive",
-                "session_active": True
+                "session_active": True,
+                "bot_session_exists": True,
+                "session_id": state.chat_session,
+                "target_column": state.target_column,
+                "current_features": list(state.cleaned_data.columns),
+                "phase": session.phase
+            }
+            
+            # ✅ SET INTERACTIVE SESSION - This was missing!
+            state.interactive_session = {
+                "agent_type": "feature_selection",
+                "session_active": True,
+                "phase": session.phase,
+                "current_phase": "menu"
             }
             
             print("✅ Feature selection session started - bot will handle Slack interactions")
+            print(f"💾 Set interactive_session for session persistence: {state.interactive_session}")
             
-            # Clean up temp file
-            try:
-                os.remove(temp_file)
-            except:
-                pass
+            # ✅ TEMP FILE FIX: Don't delete immediately, let the bot use it
+            # The temp file will be cleaned up when the session ends or by OS temp cleanup
+            print(f"📁 Temp file preserved for feature selection: {temp_file}")
                 
             return state
             

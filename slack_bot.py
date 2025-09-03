@@ -303,7 +303,10 @@ Just upload your data and start asking questions in natural language! 🎉"""
             # Send additional information if available
             if result.get("data_summary"):
                 summary = result["data_summary"]
-                if any(summary.values()):  # If any data is available
+                # ✅ SKIP PIPELINE SUMMARY FOR FEATURE SELECTION (user has built-in waterfall summary)
+                is_feature_selection = summary.get("current_agent") == "feature_selection" or summary.get("feature_selection_active", False)
+                
+                if any(summary.values()) and not is_feature_selection:  # Skip for feature selection
                     summary_text = self._format_pipeline_summary(summary)
                     say(summary_text, thread_ts=thread_ts)
             
@@ -406,17 +409,49 @@ Just upload your data and start asking questions in natural language! 🎉"""
         """Format pipeline summary for Slack"""
         parts = ["📋 *Pipeline Summary:*"]
         
-        if summary.get("has_raw_data"):
-            shape = summary.get("raw_data_shape", (0, 0))
-            parts.append(f"• Raw data: ✅ {shape[0]:,} rows × {shape[1]} columns")
+        # Check if we're in feature selection mode
+        is_feature_selection = summary.get("current_agent") == "feature_selection" or summary.get("feature_selection_active", False)
         
-        if summary.get("has_cleaned_data"):
-            shape = summary.get("cleaned_data_shape", (0, 0))
-            parts.append(f"• Cleaned data: ✅ {shape[0]:,} rows × {shape[1]} columns")
-        
-        if summary.get("has_selected_features"):
-            count = summary.get("selected_features_count", 0)
-            parts.append(f"• Selected features: ✅ {count} features")
+        if is_feature_selection:
+            # Feature selection specific summary
+            if summary.get("has_cleaned_data"):
+                total_features = summary.get("cleaned_data_shape", (0, 0))[1]
+                
+                # ✅ Show cleaning information if available
+                if summary.get("actual_feature_count") and summary.get("original_feature_count"):
+                    actual_count = summary["actual_feature_count"]
+                    original_count = summary["original_feature_count"]
+                    if actual_count != original_count:
+                        removed_count = original_count - actual_count
+                        parts.append(f"• Clean features: 📊 {actual_count} (removed {removed_count} object/single-value)")
+                    else:
+                        parts.append(f"• Total features: 📊 {total_features}")
+                else:
+                    parts.append(f"• Total features: 📊 {total_features}")
+            
+            if summary.get("has_selected_features"):
+                selected_count = summary.get("selected_features_count", 0)
+                total_features = summary.get("cleaned_data_shape", (0, 0))[1]
+                if total_features > 0:
+                    reduction_pct = ((total_features - selected_count) / total_features * 100)
+                    parts.append(f"• Selected features: ✅ {selected_count} (-{total_features - selected_count}, {reduction_pct:.1f}% reduction)")
+                else:
+                    parts.append(f"• Selected features: ✅ {selected_count}")
+            else:
+                parts.append("• Selected features: ⏳ Analysis in progress")
+        else:
+            # Regular pipeline summary
+            if summary.get("has_raw_data"):
+                shape = summary.get("raw_data_shape", (0, 0))
+                parts.append(f"• Raw data: ✅ {shape[0]:,} rows × {shape[1]} columns")
+            
+            if summary.get("has_cleaned_data"):
+                shape = summary.get("cleaned_data_shape", (0, 0))
+                parts.append(f"• Cleaned data: ✅ {shape[0]:,} rows × {shape[1]} columns")
+            
+            if summary.get("has_selected_features"):
+                count = summary.get("selected_features_count", 0)
+                parts.append(f"• Selected features: ✅ {count} features")
         
         if summary.get("has_trained_model"):
             parts.append("• Trained model: ✅ Available")
