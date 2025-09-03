@@ -19,6 +19,8 @@ import tempfile
 import time
 import warnings
 from dotenv import load_dotenv
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 # Load environment variables
 load_dotenv()
@@ -2973,6 +2975,813 @@ Return JSON: {{"column_name": {{"strategy": "strategy_name", "reasoning": "brief
     except Exception as e:
         print(f"Error in encoding chunk analysis: {e}")
         return {}
+
+class ConfidenceBasedPreprocessor:
+    """
+    2-Step confidence-based preprocessing with timeout fallback:
+    STEP 1: Rule-based pre-decisions for all columns
+    STEP 2: LLM chunk processing for uncertain columns only (with 2-minute timeout)
+    """
+    
+    def __init__(self, confidence_threshold: float = 0.8, timeout_minutes: int = 2):
+        self.confidence_threshold = confidence_threshold
+        self.timeout_seconds = timeout_minutes * 60
+        self.stats = {
+            'rule_based_decisions': 0,
+            'llm_decisions': 0,
+            'timeout_fallbacks': 0,
+            'total_columns': 0
+        }
+    
+    def analyze_phase_with_confidence(self, state: SequentialState, phase: str) -> Dict[str, Any]:
+        """
+        Main entry point for confidence-based analysis with timeout fallback
+        """
+        start_time = time.time()
+        print(f"🎯 Starting 2-step confidence analysis for {phase} (timeout: {self.timeout_seconds/60:.0f}min)...")
+        
+        # STEP 1: Rule-based pre-analysis (always fast)
+        rule_results = self._analyze_columns_with_rules(state, phase)
+        high_conf_decisions = rule_results['high_confidence']
+        uncertain_columns = rule_results['uncertain_columns']
+        
+        # STEP 1 LOGS
+        total_cols = len(high_conf_decisions) + len(uncertain_columns)
+        high_conf_pct = (len(high_conf_decisions) / total_cols * 100) if total_cols > 0 else 0
+        
+        print(f"📊 STEP 1 PRE-DECISION RESULTS:")
+        print(f"   ✅ High Confidence: {len(high_conf_decisions)}/{total_cols} columns ({high_conf_pct:.1f}%)")
+        print(f"   ❓ Uncertain: {len(uncertain_columns)}/{total_cols} columns ({100-high_conf_pct:.1f}%)")
+        
+        # STEP 2: LLM processing with timeout monitoring
+        llm_decisions = {}
+        if uncertain_columns:
+            elapsed = time.time() - start_time
+            remaining_time = self.timeout_seconds - elapsed
+            
+            if remaining_time > 30:  # At least 30 seconds left
+                chunk_size = 12  # Optimized for uncertain cases
+                num_chunks = (len(uncertain_columns) + chunk_size - 1) // chunk_size
+                
+                print(f"🤖 STEP 2 LLM PROCESSING:")
+                print(f"   📦 Chunking {len(uncertain_columns)} uncertain columns into {num_chunks} chunks")
+                print(f"   ⏰ Timeout in {remaining_time:.0f}s")
+                
+                llm_decisions = self._process_with_timeout(state, phase, uncertain_columns, remaining_time)
+            else:
+                print(f"⚠️ Insufficient time remaining ({remaining_time:.0f}s), using fallback strategies...")
+                llm_decisions = self._apply_fallback_strategies(uncertain_columns, phase)
+                self.stats['timeout_fallbacks'] += len(uncertain_columns)
+        
+        # Update stats
+        self.stats['rule_based_decisions'] += len(high_conf_decisions)
+        self.stats['llm_decisions'] += len(llm_decisions)
+        self.stats['total_columns'] += total_cols
+        
+        # Performance summary
+        total_time = time.time() - start_time
+        print(f"⚡ PERFORMANCE SUMMARY:")
+        print(f"   🚀 Rule-based efficiency: {high_conf_pct:.1f}%")
+        print(f"   ⏱️  Total processing time: {total_time:.1f}s")
+        print(f"   🎯 LLM calls saved: ~{(total_cols//10) - (len(uncertain_columns)//12 if uncertain_columns else 0)}")
+        
+        # Combine results
+        all_recommendations = {**high_conf_decisions, **llm_decisions}
+        
+        return {
+            f'{phase}_columns': list(all_recommendations.keys()),
+            'llm_recommendations': all_recommendations,
+            'confidence_stats': self.stats.copy(),
+            'processing_time': total_time
+        }
+    
+    def _analyze_columns_with_rules(self, state: SequentialState, phase: str) -> Dict[str, Any]:
+        """STEP 1: Apply rule-based confidence scoring to all columns"""
+        
+        if phase == 'outliers':
+            return self._analyze_outliers_rules(state)
+        elif phase == 'missing_values':
+            return self._analyze_missing_values_rules(state)
+        elif phase == 'encoding':
+            return self._analyze_encoding_rules(state)
+        elif phase == 'transformations':
+            return self._analyze_transformations_rules(state)
+        else:
+            raise ValueError(f"Unknown phase: {phase}")
+
+    def _analyze_outliers_rules(self, state: SequentialState) -> Dict[str, Any]:
+        """Rule-based confidence analysis for outliers"""
+        df = state.df
+        target = df[state.target_column] if state.target_column in df.columns else None
+        
+        high_confidence = {}
+        uncertain_columns = []
+        
+        print("🔍 STEP 1: Analyzing outliers with confidence rules...")
+        
+        for col in df.columns:
+            if col == state.target_column or not pd.api.types.is_numeric_dtype(df[col]):
+                continue
+            
+            # Pre-analysis: Check if column actually has outliers
+            analysis = analyze_column_comprehensive(df[col], target, col)
+            outlier_pct = analysis.get('outliers_iqr_percentage', 0)
+            
+            # ✅ CRITICAL FIX: Only process columns WITH outliers
+            if outlier_pct > 0:
+                print(f"🎯 {col}: {outlier_pct:.1f}% outliers detected - analyzing...")
+                confidence_result = self._outlier_confidence_rules(analysis, col)
+                
+                if confidence_result['confidence'] >= self.confidence_threshold:
+                    high_confidence[col] = {
+                        'treatment': confidence_result['strategy'],
+                        'reasoning': confidence_result['reasoning'],
+                        'confidence': confidence_result['confidence'],
+                        'rule_based': True
+                    }
+                    print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                else:
+                    uncertain_columns.append({
+                        'column': col,
+                        'analysis': analysis,
+                        'patterns': detect_patterns_llm_ready(df[col], col),
+                        'rule_confidence': confidence_result['confidence']
+                    })
+                    print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+            else:
+                print(f"⚪ {col}: No outliers ({outlier_pct:.1f}%) - skipping")
+        
+        return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
+    
+    def _outlier_confidence_rules(self, analysis: Dict, column: str) -> Dict[str, Any]:
+        """High-confidence rules for outlier treatment"""
+        outlier_pct = analysis.get('outliers_iqr_percentage', 0)
+        extreme_pct = analysis.get('extreme_outliers_percentage', 0)
+        
+        # Rule 1: No outliers → Keep (Very High Confidence)
+        if outlier_pct == 0:
+            return {
+                'strategy': 'keep',
+                'confidence': 0.95,
+                'reasoning': 'No outliers detected using IQR method'
+            }
+        
+        # Rule 2: Extreme outliers (>5% extreme) → Winsorize (High Confidence)
+        if extreme_pct > 5.0:
+            return {
+                'strategy': 'winsorize',
+                'confidence': 0.90,
+                'reasoning': f'High extreme outlier rate ({extreme_pct:.1f}%) indicates data quality issues'
+            }
+        
+        # Rule 3: High outliers → Winsorize (High Confidence)
+        if outlier_pct > 15.0:
+            return {
+                'strategy': 'winsorize',
+                'confidence': 0.90,
+                'reasoning': f'Very high outlier rate ({outlier_pct:.1f}%) suggests measurement errors'
+            }
+        
+        # Rule 4: Very low outliers (<2%) → Keep (High Confidence)
+        if outlier_pct < 2.0:
+            return {
+                'strategy': 'keep',
+                'confidence': 0.85,
+                'reasoning': f'Low outlier rate ({outlier_pct:.1f}%) - likely legitimate values'
+            }
+        
+        # Rule 5: Financial/ID-like columns → Keep (Medium-High Confidence)
+        if any(keyword in column.lower() for keyword in ['id', 'account', 'balance', 'amount', 'price', 'income', 'revenue', 'cost']):
+            return {
+                'strategy': 'keep',
+                'confidence': 0.80,
+                'reasoning': f'Financial/ID column - outliers likely legitimate extreme values'
+            }
+        
+        # Gray area - needs LLM
+        return {
+            'strategy': 'uncertain',
+            'confidence': 0.5,
+            'reasoning': f'Moderate outlier rate ({outlier_pct:.1f}%) requires contextual analysis'
+        }
+    
+    def _analyze_missing_values_rules(self, state: SequentialState) -> Dict[str, Any]:
+        """Rule-based confidence analysis for missing values"""
+        current_df = get_current_data_state(state)
+        target = current_df[state.target_column] if state.target_column in current_df.columns else None
+        
+        high_confidence = {}
+        uncertain_columns = []
+        
+        print("🔍 STEP 1: Analyzing missing values with confidence rules...")
+        
+        for col in current_df.columns:
+            if current_df[col].isnull().sum() > 0:  # Process columns WITH missing values
+                analysis = analyze_column_comprehensive(current_df[col], target, col)
+                confidence_result = self._missing_values_confidence_rules(analysis, col)
+                
+                if confidence_result['confidence'] >= self.confidence_threshold:
+                    high_confidence[col] = {
+                        'strategy': confidence_result['strategy'],
+                        'reasoning': confidence_result['reasoning'],
+                        'confidence': confidence_result['confidence'],
+                        'rule_based': True
+                    }
+                    print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                else:
+                    uncertain_columns.append({
+                        'column': col,
+                        'analysis': analysis,
+                        'patterns': detect_patterns_llm_ready(current_df[col], col),
+                        'rule_confidence': confidence_result['confidence']
+                    })
+                    print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+            else:
+                print(f"⚪ {col}: No missing values - skipping")
+        
+        return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
+    
+    def _missing_values_confidence_rules(self, analysis: Dict, column: str) -> Dict[str, Any]:
+        """High-confidence rules for missing value treatment"""
+        missing_pct = analysis.get('missing_percentage', 0)
+        unique_ratio = analysis.get('unique_ratio', 0)
+        is_numeric = analysis.get('dtype', '').startswith(('int', 'float'))
+        skewness = abs(analysis.get('skewness', 0)) if is_numeric else 0
+        
+        # Rule 1: Very high missing rate (>80%) → Drop column (High Confidence)
+        if missing_pct > 80.0:
+            return {
+                'strategy': 'drop_column',
+                'confidence': 0.95,
+                'reasoning': f'Very high missing rate ({missing_pct:.1f}%) - insufficient data'
+            }
+        
+        # Rule 2: ID columns → Drop missing (Very High Confidence)
+        if any(keyword in column.lower() for keyword in ['id', 'key', 'uuid', 'guid']):
+            return {
+                'strategy': 'drop_missing',
+                'confidence': 0.95,
+                'reasoning': 'ID column - missing values should be excluded'
+            }
+        
+        # Rule 3: Low missing rate (<5%) + Numeric + Low skewness → Mean (High Confidence)
+        if missing_pct < 5.0 and is_numeric and skewness < 1.0:
+            return {
+                'strategy': 'mean',
+                'confidence': 0.85,
+                'reasoning': f'Low missing rate ({missing_pct:.1f}%) with normal distribution'
+            }
+        
+        # Rule 4: Low missing rate (<5%) + Numeric + High skewness → Median (High Confidence)
+        if missing_pct < 5.0 and is_numeric and skewness >= 1.0:
+            return {
+                'strategy': 'median',
+                'confidence': 0.85,
+                'reasoning': f'Low missing rate ({missing_pct:.1f}%) with skewed distribution'
+            }
+        
+        # Rule 5: Categorical + Low missing rate (<10%) + Low cardinality → Mode (High Confidence)
+        if not is_numeric and missing_pct < 10.0 and unique_ratio < 0.1:
+            return {
+                'strategy': 'mode',
+                'confidence': 0.80,
+                'reasoning': f'Low missing rate ({missing_pct:.1f}%) categorical with low cardinality'
+            }
+        
+        # Rule 6: High cardinality categorical (likely IDs) → Drop missing (High Confidence)
+        if not is_numeric and unique_ratio > 0.8:
+            return {
+                'strategy': 'drop_missing',
+                'confidence': 0.85,
+                'reasoning': f'High cardinality ({unique_ratio:.2f}) - likely unique identifiers'
+            }
+        
+        # Gray area - needs LLM
+        return {
+            'strategy': 'uncertain',
+            'confidence': 0.5,
+            'reasoning': f'Missing rate ({missing_pct:.1f}%) requires contextual analysis'
+        }
+
+    def _process_with_timeout(self, state: SequentialState, phase: str, uncertain_columns: List[Dict], timeout_seconds: float) -> Dict[str, Any]:
+        """Process uncertain columns with timeout fallback"""
+        
+        def llm_processing_task():
+            """The actual LLM processing task"""
+            return self._process_uncertain_columns_with_llm(state, phase, uncertain_columns)
+        
+        try:
+            # Use ThreadPoolExecutor with timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(llm_processing_task)
+                
+                print(f"🤖 Starting LLM processing with {timeout_seconds:.0f}s timeout...")
+                result = future.result(timeout=timeout_seconds)
+                
+                print(f"✅ LLM processing completed within timeout")
+                return result
+                
+        except TimeoutError:
+            print(f"⏰ TIMEOUT: LLM processing exceeded {timeout_seconds:.0f}s limit")
+            print(f"🔄 Falling back to conservative strategies for {len(uncertain_columns)} columns...")
+            
+            fallback_result = self._apply_fallback_strategies(uncertain_columns, phase)
+            self.stats['timeout_fallbacks'] += len(uncertain_columns)
+            return fallback_result
+        
+        except Exception as e:
+            print(f"❌ LLM processing failed: {e}")
+            print(f"🔄 Using fallback strategies...")
+            return self._apply_fallback_strategies(uncertain_columns, phase)
+    
+    def _process_uncertain_columns_with_llm(self, state: SequentialState, phase: str, uncertain_columns: List[Dict]) -> Dict[str, Any]:
+        """Process uncertain columns with LLM in optimized chunks"""
+        if not uncertain_columns:
+            return {}
+        
+        chunk_size = 12  # Optimized for uncertain cases
+        all_recommendations = {}
+        
+        for i in range(0, len(uncertain_columns), chunk_size):
+            chunk = uncertain_columns[i:i+chunk_size]
+            chunk_num = (i // chunk_size) + 1
+            total_chunks = (len(uncertain_columns) + chunk_size - 1) // chunk_size
+            
+            print(f"🔧 Processing chunk {chunk_num}/{total_chunks}: {len(chunk)} columns")
+            print(f"   Columns: {[col_info['column'] for col_info in chunk]}")
+            
+            start_time = time.time()
+            
+            try:
+                if phase == 'outliers':
+                    chunk_results = analyze_outlier_chunk(state, chunk)
+                elif phase == 'missing_values':
+                    current_df = get_current_data_state(state)
+                    chunk_results = analyze_missing_values_chunk(state, chunk, current_df)
+                elif phase == 'encoding':
+                    chunk_results = self._process_encoding_chunk_with_llm(state, chunk)
+                elif phase == 'transformations':
+                    chunk_results = self._process_transformations_chunk_with_llm(state, chunk)
+                else:
+                    chunk_results = {}
+                
+                processing_time = time.time() - start_time
+                print(f"   ✅ Chunk {chunk_num} completed in {processing_time:.1f}s")
+                
+                # Handle different return formats for different phases
+                if phase == 'missing_values':
+                    # analyze_missing_values_chunk returns recommendations directly
+                    all_recommendations.update(chunk_results)
+                else:
+                    # Other phases return wrapped in 'llm_recommendations'
+                    all_recommendations.update(chunk_results.get('llm_recommendations', {}))
+                
+            except Exception as e:
+                print(f"   ❌ Chunk {chunk_num} failed: {e}")
+                # Apply fallback for this chunk
+                chunk_fallback = self._apply_fallback_strategies(chunk, phase)
+                all_recommendations.update(chunk_fallback)
+        
+        return all_recommendations
+    
+    def _process_encoding_chunk_with_llm(self, state: SequentialState, chunk: List[Dict]) -> Dict[str, Any]:
+        """Process encoding chunk with LLM"""
+        try:
+            from langchain_core.messages import HumanMessage
+            llm = get_llm_from_state(state)
+            
+            prompt = self._create_encoding_prompt(chunk, state.target_column)
+            response = llm.invoke([HumanMessage(content=prompt)])
+            
+            return {'llm_recommendations': self._parse_encoding_response(response.content, chunk)}
+            
+        except Exception as e:
+            print(f"❌ Encoding LLM processing failed: {e}")
+            return {'llm_recommendations': self._apply_fallback_strategies(chunk, 'encoding')}
+    
+    def _process_transformations_chunk_with_llm(self, state: SequentialState, chunk: List[Dict]) -> Dict[str, Any]:
+        """Process transformations chunk with LLM"""
+        try:
+            from langchain_core.messages import HumanMessage
+            llm = get_llm_from_state(state)
+            
+            prompt = self._create_transformations_prompt(chunk, state.target_column)
+            response = llm.invoke([HumanMessage(content=prompt)])
+            
+            return {'llm_recommendations': self._parse_transformations_response(response.content, chunk)}
+            
+        except Exception as e:
+            print(f"❌ Transformations LLM processing failed: {e}")
+            return {'llm_recommendations': self._apply_fallback_strategies(chunk, 'transformations')}
+    
+    def _create_encoding_prompt(self, chunk: List[Dict], target_column: str) -> str:
+        """Create focused LLM prompt for encoding uncertain cases"""
+        prompt = f"""Analyze categorical encoding strategies for {len(chunk)} UNCERTAIN columns.
+Focus on cardinality, ordinality, and target relationship.
+
+TARGET COLUMN: {target_column}
+
+UNCERTAIN COLUMNS:
+"""
+        for col_info in chunk:
+            analysis = col_info['analysis']
+            prompt += f"""
+Column: {col_info['column']}
+- Unique values: {analysis.get('unique_count', 0)}
+- Cardinality ratio: {analysis.get('unique_ratio', 0):.3f}
+- Sample values: {analysis.get('sample_values', [])}
+- Target correlation: {analysis.get('target_correlation', 0):.3f}
+"""
+        
+        prompt += """
+Provide encoding strategies in JSON format:
+{
+    "column_name": {
+        "strategy": "label_encoding|onehot_encoding|target_encoding|binary_encoding",
+        "reasoning": "Brief justification"
+    }
+}
+
+GUIDELINES:
+- label_encoding: Natural ordering exists
+- onehot_encoding: No ordering, low-medium cardinality (<15)
+- target_encoding: High cardinality or strong target relationship
+- binary_encoding: Medium-high cardinality (10-50 categories)
+"""
+        return prompt
+    
+    def _create_transformations_prompt(self, chunk: List[Dict], target_column: str) -> str:
+        """Create focused LLM prompt for transformations uncertain cases"""
+        prompt = f"""Analyze transformation strategies for {len(chunk)} UNCERTAIN numeric columns.
+Focus on distribution characteristics and business context.
+
+TARGET COLUMN: {target_column}
+
+UNCERTAIN COLUMNS:
+"""
+        for col_info in chunk:
+            analysis = col_info['analysis']
+            prompt += f"""
+Column: {col_info['column']}
+- Skewness: {analysis.get('skewness', 0):.2f}
+- Kurtosis: {analysis.get('kurtosis', 0):.2f}
+- Min/Max: {analysis.get('percentile_1', 0):.2f} / {analysis.get('percentile_99', 0):.2f}
+- Has zeros: {'Yes' if analysis.get('percentile_1', 1) <= 0 else 'No'}
+- Has negatives: {'Yes' if analysis.get('percentile_1', 0) < 0 else 'No'}
+"""
+        
+        prompt += """
+Provide transformation strategies in JSON format:
+{
+    "column_name": {
+        "strategy": "log|log1p|sqrt|box_cox|yeo_johnson|quantile|none",
+        "reasoning": "Brief explanation"
+    }
+}
+
+GUIDELINES:
+- log: Right-skewed, positive values, no zeros
+- log1p: Right-skewed, positive values, has zeros  
+- sqrt: Moderate right-skew, count/rate data
+- box_cox: Right-skewed, positive values, needs normality
+- yeo_johnson: Any skewness, handles negatives and zeros
+- quantile: Non-parametric, extreme distributions
+- none: Already well-distributed
+"""
+        return prompt
+    
+    def _parse_encoding_response(self, response: str, chunk: List[Dict]) -> Dict[str, Any]:
+        """Parse LLM response for encoding recommendations"""
+        try:
+            import json
+            import re
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                recommendations = json.loads(json_match.group())
+                return recommendations
+            
+        except Exception as e:
+            print(f"❌ Failed to parse encoding response: {e}")
+        
+        # Fallback
+        return {col_info['column']: {'strategy': 'onehot_encoding', 'reasoning': 'Parse error fallback'} 
+                for col_info in chunk}
+    
+    def _parse_transformations_response(self, response: str, chunk: List[Dict]) -> Dict[str, Any]:
+        """Parse LLM response for transformation recommendations"""
+        try:
+            import json
+            import re
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                recommendations = json.loads(json_match.group())
+                return recommendations
+            
+        except Exception as e:
+            print(f"❌ Failed to parse transformation response: {e}")
+        
+        # Fallback based on skewness
+        fallback = {}
+        for col_info in chunk:
+            col = col_info['column']
+            skewness = abs(col_info['analysis'].get('skewness', 0))
+            strategy = 'log1p' if skewness > 2.0 else 'none'
+            fallback[col] = {'strategy': strategy, 'reasoning': 'Parse error, skewness-based fallback'}
+        
+        return fallback
+    
+    def _apply_fallback_strategies(self, uncertain_columns: List[Dict], phase: str) -> Dict[str, Any]:
+        """Apply conservative fallback strategies when LLM fails or times out"""
+        fallback_decisions = {}
+        
+        for col_info in uncertain_columns:
+            col = col_info['column']
+            analysis = col_info['analysis']
+            
+            if phase == 'outliers':
+                outlier_pct = analysis.get('outliers_iqr_percentage', 0)
+                if outlier_pct > 5.0:
+                    strategy = 'winsorize'
+                    reasoning = f'Timeout fallback: {outlier_pct:.1f}% outliers → conservative winsorization'
+                else:
+                    strategy = 'keep'
+                    reasoning = f'Timeout fallback: {outlier_pct:.1f}% outliers → keep as legitimate values'
+                fallback_decisions[col] = {'treatment': strategy, 'reasoning': reasoning, 'fallback_used': True}
+                
+            elif phase == 'missing_values':
+                missing_pct = analysis.get('missing_percentage', 0)
+                is_numeric = analysis.get('dtype', '').startswith(('int', 'float'))
+                
+                if missing_pct > 50:
+                    strategy = 'drop_column'
+                    reasoning = f'Timeout fallback: {missing_pct:.1f}% missing → drop column (safe choice)'
+                elif is_numeric:
+                    strategy = 'median'
+                    reasoning = f'Timeout fallback: numeric column → median imputation (robust)'
+                else:
+                    strategy = 'mode'
+                    reasoning = f'Timeout fallback: categorical column → mode imputation (safe)'
+                fallback_decisions[col] = {'strategy': strategy, 'reasoning': reasoning, 'fallback_used': True}
+                
+            elif phase == 'encoding':
+                unique_count = analysis.get('unique_count', 0)
+                if unique_count <= 10:
+                    strategy = 'onehot_encoding'
+                    reasoning = f'Timeout fallback: {unique_count} categories → one-hot encoding (safe)'
+                else:
+                    strategy = 'target_encoding'
+                    reasoning = f'Timeout fallback: {unique_count} categories → target encoding (dimensionality)'
+                fallback_decisions[col] = {'strategy': strategy, 'reasoning': reasoning, 'fallback_used': True}
+                
+            elif phase == 'transformations':
+                skewness = abs(analysis.get('skewness', 0))
+                if skewness > 2.0:
+                    strategy = 'log1p'
+                    reasoning = f'Timeout fallback: skewness {skewness:.2f} → log1p transformation (safe)'
+                else:
+                    strategy = 'none'
+                    reasoning = f'Timeout fallback: skewness {skewness:.2f} → no transformation (conservative)'
+                fallback_decisions[col] = {'strategy': strategy, 'reasoning': reasoning, 'fallback_used': True}
+        
+        return fallback_decisions
+
+    def _analyze_encoding_rules(self, state: SequentialState) -> Dict[str, Any]:
+        """Rule-based confidence analysis for encoding"""
+        current_df = get_current_data_state(state)
+        
+        high_confidence = {}
+        uncertain_columns = []
+        
+        print("🔍 STEP 1: Analyzing encoding with confidence rules...")
+        
+        # Get categorical columns
+        for col in current_df.columns:
+            if col != state.target_column and (current_df[col].dtype == 'object' or pd.api.types.is_categorical_dtype(current_df[col])):
+                analysis = analyze_column_comprehensive(current_df[col], 
+                                                     current_df[state.target_column] if state.target_column in current_df.columns else None, 
+                                                     col)
+                confidence_result = self._encoding_confidence_rules(analysis, col, current_df)
+                
+                if confidence_result['confidence'] >= self.confidence_threshold:
+                    high_confidence[col] = {
+                        'strategy': confidence_result['strategy'],
+                        'reasoning': confidence_result['reasoning'],
+                        'confidence': confidence_result['confidence'],
+                        'rule_based': True
+                    }
+                    print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                else:
+                    uncertain_columns.append({
+                        'column': col,
+                        'analysis': analysis,
+                        'patterns': detect_patterns_llm_ready(current_df[col], col),
+                        'rule_confidence': confidence_result['confidence']
+                    })
+                    print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+        
+        return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
+    
+    def _encoding_confidence_rules(self, analysis: Dict, column: str, df: pd.DataFrame) -> Dict[str, Any]:
+        """High-confidence rules for categorical encoding"""
+        unique_count = analysis.get('unique_count', 0)
+        unique_ratio = analysis.get('unique_ratio', 0)
+        
+        # Rule 1: Binary categorical (2 unique values) → Label encoding (Very High Confidence)
+        if unique_count == 2:
+            return {
+                'strategy': 'label_encoding',
+                'confidence': 0.95,
+                'reasoning': f'Binary categorical with {unique_count} unique values'
+            }
+        
+        # Rule 2: Very low cardinality (≤3 unique values) → Label encoding (High Confidence)
+        if unique_count <= 3:
+            return {
+                'strategy': 'label_encoding',
+                'confidence': 0.90,
+                'reasoning': f'Low cardinality with {unique_count} unique values'
+            }
+        
+        # Rule 3: Very high cardinality (>50% unique) → Target encoding (High Confidence)
+        if unique_ratio > 0.5:
+            return {
+                'strategy': 'target_encoding',
+                'confidence': 0.85,
+                'reasoning': f'High cardinality ({unique_count} unique, {unique_ratio:.2f} ratio)'
+            }
+        
+        # Rule 4: Geographic columns → Target encoding (Medium-High Confidence)
+        if any(keyword in column.lower() for keyword in ['city', 'state', 'country', 'region', 'location', 'zip', 'postal']):
+            return {
+                'strategy': 'target_encoding',
+                'confidence': 0.80,
+                'reasoning': 'Geographic column - target encoding captures regional patterns'
+            }
+        
+        # Rule 5: Ordinal-like patterns → Label encoding (Medium-High Confidence)
+        if self._detect_ordinal_pattern(df[column]):
+            return {
+                'strategy': 'label_encoding',
+                'confidence': 0.80,
+                'reasoning': 'Detected ordinal pattern in categorical values'
+            }
+        
+        # Gray area - needs LLM
+        return {
+            'strategy': 'uncertain',
+            'confidence': 0.5,
+            'reasoning': f'Moderate cardinality ({unique_count} unique) requires contextual analysis'
+        }
+    
+    def _detect_ordinal_pattern(self, series: pd.Series) -> bool:
+        """Detect if categorical values have ordinal pattern"""
+        unique_values = series.dropna().unique()
+        if len(unique_values) < 3:
+            return False
+        
+        # Check for size patterns
+        size_patterns = ['small', 'medium', 'large', 'xs', 's', 'm', 'l', 'xl', 'low', 'high']
+        if any(str(val).lower() in size_patterns for val in unique_values):
+            return True
+        
+        # Check for rating patterns
+        rating_patterns = ['poor', 'fair', 'good', 'excellent', 'bad', 'average', 'great']
+        if any(str(val).lower() in rating_patterns for val in unique_values):
+            return True
+        
+        # Check for numeric-like strings
+        try:
+            numeric_values = [float(val) for val in unique_values if str(val).replace('.', '').replace('-', '').isdigit()]
+            if len(numeric_values) == len(unique_values):
+                return True
+        except:
+            pass
+        
+        return False
+    
+    def _analyze_transformations_rules(self, state: SequentialState) -> Dict[str, Any]:
+        """Rule-based confidence analysis for transformations"""
+        current_df = get_current_data_state(state)
+        target = current_df[state.target_column] if state.target_column in current_df.columns else None
+        
+        high_confidence = {}
+        uncertain_columns = []
+        
+        print("🔍 STEP 1: Analyzing transformations with confidence rules...")
+        
+        for col in current_df.columns:
+            if col == state.target_column or not pd.api.types.is_numeric_dtype(current_df[col]):
+                continue
+                
+            analysis = analyze_column_comprehensive(current_df[col], target, col)
+            
+            # Only consider columns that might benefit from transformation
+            skewness = abs(analysis.get('skewness', 0))
+            kurtosis = abs(analysis.get('kurtosis', 0))
+            is_normal = analysis.get('is_likely_normal', False)
+            
+            if skewness < 1.0 and kurtosis < 5.0 and is_normal:
+                continue  # Skip normal distributions
+            
+            confidence_result = self._transformation_confidence_rules(analysis, col)
+            
+            if confidence_result['confidence'] >= self.confidence_threshold:
+                high_confidence[col] = {
+                    'strategy': confidence_result['strategy'],
+                    'reasoning': confidence_result['reasoning'],
+                    'confidence': confidence_result['confidence'],
+                    'rule_based': True
+                }
+                print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+            else:
+                uncertain_columns.append({
+                    'column': col,
+                    'analysis': analysis,
+                    'rule_confidence': confidence_result['confidence']
+                })
+                print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+        
+        return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
+    
+    def _transformation_confidence_rules(self, analysis: Dict, column: str) -> Dict[str, Any]:
+        """High-confidence rules for transformation selection"""
+        skewness = abs(analysis.get('skewness', 0))
+        kurtosis = abs(analysis.get('kurtosis', 0))
+        has_negative = analysis.get('percentile_1', 0) < 0
+        has_zero = analysis.get('percentile_1', 1) <= 0
+        
+        # Rule 1: Near-normal distribution → No transformation (High Confidence)
+        if skewness < 1.5 and kurtosis < 7.0:
+            return {
+                'strategy': 'none',
+                'confidence': 0.90,
+                'reasoning': f'Near-normal distribution (skew: {skewness:.2f}, kurtosis: {kurtosis:.2f})'
+            }
+        
+        # Rule 2: Extreme skewness (>5) → Yeo-Johnson (High Confidence)
+        if skewness > 5.0:
+            return {
+                'strategy': 'yeo_johnson',
+                'confidence': 0.90,
+                'reasoning': f'Extreme skewness ({skewness:.2f}) requires robust transformation'
+            }
+        
+        # Rule 3: Moderate right skew + no zeros/negatives → Log transform (High Confidence)
+        if 1.0 < skewness < 3.0 and not has_zero and not has_negative:
+            return {
+                'strategy': 'log',
+                'confidence': 0.85,
+                'reasoning': f'Moderate right skew ({skewness:.2f}) with positive values'
+            }
+        
+        # Rule 4: High right skew + has zeros → Log1p transform (High Confidence)
+        if skewness > 2.0 and has_zero and not has_negative:
+            return {
+                'strategy': 'log1p',
+                'confidence': 0.85,
+                'reasoning': f'High right skew ({skewness:.2f}) with zero values'
+            }
+        
+        # Rule 5: Financial/measurement columns + moderate skew → Square root (Medium-High Confidence)
+        if any(keyword in column.lower() for keyword in ['amount', 'price', 'income', 'balance', 'cost', 'revenue']):
+            if 1.0 < skewness < 4.0 and not has_negative:
+                return {
+                    'strategy': 'sqrt',
+                    'confidence': 0.80,
+                    'reasoning': f'Financial column with moderate skew ({skewness:.2f})'
+                }
+        
+        # Gray area - needs LLM
+        return {
+            'strategy': 'uncertain',
+            'confidence': 0.5,
+            'reasoning': f'Complex distribution (skew: {skewness:.2f}, kurtosis: {kurtosis:.2f}) requires analysis'
+        }
+
+# Integration functions to replace existing LLM-only analysis
+def analyze_outliers_with_confidence(state: SequentialState, progress_callback=None) -> Dict[str, Any]:
+    """Replace analyze_outliers_with_llm with confidence-based approach"""
+    processor = ConfidenceBasedPreprocessor()
+    return processor.analyze_phase_with_confidence(state, 'outliers')
+
+def analyze_missing_values_with_confidence(state: SequentialState, progress_callback=None) -> Dict[str, Any]:
+    """Replace analyze_missing_values_with_llm with confidence-based approach"""
+    processor = ConfidenceBasedPreprocessor()
+    return processor.analyze_phase_with_confidence(state, 'missing_values')
+
+def analyze_encoding_with_confidence(state: SequentialState, progress_callback=None) -> Dict[str, Any]:
+    """Replace analyze_encoding_with_llm with confidence-based approach"""
+    processor = ConfidenceBasedPreprocessor()
+    return processor.analyze_phase_with_confidence(state, 'encoding')
+
+def analyze_transformations_with_confidence(state: SequentialState, progress_callback=None) -> Dict[str, Any]:
+    """Replace analyze_transformations_with_llm with confidence-based approach"""
+    processor = ConfidenceBasedPreprocessor()
+    return processor.analyze_phase_with_confidence(state, 'transformations')
 
 if __name__ == "__main__":
     # Example usage
