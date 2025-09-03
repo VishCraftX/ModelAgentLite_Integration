@@ -104,15 +104,9 @@ class SlackManager:
             print(f"  Available sessions: {list(self.session_channels.keys())}")
             print(f"  Session channels: {self.session_channels}")
             
-            # If still no channel, extract from session_id (format: user_threadts)
-            if not channel and "_" in session_id:
-                # This is a fallback - ideally channel should be set properly
-                print(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
-                print(f"[Slack:{session_id}] {text}")
-                return
-            
+            # Final check - if no channel available, we cannot send to Slack
             if not channel:
-                print(f"❌ No channel available for session {session_id}")
+                print(f"❌ No channel available for session {session_id} - message will be logged to console only")
                 print(f"[Slack:{session_id}] {text}")
                 return
             
@@ -561,6 +555,10 @@ Respond with ONLY the pattern name that best matches the query. If none match we
                 score += 3
             elif pattern_name == "model_building" and any(model in query_lower for model in ["use this model", "apply model", "existing model"]):
                 score += 5
+            elif pattern_name == "no_skip" and any(existing in query_lower for existing in ["use this model", "use existing", "apply existing", "current model", "existing model"]):
+                score += 10  # High priority for existing model usage
+            elif pattern_name == "action" and any(action in query_lower for action in ["what is", "how does", "explain", "tell me", "what are"]):
+                score -= 5  # Penalize action for educational phrases
                 
             pattern_scores[pattern_name] = score
             

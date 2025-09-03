@@ -71,14 +71,32 @@ class UniversalClassifierTester:
             ("correlation analysis", "feature_selection"),
             ("feature engineering", "feature_selection"),
             
-            # Model building cases
+            # Model building cases - NEW MODEL TRAINING
             ("train a random forest model", "model_building"),
             ("build a classifier", "model_building"),
             ("create predictive model", "model_building"),
             ("develop machine learning algorithm", "model_building"),
-            ("use this model and print rank order table", "model_building"),  # This was failing - now should pass
+            ("train new lgbm model", "model_building"),
+            ("build new decision tree", "model_building"),
+            ("create new neural network", "model_building"),
+            
+            # Model building cases - EXISTING MODEL USAGE
+            ("use this model and print rank order table", "model_building"),  # Critical test case
             ("apply existing model", "model_building"),
             ("use trained model for analysis", "model_building"),
+            ("use current model for predictions", "model_building"),
+            ("apply this classifier for scoring", "model_building"),
+            ("use existing algorithm for evaluation", "model_building"),
+            ("apply trained predictor to data", "model_building"),
+            ("use saved model for classification", "model_building"),
+            ("apply current algorithm for ranking", "model_building"),
+            ("use built model for segmentation", "model_building"),
+            ("apply existing classifier for analysis", "model_building"),
+            ("use this predictor for risk scoring", "model_building"),
+            ("apply current model for probability estimation", "model_building"),
+            ("use trained algorithm for performance analysis", "model_building"),
+            ("apply existing model for decile analysis", "model_building"),
+            ("use this classifier for rank ordering", "model_building"),
             
             # Code execution cases
             ("run custom analysis", "code_execution"),
@@ -107,8 +125,8 @@ class UniversalClassifierTester:
         skip_definitions = {
             "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build model, immediate model training, direct model building, bypass data preparation entirely, skip all steps, bypass everything, skip all data work, skip everything and train, bypass all preparation, skip all processing, go directly to model, straight to model training",
             "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features, clean skip but features needed, bypass cleaning keep features",
-            "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for model building, skip data cleaning and train model, model building without preprocessing, train model with raw data, build classifier without cleaning, direct model training, skip cleaning and build model, bypass preprocessing build model, skip data preparation and model",
-            "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation, standard flow, complete process, full workflow, normal process"
+            "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for new model building, skip data cleaning and train new model, new model building without preprocessing, train new model with raw data, build new classifier without cleaning, direct new model training, skip cleaning and build new model, bypass preprocessing build new model, skip data preparation and new model",
+            "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation, standard flow, complete process, full workflow, normal process, use existing model, apply existing model, use this model, use trained model, existing model analysis, current model application, model usage, model application, existing model operations, use current model"
         }
         
         test_cases = [
@@ -134,9 +152,27 @@ class UniversalClassifierTester:
             ("standard preprocessing", "no_skip"),
             ("clean data first", "no_skip"),
             
-            # Edge cases that should NOT trigger skip patterns
-            ("use this model and print rank order table", "no_skip"),  # Should not skip
-            ("apply existing model for analysis", "no_skip"),           # Should not skip
+            # Edge cases that should NOT trigger skip patterns - EXISTING MODEL USAGE
+            ("use this model and print rank order table", "no_skip"),  # Critical test case
+            ("apply existing model for analysis", "no_skip"),           
+            ("use existing model to predict", "no_skip"),
+            ("apply current model for scoring", "no_skip"), 
+            ("use trained model for classification", "no_skip"),
+            ("apply this model to new data", "no_skip"),
+            ("use current classifier for predictions", "no_skip"),
+            ("apply existing algorithm for analysis", "no_skip"),
+            ("use saved model for evaluation", "no_skip"),
+            ("apply previous model to dataset", "no_skip"),
+            ("use this classifier for scoring", "no_skip"),
+            ("apply built model for ranking", "no_skip"),
+            ("use existing predictor for analysis", "no_skip"),
+            ("apply current algorithm for evaluation", "no_skip"),
+            ("use this model to generate segments", "no_skip"),
+            ("apply existing model for decile analysis", "no_skip"),
+            ("use trained classifier for rank ordering", "no_skip"),
+            ("apply this predictor to score data", "no_skip"),
+            ("use current model for probability scoring", "no_skip"),
+            ("apply existing algorithm for risk analysis", "no_skip")
         ]
         
         results = self._run_test_cases("skip_patterns", test_cases, skip_definitions)
@@ -250,19 +286,50 @@ class UniversalClassifierTester:
         }
         
         test_cases = [
-            # Use existing model
-            ("use this model and print rank order table", "use_existing"),
+            # Use existing model - COMPREHENSIVE TEST CASES
+            ("use this model and print rank order table", "use_existing"),  # Critical case
             ("apply existing classifier for prediction", "use_existing"),
             ("show model performance", "use_existing"),
             ("visualize decision tree", "use_existing"),
             ("build segments using current model", "use_existing"),
+            ("use current model for scoring", "use_existing"),
+            ("apply this classifier to new data", "use_existing"),
+            ("use trained model for predictions", "use_existing"),
+            ("apply existing algorithm for analysis", "use_existing"),
+            ("use saved model for classification", "use_existing"),
+            ("apply current predictor for evaluation", "use_existing"),
+            ("use built classifier for ranking", "use_existing"),
+            ("apply this model for risk analysis", "use_existing"),
+            ("use existing model for decile analysis", "use_existing"),
+            ("apply current algorithm for segmentation", "use_existing"),
+            ("use trained predictor for probability scoring", "use_existing"),
+            ("apply this classifier for performance evaluation", "use_existing"),
+            ("use current model for rank ordering", "use_existing"),
+            ("apply existing algorithm for business analysis", "use_existing"),
+            ("use saved classifier for customer segmentation", "use_existing"),
+            ("show plot of decision tree", "use_existing"),
+            ("visualize model tree structure", "use_existing"),
+            ("display tree plot", "use_existing"),
+            ("generate model visualization", "use_existing"),
+            ("create rank order table", "use_existing"),
+            ("build deciles using model", "use_existing"),
+            ("generate buckets", "use_existing"),
+            ("create segments", "use_existing"),
+            ("score this data", "use_existing"),
+            ("predict using model", "use_existing"),
+            ("classify new records", "use_existing"),
             
-            # Build new model
+            # Build new model 
             ("train new random forest", "new_model"),
             ("build fresh classifier", "new_model"),
             ("create new lgbm model", "new_model"),
             ("develop new algorithm", "new_model"),
-            ("train from scratch", "new_model")
+            ("train from scratch", "new_model"),
+            ("build new decision tree", "new_model"),
+            ("create new neural network", "new_model"),
+            ("develop new predictor", "new_model"),
+            ("train new classifier", "new_model"),
+            ("build new machine learning model", "new_model")
         ]
         
         results = self._run_test_cases("model_sub_classification", test_cases, model_definitions)
