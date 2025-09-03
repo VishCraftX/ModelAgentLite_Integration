@@ -423,25 +423,40 @@ class ModelBuildingAgentWrapper:
                     }
                 
                 # Handle file uploads (plots, etc.)
-                if 'artifacts' in result and 'files' in result['artifacts']:
-                    try:
-                        from toolbox import slack_manager
-                        for file_info in result['artifacts']['files']:
-                            if isinstance(file_info, dict) and 'path' in file_info:
-                                file_path = file_info['path']
-                                title = file_info.get('title', 'Generated Plot')
-                                if os.path.exists(file_path):
-                                    print(f"📤 Uploading {title}: {file_path}")
-                                    slack_manager.upload_file(
-                                        session_id=state.chat_session,
-                                        file_path=file_path,
-                                        title=title,
-                                        comment=f"Generated {title.lower()}"
-                                    )
+                print(f"🔍 UPLOAD DEBUG: Checking for artifacts in result...")
+                print(f"🔍 UPLOAD DEBUG: Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+                if isinstance(result, dict) and 'artifacts' in result:
+                    print(f"🔍 UPLOAD DEBUG: Found artifacts: {result['artifacts']}")
+                    if 'files' in result['artifacts']:
+                        print(f"🔍 UPLOAD DEBUG: Found files: {result['artifacts']['files']}")
+                        try:
+                            from toolbox import slack_manager
+                            for file_info in result['artifacts']['files']:
+                                print(f"🔍 UPLOAD DEBUG: Processing file_info: {file_info}")
+                                if isinstance(file_info, dict) and 'path' in file_info:
+                                    file_path = file_info['path']
+                                    title = file_info.get('title', 'Generated Plot')
+                                    print(f"🔍 UPLOAD DEBUG: Attempting upload - Path: {file_path}, Title: {title}")
+                                    if os.path.exists(file_path):
+                                        print(f"📤 Uploading {title}: {file_path}")
+                                        slack_manager.upload_file(
+                                            session_id=state.chat_session,
+                                            file_path=file_path,
+                                            title=title,
+                                            comment=f"Generated {title.lower()}"
+                                        )
+                                    else:
+                                        print(f"⚠️ File not found for upload: {file_path}")
                                 else:
-                                    print(f"⚠️ File not found for upload: {file_path}")
-                    except Exception as e:
-                        print(f"❌ Failed to upload files: {e}")
+                                    print(f"🔍 UPLOAD DEBUG: Invalid file_info format: {file_info}")
+                        except Exception as e:
+                            print(f"❌ Failed to upload files: {e}")
+                            import traceback
+                            print(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
+                    else:
+                        print(f"🔍 UPLOAD DEBUG: No 'files' key in artifacts")
+                else:
+                    print(f"🔍 UPLOAD DEBUG: No artifacts in result")
             
             print("✅ Model building completed")
             return state
