@@ -3033,9 +3033,15 @@ class ConfidenceBasedPreprocessor:
                 llm_decisions = self._apply_fallback_strategies(uncertain_columns, phase)
                 self.stats['timeout_fallbacks'] += len(uncertain_columns)
         
-        # Update stats
+        # Update stats - track what actually happened
         self.stats['rule_based_decisions'] += len(high_conf_decisions)
-        self.stats['llm_decisions'] += len(llm_decisions)
+        
+        # Count LLM decisions vs timeout fallbacks
+        current_timeout_fallbacks = self.stats.get('timeout_fallbacks', 0)
+        llm_processed = len(llm_decisions) - current_timeout_fallbacks
+        if llm_processed > 0:
+            self.stats['llm_decisions'] += llm_processed
+            
         self.stats['total_columns'] += total_cols
         
         # Performance summary
@@ -3264,11 +3270,22 @@ class ConfidenceBasedPreprocessor:
         }
 
     def _process_with_timeout(self, state: SequentialState, phase: str, uncertain_columns: List[Dict], timeout_seconds: float) -> Dict[str, Any]:
-        """Process uncertain columns with timeout fallback"""
+        """Process uncertain columns with timeout fallback - FIXED VERSION"""
+        
+        # ✅ CRITICAL FIX: Pre-check timeout before starting LLM calls
+        # Only use immediate fallback if we have very little time (less than 30 seconds for large datasets)
+        min_time_needed = min(30, len(uncertain_columns) * 2)  # 2 seconds per column, max 30s
+        if timeout_seconds <= min_time_needed:
+            print(f"⏰ TIMEOUT PREVENTION: Only {timeout_seconds:.0f}s remaining (need {min_time_needed}s) - using fallback strategies...")
+            print(f"🔄 Applying conservative strategies for {len(uncertain_columns)} columns...")
+            
+            fallback_result = self._apply_fallback_strategies(uncertain_columns, phase)
+            self.stats['timeout_fallbacks'] += len(uncertain_columns)
+            return fallback_result
         
         def llm_processing_task():
-            """The actual LLM processing task"""
-            return self._process_uncertain_columns_with_llm(state, phase, uncertain_columns)
+            """The actual LLM processing task with per-chunk timeout checking"""
+            return self._process_uncertain_columns_with_llm_safe(state, phase, uncertain_columns, timeout_seconds)
         
         try:
             # Use ThreadPoolExecutor with timeout
@@ -3341,6 +3358,78 @@ class ConfidenceBasedPreprocessor:
                 # Apply fallback for this chunk
                 chunk_fallback = self._apply_fallback_strategies(chunk, phase)
                 all_recommendations.update(chunk_fallback)
+        
+        return all_recommendations
+    
+    def _process_uncertain_columns_with_llm_safe(self, state: SequentialState, phase: str, uncertain_columns: List[Dict], total_timeout: float) -> Dict[str, Any]:
+        """Process uncertain columns with LLM in optimized chunks - TIMEOUT SAFE VERSION"""
+        if not uncertain_columns:
+            return {}
+        
+        chunk_size = 12  # Optimized for uncertain cases
+        all_recommendations = {}
+        start_total_time = time.time()
+        
+        for i in range(0, len(uncertain_columns), chunk_size):
+            # ✅ CRITICAL: Check timeout before each chunk
+            elapsed_time = time.time() - start_total_time
+            remaining_time = total_timeout - elapsed_time
+            
+            # Need enough time for at least one more chunk (estimate 10s per chunk)
+            if remaining_time <= 10:  
+                print(f"⏰ CHUNK TIMEOUT: Only {remaining_time:.1f}s remaining - stopping LLM processing")
+                print(f"🔄 Processed {i}/{len(uncertain_columns)} columns, applying fallback for remaining...")
+                
+                # Apply fallback for remaining columns
+                remaining_columns = uncertain_columns[i:]
+                if remaining_columns:
+                    fallback_result = self._apply_fallback_strategies(remaining_columns, phase)
+                    all_recommendations.update(fallback_result)
+                    self.stats['timeout_fallbacks'] += len(remaining_columns)
+                break
+            
+            chunk = uncertain_columns[i:i+chunk_size]
+            chunk_num = (i // chunk_size) + 1
+            total_chunks = (len(uncertain_columns) + chunk_size - 1) // chunk_size
+            
+            print(f"🔧 Processing chunk {chunk_num}/{total_chunks}: {len(chunk)} columns (⏰ {remaining_time:.0f}s left)")
+            print(f"   Columns: {[col_info['column'] for col_info in chunk]}")
+            
+            start_time = time.time()
+            
+            try:
+                if phase == 'outliers':
+                    chunk_results = analyze_outlier_chunk(state, chunk)
+                elif phase == 'missing_values':
+                    current_df = get_current_data_state(state)
+                    chunk_results = analyze_missing_values_chunk(state, chunk, current_df)
+                elif phase == 'encoding':
+                    chunk_results = self._process_encoding_chunk_with_llm(state, chunk)
+                elif phase == 'transformations':
+                    chunk_results = self._process_transformations_chunk_with_llm(state, chunk)
+                else:
+                    chunk_results = {}
+                
+                processing_time = time.time() - start_time
+                print(f"   ✅ Chunk {chunk_num} completed in {processing_time:.1f}s")
+                
+                # Handle different return formats for different phases
+                if phase == 'missing_values':
+                    # analyze_missing_values_chunk returns recommendations directly
+                    all_recommendations.update(chunk_results)
+                else:
+                    # Other phases return wrapped in 'llm_recommendations'
+                    all_recommendations.update(chunk_results.get('llm_recommendations', {}))
+                
+            except Exception as e:
+                print(f"   ❌ Chunk {chunk_num} failed: {e}")
+                print(f"   🔄 Applying fallback for this chunk...")
+                
+                # Apply fallback for this chunk only
+                chunk_fallback = self._apply_fallback_strategies(chunk, phase)
+                all_recommendations.update(chunk_fallback)
+                self.stats['timeout_fallbacks'] += len(chunk)
+                continue
         
         return all_recommendations
     
