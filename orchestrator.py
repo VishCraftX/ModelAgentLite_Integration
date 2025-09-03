@@ -57,6 +57,197 @@ class AgentType(Enum):
     END = "END"
 
 
+class UniversalPatternClassifier:
+    """Standardized Semantic → LLM → Keyword classification for all patterns"""
+    
+    # Predefined threshold profiles for different use cases
+    THRESHOLD_PROFILES = {
+        "critical_routing": {
+            "semantic_threshold": 0.50,      # Conservative - avoid misrouting
+            "confidence_threshold": 0.12,    # Need clear winner
+            "description": "High-stakes routing decisions"
+        },
+        "intent_classification": {
+            "semantic_threshold": 0.4,       # Balanced
+            "confidence_threshold": 0.08,    # Moderate confidence
+            "description": "Main intent classification"
+        },
+        "skip_patterns": {
+            "semantic_threshold": 0.45,      # Slightly conservative
+            "confidence_threshold": 0.10,    # Clear skip intent needed
+            "description": "Workflow skip detection"
+        },
+        "session_continuation": {
+            "semantic_threshold": 0.35,      # Liberal - better to continue wrongly than break flow
+            "confidence_threshold": 0.06,    # Low confidence OK
+            "description": "Interactive session flow"
+        },
+        "feature_detection": {
+            "semantic_threshold": 0.3,       # Liberal - plot/visualization detection
+            "confidence_threshold": 0.05,    # Low confidence OK
+            "description": "Feature/plot/analysis detection"
+        },
+        "educational_queries": {
+            "semantic_threshold": 0.4,       # Balanced
+            "confidence_threshold": 0.08,    # Moderate confidence
+            "description": "Educational vs action intent"
+        },
+        "model_sub_classification": {
+            "semantic_threshold": 0.35,      # Liberal - within model building context
+            "confidence_threshold": 0.07,    # Low confidence OK
+            "description": "Model building sub-classifications"
+        }
+    }
+    
+    def __init__(self, orchestrator_instance):
+        self.orchestrator = orchestrator_instance  # Reuse embedding infrastructure
+        
+    def classify_pattern(self, query: str, pattern_definitions: dict, 
+                        use_case: str = "intent_classification",
+                        context_adjustments: dict = None) -> tuple:
+        """
+        Universal pattern classification: Semantic → LLM → Keyword
+        Returns: (classification_result, method_used)
+        """
+        # Get base thresholds for use case
+        if use_case not in self.THRESHOLD_PROFILES:
+            print(f"⚠️ Unknown use case '{use_case}', using 'intent_classification'")
+            use_case = "intent_classification"
+            
+        base_thresholds = self.THRESHOLD_PROFILES[use_case]
+        semantic_threshold = base_thresholds["semantic_threshold"]
+        confidence_threshold = base_thresholds["confidence_threshold"]
+        
+        # Apply context-based adjustments
+        if context_adjustments:
+            semantic_threshold += context_adjustments.get("semantic_adjust", 0)
+            confidence_threshold += context_adjustments.get("confidence_adjust", 0)
+            
+        # Clamp to reasonable bounds
+        semantic_threshold = max(0.2, min(0.7, semantic_threshold))
+        confidence_threshold = max(0.03, min(0.2, confidence_threshold))
+        
+        print(f"🎯 Pattern classification for {use_case}: semantic={semantic_threshold:.3f}, confidence={confidence_threshold:.3f}")
+        
+        # Step 1: Semantic Classification
+        if EMBEDDINGS_AVAILABLE:
+            semantic_result = self._semantic_classify(
+                query, pattern_definitions, semantic_threshold, confidence_threshold
+            )
+            if semantic_result:
+                print(f"🧠 Semantic pattern classification used (use_case: {use_case})")
+                return semantic_result, "semantic"
+        
+        # Step 2: LLM Classification  
+        if LLM_AVAILABLE:
+            llm_result = self._llm_classify(query, pattern_definitions, use_case)
+            if llm_result:
+                print(f"🤖 LLM pattern classification used (use_case: {use_case})")
+                return llm_result, "llm"
+            
+        # Step 3: Keyword Fallback
+        print(f"⚡ Keyword pattern fallback used (use_case: {use_case})")
+        keyword_result = self._keyword_classify(query, pattern_definitions)
+        return keyword_result, "keyword"
+    
+    def _semantic_classify(self, query: str, pattern_definitions: dict, 
+                          semantic_threshold: float, confidence_threshold: float) -> Optional[str]:
+        """Semantic classification using embeddings"""
+        try:
+            query_embedding = self.orchestrator._get_embedding(query)
+            if query_embedding is None:
+                return None
+                
+            similarities = {}
+            for pattern_name, pattern_description in pattern_definitions.items():
+                pattern_embedding = self.orchestrator._get_embedding(pattern_description)
+                if pattern_embedding is not None:
+                    similarity = cosine_similarity([query_embedding], [pattern_embedding])[0][0]
+                    similarities[pattern_name] = similarity
+            
+            if not similarities:
+                return None
+                
+            # Find best and second best
+            sorted_similarities = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
+            best_pattern, best_score = sorted_similarities[0]
+            second_score = sorted_similarities[1][1] if len(sorted_similarities) > 1 else 0
+            
+            score_diff = best_score - second_score
+            
+            print(f"[Pattern Semantic] Best: {best_pattern} (score: {best_score:.3f}, diff: {score_diff:.3f})")
+            
+            # Check both thresholds
+            if best_score > semantic_threshold and score_diff > confidence_threshold:
+                return best_pattern
+                
+            print(f"[Pattern Semantic] Below threshold - score: {best_score:.3f} < {semantic_threshold:.3f} or diff: {score_diff:.3f} < {confidence_threshold:.3f}")
+            return None
+            
+        except Exception as e:
+            print(f"[Pattern Semantic] Error in semantic classification: {e}")
+            return None
+    
+    def _llm_classify(self, query: str, pattern_definitions: dict, use_case: str) -> Optional[str]:
+        """LLM classification with context-aware prompts"""
+        try:
+            # Create context-aware prompt based on use case
+            if use_case == "skip_patterns":
+                system_prompt = """You are a workflow pattern classifier. Analyze the user query and determine if they want to skip certain steps in the ML pipeline."""
+            elif use_case == "session_continuation":
+                system_prompt = """You are a session flow classifier. Determine if the user wants to continue their current task or start something new."""
+            elif use_case == "educational_queries":
+                system_prompt = """You are an intent classifier. Determine if the user wants to learn about something or take an action."""
+            else:
+                system_prompt = """You are a pattern classifier. Analyze the user query and classify it according to the provided patterns."""
+            
+            pattern_list = "\n".join([f"- {name}: {desc[:100]}..." for name, desc in pattern_definitions.items()])
+            
+            prompt = f"""{system_prompt}
+
+Available patterns:
+{pattern_list}
+
+User query: "{query}"
+
+Respond with ONLY the pattern name that best matches the query. If none match well, respond with "uncertain"."""
+
+            response = self.orchestrator._call_llm_for_classification(prompt)
+            if response and response.strip().lower() != "uncertain":
+                # Validate that response is one of the valid patterns
+                response_clean = response.strip().lower()
+                for pattern_name in pattern_definitions.keys():
+                    if pattern_name.lower() == response_clean:
+                        return pattern_name
+                        
+            return None
+            
+        except Exception as e:
+            print(f"[Pattern LLM] Error in LLM classification: {e}")
+            return None
+    
+    def _keyword_classify(self, query: str, pattern_definitions: dict) -> str:
+        """Keyword-based classification fallback"""
+        query_lower = query.lower()
+        
+        # Convert pattern definitions to keyword lists (simplified approach)
+        pattern_scores = {}
+        
+        for pattern_name, pattern_description in pattern_definitions.items():
+            # Extract keywords from description (simple word matching)
+            keywords = pattern_description.lower().split()
+            score = sum(1 for keyword in keywords if keyword in query_lower)
+            pattern_scores[pattern_name] = score
+            
+        # Return pattern with highest score, or first pattern if tie
+        if pattern_scores:
+            best_pattern = max(pattern_scores, key=pattern_scores.get)
+            return best_pattern
+        
+        # Fallback to first pattern
+        return list(pattern_definitions.keys())[0]
+
+
 class Orchestrator:
     """
     Unified orchestrator with hybrid keyword scoring + LLM fallback
@@ -82,6 +273,9 @@ class Orchestrator:
         # Initialize intent embeddings if possible
         if EMBEDDINGS_AVAILABLE:
             self._initialize_intent_embeddings()
+        
+        # Initialize universal pattern classifier
+        self.pattern_classifier = UniversalPatternClassifier(self)
         
         # Fallback: Exhaustive keywords for compatibility (used when embeddings unavailable)
         self.preprocessing_keywords = [
@@ -571,85 +765,65 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         
         return best_intent, confidence_info
 
+    def _should_analyze_skip_patterns(self, query: str) -> bool:
+        """Determine if skip pattern analysis is relevant for this query"""
+        
+        # Skip patterns only apply to explicit skip language
+        skip_indicators = [
+            "skip preprocessing", "bypass preprocessing", 
+            "skip cleaning", "go straight to", 
+            "directly to modeling", "skip data preparation",
+            "bypass data", "skip to", "direct to"
+        ]
+        
+        has_skip_language = any(indicator in query.lower() for indicator in skip_indicators)
+        
+        # For model_building intent with existing model references,
+        # skip patterns are usually not needed (let ModelBuildingAgent handle it)
+        has_existing_model_ref = any(ref in query.lower() for ref in [
+            "use this model", "use existing model", "use the model",
+            "with this model", "apply this model", "existing model"
+        ])
+        
+        # Only apply skip patterns for explicit skip requests
+        # Don't apply for existing model usage (that's ModelBuildingAgent's job)
+        return has_skip_language and not has_existing_model_ref
+
     def _classify_skip_patterns(self, query: str) -> str:
         """
-        Classify skip/bypass patterns using Semantic → LLM → Keyword hierarchy
+        Classify skip/bypass patterns using Universal Pattern Classifier
         Returns: routing destination or None if no skip patterns detected
         """
         if not query:
             return None
             
-        # Step 1: Semantic Classification
-        try:
-            if EMBEDDINGS_AVAILABLE and self._intent_embeddings:
-                skip_intent_definitions = {
-                    "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build model, immediate model training, direct model building, bypass data preparation entirely",
-                    "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features",
-                    "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for model building, skip data cleaning and train model, model building without preprocessing, train model with raw data, build classifier without cleaning, direct model training",
-                    "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation"
-                }
-                
-                # Create temporary embeddings for skip patterns
-                skip_embeddings = {}
-                for skip_type, definition in skip_intent_definitions.items():
-                    embedding = self._get_embedding(definition)
-                    if embedding is not None:
-                        skip_embeddings[skip_type] = embedding
-                
-                if skip_embeddings:
-                    query_embedding = self._get_embedding(query)
-                    if query_embedding is not None:
-                        # Calculate similarities
-                        similarities = {}
-                        for skip_type, skip_embedding in skip_embeddings.items():
-                            similarity = cosine_similarity(
-                                query_embedding.reshape(1, -1),
-                                skip_embedding.reshape(1, -1)
-                            )[0][0]
-                            similarities[skip_type] = float(similarity)
-                        
-                        # Find best match
-                        best_skip_type = max(similarities, key=similarities.get)
-                        max_similarity = similarities[best_skip_type]
-                        
-                        # Calculate confidence
-                        sorted_similarities = sorted(similarities.values(), reverse=True)
-                        second_best = sorted_similarities[1] if len(sorted_similarities) > 1 else 0
-                        similarity_diff = max_similarity - second_best
-                        
-                        print(f"[Orchestrator] Skip pattern semantic: {best_skip_type} (score: {max_similarity:.3f}, diff: {similarity_diff:.3f})")
-                        
-                        # Use moderate threshold for skip pattern detection
-                        if max_similarity > 0.4 and similarity_diff > 0.08:
-                            print(f"[Orchestrator] 🧠 Semantic skip pattern accepted: {best_skip_type}")
-                            return self._route_skip_pattern(best_skip_type, query)
-                        else:
-                            print(f"[Orchestrator] 🤔 Semantic skip pattern below threshold, trying LLM")
+        # Check if this query warrants skip pattern analysis
+        if not self._should_analyze_skip_patterns(query):
+            return None
+            
+        # Define skip pattern semantic definitions
+        skip_intent_definitions = {
+            "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build model, immediate model training, direct model building, bypass data preparation entirely",
+            "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features",
+            "skip_preprocessing_to_modeling": "Skip preprocessing and go to modeling, bypass preprocessing for model building, skip data cleaning and train model, model building without preprocessing, train model with raw data, build classifier without cleaning, direct model training",
+            "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation"
+        }
         
-        except Exception as e:
-            print(f"[Orchestrator] Semantic skip pattern error: {e}, trying LLM")
+        # Use universal pattern classifier
+        skip_result, method_used = self.pattern_classifier.classify_pattern(
+            query, 
+            skip_intent_definitions,
+            use_case="skip_patterns"
+        )
         
-        # Step 2: LLM Classification
-        try:
-            print(f"[Orchestrator] 🤖 Using LLM for skip pattern classification")
-            llm_skip_result = self._llm_classify_skip_patterns(query)
-            if llm_skip_result:
-                print(f"[Orchestrator] LLM skip pattern: {llm_skip_result}")
-                return self._route_skip_pattern(llm_skip_result, query)
-            else:
-                print(f"[Orchestrator] LLM skip pattern failed, using keyword fallback")
-        except Exception as e:
-            print(f"[Orchestrator] LLM skip pattern error: {e}, using keyword fallback")
-        
-        # Step 3: Keyword Fallback
-        print(f"[Orchestrator] ⚡ Using keyword fallback for skip pattern")
-        keyword_skip_result = self._keyword_classify_skip_patterns(query)
-        if keyword_skip_result:
-            return self._route_skip_pattern(keyword_skip_result, query)
-        
-        return None
+        if skip_result and skip_result != "no_skip":
+            print(f"[Orchestrator] Skip pattern detected: {skip_result} (method: {method_used})")
+            return self._route_skip_pattern(skip_result, query)
+        else:
+            print(f"[Orchestrator] No skip pattern detected (result: {skip_result}, method: {method_used})")
+            return None
 
-    def _llm_classify_skip_patterns(self, query: str) -> str:
+    def _OBSOLETE_llm_classify_skip_patterns(self, query: str) -> str:
         """LLM-based skip pattern classification"""
         try:
             import requests
@@ -1127,46 +1301,14 @@ How can I help you with your ML workflow today?"""
         
         print(f"[Orchestrator] Processing query: '{state.user_query}'")
         
-        # Step 1: Try semantic similarity classification first (if available)
-        if EMBEDDINGS_AVAILABLE and self._intent_embeddings:
-            intent, confidence_info = self._classify_with_semantic_similarity(state.user_query)
-            
-            print(f"[Orchestrator] Semantic classification: {intent}")
-            print(f"[Orchestrator] Similarity: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
-            
-            # Use semantic if threshold is met (removed "confident" requirement for more usage)
-            if confidence_info.get("threshold_met", False):
-                print(f"[Orchestrator] 🧠 Semantic classification accepted: {intent}")
-                return self._route_by_intent(state, intent)
-            else:
-                print(f"[Orchestrator] 🤔 Semantic classification below threshold, trying LLM")
+        # Use universal pattern classifier for main intent classification
+        intent, method_used = self.pattern_classifier.classify_pattern(
+            state.user_query,
+            self.intent_definitions,
+            use_case="intent_classification"
+        )
         
-        # Step 2: Try LLM Classification (high accuracy for ambiguous cases)
-        try:
-            print(f"[Orchestrator] 🤖 Using LLM for ambiguous/complex query")
-            context = {
-                "has_raw_data": state.raw_data is not None,
-                "has_cleaned_data": state.cleaned_data is not None,
-                "has_selected_features": state.selected_features is not None,
-                "has_trained_model": state.models is not None and len(state.models) > 0
-            }
-            intent = self.classify_intent_with_llm(state.user_query, context)
-            print(f"[Orchestrator] LLM classification: {intent}")
-            
-            # Use LLM result if it's valid
-            if intent and intent != "error":
-                return self._route_by_intent(state, intent)
-            else:
-                print(f"[Orchestrator] 🤖 LLM classification failed, falling back to keywords")
-        except Exception as e:
-            print(f"[Orchestrator] 🤖 LLM error: {e}, falling back to keywords")
-        
-        # Step 3: Keyword Fallback (only if semantic and LLM both fail)
-        print(f"[Orchestrator] ⚡ Using keyword fallback as last resort")
-        intent, confidence_info = self._classify_with_keyword_scoring(state.user_query)
-        print(f"[Orchestrator] Keyword classification: {intent}")
-        print(f"[Orchestrator] Confidence: max_score={confidence_info['max_score']:.3f}, score_diff={confidence_info['score_diff']:.3f}")
-        
+        print(f"[Orchestrator] Intent classification: {intent} (method: {method_used})")
         return self._route_by_intent(state, intent)
 
     def get_routing_explanation(self, state: PipelineState, routing_decision: str) -> str:
