@@ -344,8 +344,8 @@ class UniversalPatternClassifier:
             "description": "Educational vs action intent"
         },
         "model_sub_classification": {
-            "semantic_threshold": 0.35,      # Liberal - within model building context
-            "confidence_threshold": 0.07,    # Low confidence OK
+            "semantic_threshold": 0.3,       # More liberal - within model building context
+            "confidence_threshold": 0.04,    # Very low confidence OK - we're already in model context
             "description": "Model building sub-classifications"
         }
     }
@@ -468,24 +468,47 @@ class UniversalPatternClassifier:
         try:
             # Create context-aware prompt based on use case
             if use_case == "skip_patterns":
-                system_prompt = """You are a workflow pattern classifier. Analyze the user query and determine if they want to skip certain steps in the ML pipeline.
+                system_prompt = """You are a workflow pattern classifier. Analyze user queries to detect EXPLICIT workflow skipping requests.
 
-Key distinctions:
-- "skip_to_modeling": Skip ALL steps (preprocessing AND feature selection) and go directly to modeling
-- "skip_preprocessing_to_modeling": Skip ONLY preprocessing but still do modeling (implies some data prep may happen)
-- "skip_preprocessing_to_features": Skip preprocessing but still do feature selection
+CRITICAL: Only classify as skip patterns when user EXPLICITLY asks to skip/bypass steps.
 
-Focus on whether they want to skip EVERYTHING vs just preprocessing."""
+Pattern meanings:
+- "skip_to_modeling": User explicitly asks to skip ALL steps and go directly to NEW model building
+  Examples: "skip preprocessing and feature selection", "go straight to modeling", "bypass everything"
+  
+- "skip_preprocessing_to_modeling": User explicitly asks to skip preprocessing but wants NEW model building  
+  Examples: "skip data cleaning and train NEW model", "bypass preprocessing for NEW model"
+  
+- "skip_preprocessing_to_features": User explicitly asks to skip preprocessing but wants feature selection
+  Examples: "skip cleaning but do feature selection", "bypass preprocessing and select features"
+  
+- "no_skip": Normal workflow OR existing model usage (VERY IMPORTANT!)
+  Examples: "use this model", "apply existing model", "use current model for analysis"
+  
+CRITICAL RULES:
+1. If query mentions "use this model", "apply existing", "current model" → ALWAYS classify as "no_skip"
+2. Only classify as skip patterns if user explicitly uses words like "skip", "bypass", "go straight to"
+3. Model application/usage queries are NOT skip patterns, they are normal workflow ("no_skip")"""
             elif use_case == "session_continuation":
                 system_prompt = """You are a session flow classifier. Determine if the user wants to continue their current task or start something new."""
             elif use_case == "educational_queries":
-                system_prompt = """You are an intent classifier. Determine if the user wants to learn about something or take an action.
+                system_prompt = """You are an educational vs action intent classifier. Your job is to distinguish between learning requests and action requests.
 
-Key distinctions:
-- "educational": Questions starting with "what is", "how does", "explain", "tell me about", asking for information/understanding
-- "action": Commands to DO something - "build", "train", "create", "run", "execute"
+CRITICAL DISTINCTION:
 
-Focus on whether they're asking for knowledge vs requesting action."""
+"educational" - User wants to LEARN or GET INFORMATION about something:
+- Questions: "what is", "how does", "explain", "tell me about", "what are"
+- Learning: "what are different methods", "what are various techniques", "types of"
+- Information seeking: "describe", "define", "help me understand"
+- Examples: "what is random forest?", "explain decision trees", "what are different preprocessing methods?"
+
+"action" - User wants to DO something or PERFORM a task:
+- Commands: "build", "train", "create", "run", "execute", "apply", "use"
+- Task execution: "implement", "perform", "generate", "develop"
+- Examples: "build a model", "train a classifier", "apply preprocessing"
+
+CRITICAL RULE: If the query asks "what are different [methods/techniques/types]" → ALWAYS classify as "educational"
+The word "different" + methods/techniques = learning request, NOT action request."""
             else:
                 system_prompt = """You are a pattern classifier. Analyze the user query and classify it according to the provided patterns."""
             
@@ -561,6 +584,10 @@ Respond with ONLY the pattern name that best matches the query. If none match we
                 score -= 8  # Strong penalty for action when educational language detected
             elif pattern_name == "educational" and any(edu in query_lower for edu in ["different methods", "different techniques", "types of", "kinds of", "what are different", "various methods", "various techniques"]):
                 score += 8  # Strong bonus for educational when asking about methods/techniques
+            elif pattern_name == "use_existing" and any(operation in query_lower for operation in ["create", "build", "generate"]):
+                # For model operations, assume use_existing unless explicitly "new"
+                if "new" not in query_lower and any(context in query_lower for context in ["rank order", "segments", "deciles", "buckets", "table"]):
+                    score += 15  # Very strong bonus for model operations without "new"
                 
             pattern_scores[pattern_name] = score
             

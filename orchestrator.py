@@ -597,7 +597,8 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             "this classifier", "existing classifier", "current classifier",
             "this predictor", "existing predictor", "current predictor",
             "saved model", "built model", "previous model", 
-            "apply this", "use this", "apply the model", "apply current model"
+            "apply this", "use this", "apply the model", "apply current model",
+            "apply this model to", "apply previous model", "apply this predictor"
         ]
         
         has_existing_model_ref = any(ref in query.lower() for ref in existing_model_indicators)
