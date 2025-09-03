@@ -1319,8 +1319,8 @@ def model_building_agent(state: AgentState) -> AgentState:
                 return state
             except Exception as e:
                 print(f"🔥 Error generating conversational response: {e}")
-                # Fallback if LLM fails
-                state["response"] = "👋 Hello! How can I help you today?"
+                # Show error instead of hiding it
+                state["response"] = f"❌ Error generating response: {str(e)}"
                 return state
         else:
             # For model-specific requests, ask for data
@@ -1528,11 +1528,8 @@ Then you can use it for predictions, visualizations, and analysis."""
             return state
         except Exception as e:
             print(f"🔥 Error generating conversational response: {e}")
-            # Fallback if LLM fails
-            if data is not None:
-                state["response"] = f"Hello! I see you have a dataset with {data.shape[0]:,} rows and {data.shape[1]} columns. What would you like to do with it?"
-            else:
-                state["response"] = "Hello! How can I help you today?"
+            # Show error instead of hiding it
+            state["response"] = f"❌ Error generating conversational response: {str(e)}"
             return state
     
     elif routing_decision == "execute_code":
@@ -1774,7 +1771,8 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         elif isinstance(result, str) and ("error" in result.lower() or "failed" in result.lower()):
             state["response"] = f"❌ Code execution failed: {result}"
         else:
-            state["response"] = "✅ Model operation completed successfully!"
+            # Format detailed response with metrics
+            state["response"] = format_model_response(result, routing_decision, query)
         
         # Update model state if new model was built
         print(f"🔍 MODEL STATE TRACKING:")
@@ -2235,6 +2233,135 @@ def create_agent_graph() -> StateGraph:
     
     return workflow.compile()
 
+def format_model_response(result: Dict, routing_decision: str, query: str) -> str:
+    """Format detailed response with model metrics for Slack display"""
+    try:
+        if not isinstance(result, dict):
+            return "✅ Model operation completed successfully!"
+        
+        # Check if we have model metrics (classification or regression)
+        if routing_decision == "build_new_model" and any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score', 'r2_score', 'mean_squared_error', 'mean_absolute_error']):
+            # Determine model type and problem type
+            model_type = "Model"
+            model_emoji = "🤖"
+            if "RandomForest" in str(type(result.get('model', ''))):
+                model_type = "Random Forest"
+                model_emoji = "🌳"
+            elif "DecisionTree" in str(type(result.get('model', ''))):
+                model_type = "Decision Tree"
+                model_emoji = "🌲"
+            elif "LGBM" in str(type(result.get('model', ''))):
+                model_type = "LightGBM"
+                model_emoji = "🚀"
+            elif "XGB" in str(type(result.get('model', ''))):
+                model_type = "XGBoost"
+                model_emoji = "⚡"
+            elif "LinearRegression" in str(type(result.get('model', ''))):
+                model_type = "Linear Regression"
+                model_emoji = "📈"
+            elif "Ridge" in str(type(result.get('model', ''))):
+                model_type = "Ridge Regression"
+                model_emoji = "📈"
+            elif "Lasso" in str(type(result.get('model', ''))):
+                model_type = "Lasso Regression"
+                model_emoji = "📈"
+            elif "ElasticNet" in str(type(result.get('model', ''))):
+                model_type = "ElasticNet Regression"
+                model_emoji = "📈"
+            elif "RandomForestRegressor" in str(type(result.get('model', ''))):
+                model_type = "Random Forest Regressor"
+                model_emoji = "🌳"
+            elif "DecisionTreeRegressor" in str(type(result.get('model', ''))):
+                model_type = "Decision Tree Regressor"
+                model_emoji = "🌲"
+            elif "GradientBoosting" in str(type(result.get('model', ''))):
+                model_type = "Gradient Boosting Regressor"
+                model_emoji = "🚀"
+            elif "SVR" in str(type(result.get('model', ''))):
+                model_type = "Support Vector Regressor"
+                model_emoji = "⚙️"
+            
+            # Check if it's classification or regression
+            is_classification = any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score', 'roc_auc'])
+            is_regression = any(key in result for key in ['r2_score', 'mean_squared_error', 'mean_absolute_error'])
+            
+            # Format header with model name
+            response_parts = [f"✅ **{model_emoji} {model_type} Model Training Completed Successfully!**\n"]
+            
+            if is_classification:
+                response_parts.append(f"📊 **Classification Performance:**")
+            elif is_regression:
+                response_parts.append(f"📊 **Regression Performance:**")
+            else:
+                response_parts.append(f"📊 **{model_emoji} {model_type} Model Performance:**")
+            
+            # Add classification metrics
+            if 'accuracy' in result:
+                response_parts.append(f"• **Accuracy:** {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
+            if 'precision' in result:
+                response_parts.append(f"• **Precision:** {result['precision']:.4f}")
+            if 'recall' in result:
+                response_parts.append(f"• **Recall:** {result['recall']:.4f}")
+            if 'f1_score' in result:
+                response_parts.append(f"• **F1 Score:** {result['f1_score']:.4f}")
+            if 'roc_auc' in result:
+                response_parts.append(f"• **ROC AUC:** {result['roc_auc']:.4f}")
+            if 'specificity' in result:
+                response_parts.append(f"• **Specificity:** {result['specificity']:.4f}")
+            
+            # Add regression metrics
+            if 'r2_score' in result:
+                response_parts.append(f"• **R² Score:** {result['r2_score']:.4f} ({result['r2_score']*100:.2f}% variance explained)")
+            if 'mean_absolute_error' in result:
+                response_parts.append(f"• **Mean Absolute Error (MAE):** {result['mean_absolute_error']:.4f}")
+            if 'mean_squared_error' in result:
+                response_parts.append(f"• **Mean Squared Error (MSE):** {result['mean_squared_error']:.4f}")
+            if 'root_mean_squared_error' in result:
+                response_parts.append(f"• **Root Mean Squared Error (RMSE):** {result['root_mean_squared_error']:.4f}")
+            elif 'mean_squared_error' in result:
+                # Calculate RMSE if not provided
+                import math
+                rmse = math.sqrt(result['mean_squared_error'])
+                response_parts.append(f"• **Root Mean Squared Error (RMSE):** {rmse:.4f}")
+            if 'mean_absolute_percentage_error' in result:
+                response_parts.append(f"• **Mean Absolute Percentage Error (MAPE):** {result['mean_absolute_percentage_error']:.4f}%")
+            
+            # Add confusion matrix if available
+            if 'confusion_matrix' in result:
+                cm = result['confusion_matrix']
+                if isinstance(cm, list) and len(cm) == 2 and len(cm[0]) == 2:
+                    tn, fp = cm[0]
+                    fn, tp = cm[1]
+                    response_parts.append(f"\n📋 **Confusion Matrix:**")
+                    response_parts.append(f"```")
+                    response_parts.append(f"         Predicted")
+                    response_parts.append(f"Actual   0     1")
+                    response_parts.append(f"   0   {tn:4}  {fp:4}")
+                    response_parts.append(f"   1   {fn:4}  {tp:4}")
+                    response_parts.append(f"```")
+            
+            # Add model save information
+            if 'model_path' in result and result['model_path']:
+                response_parts.append(f"\n💾 **Model saved:** `{result['model_path'].split('/')[-1]}`")
+            
+            response_parts.append(f"\n🎯 You can now use this model for predictions, visualizations, or further analysis!")
+            
+            return "\n".join(response_parts)
+        
+        elif routing_decision == "use_existing_model":
+            return "✅ **Existing Model Operation Completed!**\n\n🎯 Your existing model has been used successfully for the requested operation."
+        
+        elif routing_decision == "execute_code":
+            return "✅ **Code Execution Completed!**\n\n📊 Your custom analysis has been executed successfully. Check the results above."
+        
+        else:
+            # Generic success for other cases
+            return "✅ Model operation completed successfully!"
+            
+    except Exception as e:
+        print(f"⚠️ Error formatting model response: {e}")
+        return f"❌ Error formatting response: {str(e)}"
+
 # =============================================================================
 # MAIN INTERFACE
 # =============================================================================
@@ -2270,10 +2397,7 @@ class LangGraphModelAgent:
             print(f"📁 Created thread directory: {thread_dir}")
         return thread_dir
     
-    def _get_conversation_file(self, user_id: str) -> str:
-        """Get conversation history file path for specific thread"""
-        thread_dir = self._get_user_thread_dir(user_id)
-        return os.path.join(thread_dir, "conversation_history.json")
+    # Conversation history is now handled by the main pipeline - methods removed
     
     def _get_artifacts_dir(self, user_id: str) -> str:
         """Get artifacts directory for specific thread"""
@@ -2351,50 +2475,10 @@ class LangGraphModelAgent:
         if len(datetime_cols) > 0:
             print(f"   📅 DateTime features: {len(datetime_cols)}")
         print(f"   🎯 Target column: {'target' if 'target' in data.columns else 'Not found'}")
-        self._save_conversation_history(user_id)
         self._save_session_data(user_id)  # Also save the DataFrame data
     
-    def _load_conversation_history(self, user_id: str):
-        """Load conversation history from disk for specific thread"""
-        try:
-            conversation_file = self._get_conversation_file(user_id)
-            if os.path.exists(conversation_file):
-                with open(conversation_file, 'r') as f:
-                    saved_data = json.load(f)
-                    if user_id not in self.user_states:
-                        self.user_states[user_id] = {}
-                    self.user_states[user_id]["messages"] = saved_data.get("messages", [])
-                    user, thread_ts = self._get_thread_id(user_id)
-                    print(f"📚 Loaded {len(self.user_states[user_id]['messages'])} conversation messages for user {user}, thread {thread_ts}")
-            else:
-                # Initialize empty conversation for new thread
-                if user_id not in self.user_states:
-                    self.user_states[user_id] = {}
-                self.user_states[user_id]["messages"] = []
-                user, thread_ts = self._get_thread_id(user_id)
-                print(f"📝 New conversation started for user {user}, thread {thread_ts}")
-            
-            # Try to restore DataFrame data for this thread
-            if user_id in self.user_states:
-                restored_data = self._load_session_data(user_id)
-                if not restored_data.empty:
-                    self.user_states[user_id]["data"] = restored_data
-                    self.user_states[user_id]["has_existing_model"] = False
-                    self.user_states[user_id]["model_path"] = None
-        except Exception as e:
-            print(f"⚠️ Failed to load conversation history for {user_id}: {e}")
-    
-    def _save_conversation_history(self, user_id: str):
-        """Save conversation history to disk for specific thread"""
-        try:
-            conversation_file = self._get_conversation_file(user_id)
-            if user_id in self.user_states and "messages" in self.user_states[user_id]:
-                save_data = {"messages": self.user_states[user_id]["messages"]}
-                with open(conversation_file, 'w') as f:
-                    json.dump(save_data, f, indent=2)
-        except Exception as e:
-            print(f"⚠️ Failed to save conversation history for {user_id}: {e}")
-    
+        # Conversation history methods removed - handled by main pipeline
+
     def process_query(self, query: str, user_id: str = "default_user", progress_callback=None) -> Dict[str, Any]:
         """Process a user query through the agent graph with optional progress updates"""
         
@@ -2405,7 +2489,6 @@ class LangGraphModelAgent:
         # Initialize user state if not present and load conversation history
         if user_id not in self.user_states:
             self.user_states[user_id] = {}
-            self._load_conversation_history(user_id)
         if "messages" not in self.user_states[user_id]:
             self.user_states[user_id]["messages"] = []
         
@@ -2584,4 +2667,4 @@ if __name__ == "__main__":
         
         print(f"Response: {result['response']}")
         print(f"Intent: {result['intent']}")
-        print(f"Routing: {result['routing_decision']}") 
+        print(f"Routing: {result['routing_decision']}")

@@ -380,11 +380,20 @@ class ModelBuildingAgentWrapper:
             # The working agent will handle all the model building process
             # including LLM interactions, Slack updates, etc.
             
+            # Create progress callback function
+            def progress_callback(message: str, stage: str = "Processing"):
+                try:
+                    from toolbox import progress_tracker
+                    if progress_tracker:
+                        progress_tracker.update(state, f"{stage}: {message}")
+                except Exception as e:
+                    print(f"⚠️ Progress callback error: {e}")
+            
             # Call the working agent's process_query method
             result = self.agent.process_query(
                 query=state.user_query,
                 user_id=state.chat_session,
-                progress_callback=None  # Could add progress callback here
+                progress_callback=progress_callback
             )
             
             # Extract results
