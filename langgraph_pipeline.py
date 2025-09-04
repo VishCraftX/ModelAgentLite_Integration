@@ -1002,9 +1002,21 @@ class MultiAgentMLPipeline:
             
             # Handle conflicts: if both detected, prioritize based on context
             if is_new_request and is_continuation:
+                # Special handling for feature selection queries that should be continuations
+                fs_query_patterns = [
+                    'what are top', 'top features by', 'features by', 'show me features',
+                    'top 10 features', 'top 20 features', 'best features', 'important features',
+                    'what are the top', 'which features', 'list features', 'display features'
+                ]
+                
+                # If this is a feature selection query asking about results, treat as continuation
+                if (state.interactive_session and 
+                    state.interactive_session.get('agent_type') == 'feature_selection' and
+                    any(pattern in query_lower for pattern in fs_query_patterns)):
+                    print(f"🔄 Feature selection query detected - treating as continuation despite new request words")
+                    is_new_request = False
                 # If query starts with new request pattern, treat as new request
-                query_start = query_lower[:20]  # First 20 characters
-                if any(pattern in query_start for pattern in new_request_patterns):
+                elif any(pattern in query_lower[:20] for pattern in new_request_patterns):
                     print(f"🆕 New ML request detected (despite continuation words) - clearing session")
                     state.interactive_session = None
                 else:
