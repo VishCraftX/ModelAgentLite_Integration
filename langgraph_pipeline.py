@@ -1022,7 +1022,9 @@ class MultiAgentMLPipeline:
                 else:
                     print(f"🔄 Treating as continuation command despite new request words")
                     is_new_request = False
-            elif is_new_request:
+            
+            # Now handle the routing based on the final decision
+            if is_new_request:
                 print(f"🆕 New ML request detected - clearing interactive session and routing through orchestrator")
                 state.interactive_session = None
             elif is_continuation or is_target_specification:
