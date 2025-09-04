@@ -2789,6 +2789,9 @@ class FeatureSelectionAgentWrapper:
             elif action_intent == 'datetime':
                 mapped_command = f'DATETIME: {command}'
                 print(f"🔄 [FS] Mapping 'datetime' → '{mapped_command}' command (BGE intent)")
+            elif action_intent == 'suggestion':
+                mapped_command = f'SUGGESTION: {command}'
+                print(f"🔄 [FS] Mapping 'suggestion' → '{mapped_command}' command (BGE intent)")
             else:
                 mapped_command = command  # Fallback
                 print(f"🔄 [FS] Mapping '{action_intent}' → '{command}' command (fallback)")
@@ -2842,6 +2845,55 @@ class FeatureSelectionAgentWrapper:
                 print(f"📅 DEBUG: BGE classified datetime: '{actual_command}'")
                 # Route to datetime handler - use the correct method name
                 self.bot.handle_datetime_setup(session, actual_command, mock_say)
+                
+            elif mapped_command.startswith('SUGGESTION: '):
+                actual_command = mapped_command[12:]  # Remove 'SUGGESTION: ' prefix
+                print("💡 Processing BGE-classified SUGGESTION command for feature selection...")
+                print(f"💡 DEBUG: BGE classified suggestion: '{actual_command}'")
+                
+                # Custom suggestion handler with LLM
+                try:
+                    from feature_selection_agent_impl import LLMManager
+                    llm = LLMManager.get_llm(session.model_name)
+                    
+                    # Get current session context
+                    current_features = len(session.current_features)
+                    completed_analyses = [step.type for step in session.analysis_chain]
+                    total_original = len(session.original_df.columns) if hasattr(session, 'original_df') else current_features
+                    
+                    # Create LLM prompt for suggestions
+                    prompt = f"""You are a data science advisor. Based on the current feature selection progress, provide 2-3 concise bullet point suggestions for next steps.
+
+CURRENT STATE:
+• Features remaining: {current_features}
+• Original features: {total_original}
+• Completed analyses: {', '.join(completed_analyses) if completed_analyses else 'None yet'}
+• Target column: {session.target_column}
+
+USER REQUEST: "{actual_command}"
+
+Provide exactly 2-3 bullet points with:
+• Specific analysis recommendations (IV, Correlation, VIF, SHAP, etc.)
+• Practical thresholds/parameters
+• Brief rationale for each suggestion
+
+Format as:
+• **Analysis Name** - Brief description with suggested parameters
+• **Analysis Name** - Brief description with suggested parameters  
+• **Analysis Name** - Brief description with suggested parameters
+
+Keep it concise and actionable."""
+
+                    from langchain_core.messages import HumanMessage
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    
+                    # Format and send suggestion
+                    suggestion_message = f"💡 **Data Science Suggestions:**\n\n{response.content}\n\n💬 Just tell me which analysis you'd like to run!"
+                    mock_say(suggestion_message)
+                    
+                except Exception as e:
+                    print(f"❌ Suggestion generation failed: {e}")
+                    mock_say("💡 I'd recommend starting with IV analysis to evaluate feature importance, then correlation analysis to remove redundant features!")
                 
             else:
                 # Fallback to regular processing

@@ -180,11 +180,7 @@ Based on this request, determine the user's intent and extract relevant paramete
 3. **CUSTOM_ANALYSIS** - They want VIF filtering, PCA, LASSO, custom code analysis, or advanced techniques  
 4. **QUERY** - They're asking for general information about existing data (like feature counts, current state, etc.)
 5. **GENERAL_QUERY** - They're asking theoretical questions about feature selection concepts, bot capabilities, or general ML topics (no data needed)
-6. **SUGGESTION** - They want recommendations/suggestions about what analysis to run next based on current progress (not executing analysis)
-7. **STATUS_SUMMARY** - They want to see current progress, pipeline state, or analysis summary WITHOUT finishing
-8. **PROCEED** - They explicitly want to FINISH/COMPLETE the entire analysis and get final waterfall summary 
-9. **REVERT** - They want to go back to initial/original state (after cleaning)
-10. **SET_DATETIME** - They're providing datetime column info for CSI analysis
+6. **REVERT** - They want to go back to initial/original state (after cleaning)
 
 IMPORTANT DISTINCTION:
 - "run correlation analysis" or "filter highly correlated features" = STANDARD_ANALYSIS (removes correlated feature pairs)
@@ -197,8 +193,6 @@ IMPORTANT DISTINCTION:
 - "train decision tree and show importance" or "feature importance from model" = QUERY (computational analysis)
 - "keep only top 10 SHAP features" or "filter with SHAP > 0.01" = CUSTOM_ANALYSIS (custom filtering)
 - "how many features remain" or "current state" = QUERY (general info)
-- "what analysis should I run next" or "suggest next steps" = SUGGESTION (asks for recommendations, doesn't execute)
-- "what do you recommend" or "what's the best next analysis" = SUGGESTION (asks for guidance, doesn't execute)
 
 CORRELATION ANALYSIS TYPES:
 - "correlation analysis" = finds correlated FEATURE PAIRS for removal (STANDARD_ANALYSIS)
@@ -208,12 +202,7 @@ CORRELATION ANALYSIS TYPES:
 
 CLASSIFICATION EXAMPLES:
 
-**STATUS_SUMMARY** examples:
-- "current summary" → STATUS_SUMMARY
-- "show me pipeline summary" → STATUS_SUMMARY  
-- "what analyses have I done" → STATUS_SUMMARY
-- "current state" → STATUS_SUMMARY
-- "pipeline status" → STATUS_SUMMARY
+
 
 **STANDARD_ANALYSIS_QUERY** examples:
 - "show me top 10 SHAP features" → STANDARD_ANALYSIS_QUERY
@@ -241,20 +230,7 @@ CLASSIFICATION EXAMPLES:
 - "what analyses have been done" → QUERY
 - "current dataset info" → QUERY
 
-**PROCEED** examples:
-- "proceed with final summary" → PROCEED
-- "finish analysis" → PROCEED
-- "complete the analysis" → PROCEED
-- "I'm done, finalize" → PROCEED
-- "okay looks good" → PROCEED
-- "looks good" → PROCEED  
-- "looks great" → PROCEED
-- "that's perfect" → PROCEED
-- "this is fine" → PROCEED
-- "go ahead" → PROCEED
-- "all set" → PROCEED
-- "perfect" → PROCEED
-- "good to go" → PROCEED
+
 
 **STANDARD_ANALYSIS** examples:
 - "run IV analysis" → STANDARD_ANALYSIS
@@ -291,20 +267,11 @@ CLASSIFICATION EXAMPLES:
 - "back to square one" → REVERT
 - "return to initial" → REVERT
 
-**SUGGESTION** examples:
-- "what analysis should I run next" → SUGGESTION
-- "suggest next steps" → SUGGESTION
-- "what do you recommend" → SUGGESTION
-- "what's the best next analysis" → SUGGESTION
-- "what should I do next" → SUGGESTION
-- "guide me to next step" → SUGGESTION
-- "recommendations for analysis" → SUGGESTION
-- "advise me on next analysis" → SUGGESTION
+
 
 CRITICAL DISTINCTIONS:
-- "summary" requests = STATUS_SUMMARY (to check progress), NOT PROCEED (to finish)
-- Positive acknowledgments like "looks good", "perfect", "okay" = PROCEED (user is satisfied and wants to finish)
-- Explicit finish requests like "proceed", "done", "finalize" = PROCEED (user wants to end)
+- Analysis requests should specify the exact analysis type and any thresholds
+- Query requests should be classified based on whether they need code execution or not
 
 For analysis requests, carefully extract:
 - The analysis type (iv, correlation, csi, vif, pca, lasso)
@@ -1336,21 +1303,9 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
         elif intent == "GENERAL_QUERY":
             logger.info(f"💬 ROUTING TO GENERAL QUERY | User: {session.user_id} | Query: {intent_data.get('query_details', 'unknown')}")
             self.handle_general_query(session, intent_data, say)
-        elif intent == "SUGGESTION":
-            logger.info(f"💡 ROUTING TO SUGGESTION | User: {session.user_id} | Query: {intent_data.get('query_details', 'unknown')}")
-            self.handle_suggestion_request(session, intent_data, say)
-        elif intent == "STATUS_SUMMARY":
-            logger.info(f"📊 ROUTING TO STATUS SUMMARY | User: {session.user_id}")
-            MenuGenerator.show_crisp_summary(session, say)
         elif intent == "REVERT":
             logger.info(f"↩️ ROUTING TO REVERT | User: {session.user_id}")
             self.handle_revert(session, say)
-        elif intent == "PROCEED":
-            logger.info(f"✅ ROUTING TO FINAL SUMMARY | User: {session.user_id}")
-            self.generate_final_summary(session, say)
-        elif intent == "SET_DATETIME":
-            logger.info(f"📅 ROUTING TO DATETIME SETUP | User: {session.user_id}")
-            self.handle_datetime_setup(session, text, say)
         else:
             logger.warning(f"⚠️ UNKNOWN INTENT | User: {session.user_id} | Intent: {intent}")
             # Fallback
