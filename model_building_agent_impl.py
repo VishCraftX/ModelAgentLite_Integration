@@ -789,8 +789,9 @@ def prompt_understanding_agent(state: AgentState) -> AgentState:
     
     classification_prompt = f"""You are an intent classifier for a machine learning model building agent. Your job is to classify user queries into exactly one of these categories:
 
-1. "new_model" - User wants to build/create/train a NEW model from scratch
-2. "use_existing" - User wants to use/modify/visualize an EXISTING model that was previously built
+1. "new_model" - User wants to build/create/train a SINGLE NEW model from scratch
+2. "multi_model" - User wants to build/train/compare MULTIPLE models and find the best one
+3. "use_existing" - User wants to use/modify/visualize an EXISTING model that was previously built
 
 {context_info}
 
@@ -809,22 +810,33 @@ HIGHEST PRIORITY - "use_existing" if query contains:
 - "build segments", "build deciles", "build buckets", "build rankings" (these use existing models)
 - "rank ordering", "score", "predict", "classify" with existing model context
 
-DEFAULT PRIORITY - "new_model" for all other model-related queries:
+SECOND PRIORITY - "multi_model" if query contains:
+- "build multiple models", "train several models", "create multiple", "build three models", "build 3 models"
+- "compare models", "model comparison", "best model", "choose best", "pick best", "select best"
+- Multiple algorithm names: "lgbm random forest", "xgboost random forest", "decision tree lgbm", etc.
+- "all models", "different models", "various models", "several algorithms"
+- "comparison plot", "compare performance", "roc curves", "model metrics"
+- "benchmark models", "evaluate models", "test multiple", "try different"
+
+DEFAULT PRIORITY - "new_model" for single model requests:
 - Context shows recent data upload/mention AND current query says "use this"
 - Query contains "build [model_type]", "create [model_type]", "train [model_type]" where model_type is: model, classifier, regressor, tree, forest, lgbm, xgboost
 - "use this data", "use this file", "with this data"
-- Any other model building, training, or creation requests
+- Any other single model building, training, or creation requests
 
 EXAMPLES:
 - Context: "uploaded data" + Query: "use this" → new_model (use this data to build model)
 - Context: "built lgbm model" + Query: "use this model for segments" → use_existing
-- "build lgbm model" → new_model (creating new model)
+- "build lgbm model" → new_model (creating single new model)
 - "show plot for the model" → use_existing (visualizing existing model)
-- "train random forest" → new_model (creating new model)
+- "train random forest" → new_model (creating single new model)
+- "build three models lgbm random forest xgboost" → multi_model (multiple models)
+- "compare models and pick the best" → multi_model (model comparison)
+- "build lgbm and random forest and compare" → multi_model (multiple + comparison)
 
 USER QUERY: "{query}"
 
-Respond with ONLY one word: new_model or use_existing"""
+Respond with ONLY one word: new_model, multi_model, or use_existing"""
 
     try:
         response = ollama.chat(
@@ -836,7 +848,7 @@ Respond with ONLY one word: new_model or use_existing"""
         intent = response["message"]["content"].strip().lower()
         
         # Validate response
-        if intent not in ["new_model", "use_existing"]:
+        if intent not in ["new_model", "multi_model", "use_existing"]:
             # Fallback classification
             intent = fallback_classify_intent(query)
         
@@ -871,7 +883,8 @@ def semantic_classify_model_intent(query: str) -> str:
         # Define model-specific intent definitions
         model_intent_definitions = {
             "use_existing": "Use existing model, apply current model, utilize trained model, work with built model, use this model, apply this classifier, use previous model, existing model analysis, current model evaluation, built model application, trained model usage, model reuse, apply saved model, show plot, visualize tree, display tree, build segments, build deciles, build buckets, build rankings, rank ordering, score, predict, classify, create rank order table, create segments, create buckets, generate rankings, generate segments, generate buckets, generate rank order, create deciles, build rank order, create ranking table, generate decile table, score data, predict outcomes, classify records, apply model for scoring, use model for ranking, apply for segmentation",
-            "new_model": "Train new model, build new classifier, create new predictor, develop new algorithm, train fresh model, build from scratch, new model training, create classifier, develop predictor, train algorithm, build new, create new, fresh training, new machine learning model, model development, algorithm training, train fresh algorithm, develop fresh model, build brand new model, create entirely new model"
+            "multi_model": "Build multiple models, train several models, create multiple models, build three models, build 3 models, compare models, model comparison, best model, choose best model, pick best model, select best model, multiple algorithms, lgbm random forest xgboost, decision tree lgbm, all models, different models, various models, several algorithms, comparison plot, compare performance, roc curves, model metrics, benchmark models, evaluate models, test multiple models, try different models, multi model training, ensemble comparison, algorithm comparison, model benchmarking, performance comparison, multiple classifier training, various algorithm testing, comprehensive model evaluation, model selection process, algorithm evaluation, cross model comparison",
+            "new_model": "Train single new model, build single new classifier, create single new predictor, develop single new algorithm, train fresh model, build from scratch, new model training, create classifier, develop predictor, train algorithm, build new, create new, fresh training, single machine learning model, single model development, single algorithm training, train fresh algorithm, develop fresh model, build brand new model, create entirely new model, individual model training, single predictor development"
         }
         
         # Use universal pattern classifier from toolbox
@@ -899,11 +912,12 @@ def llm_classify_model_intent(query: str) -> str:
         prompt = f"""
         Classify this query into one of these model intents:
         - "use_existing": User wants to use/apply an existing trained model
-        - "new_model": User wants to train/build a new model
+        - "multi_model": User wants to build/train/compare multiple models
+        - "new_model": User wants to train/build a single new model
         
         Query: "{query}"
         
-        Respond with ONLY the intent name (use_existing or new_model).
+        Respond with ONLY the intent name (use_existing, multi_model, or new_model).
         """
         
         # Try Ollama first
@@ -925,6 +939,8 @@ def llm_classify_model_intent(query: str) -> str:
                 # Validate and clean response
                 if "use_existing" in intent:
                     return "use_existing"
+                elif "multi_model" in intent:
+                    return "multi_model"
                 elif "new_model" in intent:
                     return "new_model"
                     
@@ -959,7 +975,7 @@ def llm_classify_model_intent(query: str) -> str:
     return None
 
 def fallback_classify_intent_keywords(query: str) -> str:
-    """Keyword fallback classification logic - only handles model-specific intents"""
+    """Keyword fallback classification logic - handles all model-specific intents"""
     query_lower = query.lower()
     
     # Use existing patterns for existing models
@@ -972,10 +988,22 @@ def fallback_classify_intent_keywords(query: str) -> str:
         "rank ordering", "score", "predict", "classify"
     ]
     
+    # Multi-model patterns
+    multi_model_patterns = [
+        "build multiple", "train several", "create multiple", "build three", "build 3",
+        "compare models", "model comparison", "best model", "choose best", "pick best", "select best",
+        "lgbm random forest", "xgboost random forest", "decision tree lgbm", "multiple algorithms",
+        "all models", "different models", "various models", "several algorithms",
+        "comparison plot", "compare performance", "roc curves", "model metrics",
+        "benchmark models", "evaluate models", "test multiple", "try different"
+    ]
+    
     if any(pattern in query_lower for pattern in use_existing_patterns):
         return "use_existing"
+    elif any(pattern in query_lower for pattern in multi_model_patterns):
+        return "multi_model"
     
-    # Default to new_model for all other cases since we're in ModelBuildingAgent
+    # Default to new_model for single model cases
     return "new_model"
 
 # Keep the original function name for backward compatibility
@@ -1196,6 +1224,10 @@ def controller_agent(state: AgentState) -> AgentState:
         if has_existing_model:
             print("ℹ️ Building new model (existing model will be replaced)")
     
+    elif intent == "multi_model":
+        routing_decision = "build_multi_model"
+        print(f"🔄 Multi-model comparison requested - will build and compare multiple models")
+    
     elif intent == "use_existing":
         if has_existing_model:
             routing_decision = "use_existing_model"
@@ -1244,6 +1276,8 @@ def model_building_agent(state: AgentState) -> AgentState:
     if progress_callback:
         if routing_decision == "build_new_model":
             progress_callback("Generating code to build your new model...", "Code Generation")
+        elif routing_decision == "build_multi_model":
+            progress_callback("Preparing multi-model comparison workflow...", "Multi-Model Setup")
         elif routing_decision == "use_existing_model":
             progress_callback("Generating code to use your existing model...", "Code Generation")
         elif routing_decision == "execute_code":
@@ -1620,6 +1654,305 @@ else:
         except Exception as e:
             print(f"💥 Code execution failed: {e}")
             state["response"] = f"❌ Code execution failed: {str(e)}"
+            return state
+    
+    elif routing_decision == "build_multi_model":
+        # NEW: Multi-model comparison workflow
+        print("🔄 Starting multi-model comparison workflow...")
+        
+        if progress_callback:
+            progress_callback("Building multiple models for comparison...", "Multi-Model Training")
+        
+        # Check if data is available for model building
+        if data is None:
+            state["response"] = """📊 I need data to work with! Please upload a data file first.
+
+**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+
+Once you upload your data, I can build multiple models and compare them! 🎯"""
+            return state
+        
+        # Generate multi-model comparison code
+        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
+
+USER REQUEST: {query}
+
+CRITICAL REQUIREMENTS:
+1. Build multiple ML models based on USER'S SPECIFIC REQUEST (minimum 2 models)
+2. Train all models with identical train/test splits 
+3. Generate comprehensive metrics for each model
+4. Create comparison visualizations (ROC curves, metric comparison table)
+5. Automatically select the best model based on USER-SPECIFIED or default metric
+6. Return detailed results for all models + best model selection
+
+DYNAMIC USER INPUT PARSING:
+- MODELS: Extract specific model names from user query. If none specified, use: RandomForest, DecisionTree, LightGBM
+- TEST SIZE: Look for "test", "split", "validation" mentions. Default: 0.2 (20%)
+- BEST MODEL METRIC: Look for "best based on", "select by", "choose using". Default: accuracy for classification, r2 for regression
+- Handle ANY model names user mentions (LogisticRegression, SVM, XGBoost, Neural Network, etc.)
+
+DATA REQUIREMENTS:
+- Use 'sample_data' DataFrame (already loaded)
+- Target column: 'target'
+- Assume data is preprocessed (no scalers/encoders needed)
+- Use train_test_split with user-specified test_size or default 0.2, random_state=42
+
+ROBUST LIBRARY HANDLING:
+1. Import libraries with try-except blocks
+2. If a model library is missing, skip that model with warning message
+3. Continue with available models (minimum 2 required)
+4. Example:
+```python
+models = {{}}
+try:
+    from sklearn.ensemble import RandomForestClassifier
+    models['Random Forest'] = RandomForestClassifier()
+except ImportError:
+    print("Warning: sklearn RandomForest not available")
+
+try:
+    from lightgbm import LGBMClassifier
+    models['LightGBM'] = LGBMClassifier()
+except ImportError:
+    print("Warning: LightGBM not available")
+```
+
+DYNAMIC MODEL DICTIONARY:
+- Build models dictionary based on user's specific request
+- Handle model aliases (e.g., "rf" = RandomForest, "lgbm" = LightGBM, "xgb" = XGBoost)
+- If user says "3 models" or "5 models", include that many
+- If user lists specific models, use exactly those models
+
+FLEXIBLE BEST MODEL SELECTION:
+- Parse user's preference from query for selection criteria
+- Common metrics: accuracy, precision, recall, f1, roc_auc, r2, mse, mae
+- Default: accuracy (classification) or r2 (regression)
+
+MANDATORY CODE STRUCTURE:
+1. Import libraries with error handling
+2. Parse user requirements (models, test_size, metric)
+3. Data splitting (X/y, train/test with dynamic test_size)
+4. Build dynamic models dictionary based on user input
+5. Train all available models and collect metrics
+6. Create comparison visualizations
+7. Select best model based on user-specified or default metric
+8. Save all artifacts (models + plots)
+
+RESULT DICTIONARY REQUIREMENTS:
+result = {{
+    'user_config': {{
+        'models_requested': ['model1', 'model2', ...],
+        'test_size': float,
+        'selection_metric': 'metric_name',
+        'total_models_built': int
+    }},
+    'models': {{model_name: {{
+        'model': model_object,
+        'model_path': saved_path,
+        'metrics': {{accuracy, precision, recall, f1, roc_auc, mse, mae, r2, etc.}},
+        'predictions': y_pred,
+        'probabilities': y_proba_or_none,
+        'training_time': float,
+        'model_type': 'classification_or_regression'
+    }}}},
+    'best_model': {{
+        'name': best_model_name,
+        'model': best_model_object, 
+        'model_path': best_model_path,
+        'metrics': best_model_metrics,
+        'selection_criteria': 'accuracy: 0.XX (user requested)' or 'roc_auc: 0.XX (default)',
+        'improvement_over_worst': 'X% better than worst model'
+    }},
+    'comparison_plots': {{
+        'roc_curves': 'path/to/roc_comparison.png',
+        'metrics_table': 'path/to/metrics_table.png'
+    }},
+    'model_ranking': [{{
+        'rank': 1,
+        'model_name': 'best_model',
+        'score': float,
+        'metric_used': 'metric_name'
+    }}],
+    'summary': {{
+        'total_models': int,
+        'best_model': 'model_name',
+        'best_score': float,
+        'worst_model': 'model_name', 
+        'worst_score': float,
+        'performance_spread': 'X% difference between best and worst',
+        'recommendation': 'Detailed recommendation text'
+    }},
+    'detailed_comparison': 'Comprehensive textual comparison of all models with strengths/weaknesses'
+}}
+
+ENHANCED RESPONSE FORMATTING:
+- Print detailed model performance table to console
+- Show training time for each model
+- Display model ranking with scores
+- Include recommendation for model selection
+- Show performance improvement percentages
+
+Generate complete, executable Python code that implements this dynamic multi-model comparison system."""
+
+        try:
+            print("🤔 Generating multi-model comparison code...")
+            if progress_callback:
+                progress_callback("Generating multi-model comparison code using AI...", "Code Generation")
+            
+            reply, code = generate_model_code(multi_model_prompt, user_id)
+            
+            if not code.strip():
+                state["response"] = f"❌ Failed to generate multi-model code: {reply}"
+                return state
+            
+            state["code"] = code
+            print(f"📝 MULTI-MODEL CODE - Generated ({len(code)} chars)")
+            
+            # Execute the multi-model comparison code
+            print("⚙️ Executing multi-model comparison...")
+            
+            # Get artifacts directory
+            artifacts_dir = None
+            try:
+                if "_" in user_id:
+                    user, thread_ts = user_id.split("_", 1)
+                    thread_dir = os.path.join("user_data", user, thread_ts)
+                    artifacts_dir = os.path.join(thread_dir, "artifacts")
+                    if not os.path.exists(artifacts_dir):
+                        os.makedirs(artifacts_dir, exist_ok=True)
+            except Exception as e:
+                print(f"⚠️ Failed to create artifacts directory: {e}")
+            
+            if progress_callback:
+                progress_callback("Training multiple models and generating comparisons...", "Multi-Model Execution")
+            
+            result = ExecutionAgent(
+                code, 
+                data, 
+                user_id=user_id,
+                verbose=True,
+                user_query=query,
+                intent=intent,
+                model_states=global_model_states,
+                artifacts_dir=artifacts_dir,
+                progress_callback=progress_callback
+            )
+            
+            # Store results and format comprehensive response
+            state["execution_result"] = result
+            
+            if isinstance(result, dict) and 'models' in result:
+                # Format comprehensive multi-model response
+                response_parts = ["✅ 🎯 Multi-Model Comparison Completed Successfully!\n"]
+                
+                # User configuration
+                user_config = result.get('user_config', {})
+                if user_config:
+                    response_parts.append(f"⚙️ **Configuration:**")
+                    response_parts.append(f"   • Models Requested: {', '.join(user_config.get('models_requested', []))}")
+                    response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
+                    response_parts.append(f"   • Selection Metric: {user_config.get('selection_metric', 'accuracy')}")
+                    response_parts.append(f"   • Models Built: {user_config.get('total_models_built', 0)}\n")
+                
+                # Model performance summary
+                models = result.get('models', {})
+                response_parts.append(f"📊 **Model Performance Summary:**")
+                for model_name, model_data in models.items():
+                    metrics = model_data.get('metrics', {})
+                    training_time = model_data.get('training_time', 0)
+                    model_type = model_data.get('model_type', 'unknown')
+                    
+                    # Show relevant metrics based on problem type
+                    if model_type == 'classification':
+                        acc = metrics.get('accuracy', 0)
+                        auc = metrics.get('roc_auc', 0)
+                        f1 = metrics.get('f1_score', 0)
+                        response_parts.append(f"   🤖 **{model_name}**: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
+                    else:  # regression
+                        r2 = metrics.get('r2_score', 0)
+                        mae = metrics.get('mae', 0)
+                        rmse = metrics.get('rmse', 0)
+                        response_parts.append(f"   🤖 **{model_name}**: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
+                
+                # Model ranking
+                ranking = result.get('model_ranking', [])
+                if ranking and len(ranking) > 1:
+                    response_parts.append(f"\n🏅 **Model Ranking:**")
+                    for rank_info in ranking[:3]:  # Show top 3
+                        rank = rank_info.get('rank', 0)
+                        model_name = rank_info.get('model_name', 'Unknown')
+                        score = rank_info.get('score', 0)
+                        metric = rank_info.get('metric_used', 'score')
+                        response_parts.append(f"   #{rank}. **{model_name}**: {metric.upper()} = {score:.3f}")
+                
+                # Best model details
+                best_model = result.get('best_model', {})
+                if best_model:
+                    response_parts.append(f"\n🏆 **Winner: {best_model.get('name', 'Unknown')}**")
+                    response_parts.append(f"   📈 **Selection:** {best_model.get('selection_criteria', 'Not specified')}")
+                    improvement = best_model.get('improvement_over_worst', '')
+                    if improvement:
+                        response_parts.append(f"   📊 **Performance:** {improvement}")
+                
+                # Summary insights
+                summary_data = result.get('summary', {})
+                if isinstance(summary_data, dict):
+                    response_parts.append(f"\n📋 **Analysis:**")
+                    response_parts.append(f"   • Best: **{summary_data.get('best_model', 'Unknown')}** ({summary_data.get('best_score', 0):.3f})")
+                    response_parts.append(f"   • Worst: **{summary_data.get('worst_model', 'Unknown')}** ({summary_data.get('worst_score', 0):.3f})")
+                    spread = summary_data.get('performance_spread', '')
+                    if spread:
+                        response_parts.append(f"   • Performance Spread: {spread}")
+                    
+                    recommendation = summary_data.get('recommendation', '')
+                    if recommendation:
+                        response_parts.append(f"\n💡 **Recommendation:** {recommendation}")
+                elif isinstance(summary_data, str) and summary_data:
+                    response_parts.append(f"\n📋 **Summary:** {summary_data}")
+                
+                # Visualizations
+                plots = result.get('comparison_plots', {})
+                if plots:
+                    response_parts.append(f"\n📊 **Visualizations Generated:**")
+                    if plots.get('roc_curves'):
+                        response_parts.append(f"   • ROC Curves Comparison Plot")
+                    if plots.get('metrics_table'):
+                        response_parts.append(f"   • Metrics Comparison Table")
+                
+                # Detailed comparison
+                detailed_comparison = result.get('detailed_comparison', '')
+                if detailed_comparison:
+                    response_parts.append(f"\n🔍 **Detailed Analysis:**")
+                    response_parts.append(f"{detailed_comparison}")
+                
+                state["response"] = "\n".join(response_parts)
+                
+                # Handle plot uploads for multi-model comparison
+                if plots:
+                    plot_files = []
+                    for plot_type, plot_path in plots.items():
+                        if plot_path and os.path.exists(plot_path):
+                            plot_files.append({
+                                "path": plot_path, 
+                                "title": f"Multi-Model {plot_type.replace('_', ' ').title()}", 
+                                "type": "comparison_plot"
+                            })
+                    
+                    if plot_files:
+                        state["artifacts"] = state.get("artifacts", {})
+                        state["artifacts"]["files"] = plot_files
+                        result["artifacts"] = {"files": plot_files}
+                        print(f"📊 {len(plot_files)} comparison plots ready for upload")
+            else:
+                state["response"] = f"❌ Multi-model comparison failed: {result if isinstance(result, str) else 'Unexpected result format'}"
+            
+            return state
+            
+        except Exception as e:
+            print(f"💥 Multi-model comparison failed: {e}")
+            import traceback
+            print(f"💥 Full traceback: {traceback.format_exc()}")
+            state["response"] = f"❌ Multi-model comparison failed: {str(e)}"
             return state
         
     else:  # build_new_model
@@ -2197,7 +2530,7 @@ def create_agent_graph() -> StateGraph:
     # From controller -> model_building or END
     def should_use_model_building(state: AgentState) -> str:
         routing_decision = state.get("routing_decision", "")
-        if routing_decision in ["build_new_model", "use_existing_model", "general_response", "no_model_available", "execute_code"]:
+        if routing_decision in ["build_new_model", "build_multi_model", "use_existing_model", "general_response", "no_model_available", "execute_code"]:
             return "model_building"
         else:
             return END
