@@ -192,6 +192,8 @@ IMPORTANT DISTINCTION:
 - "which features correlate most with target" or "correlation scores with target" = QUERY (needs code execution)  
 - "train decision tree and show importance" or "feature importance from model" = QUERY (computational analysis)
 - "keep only top 10 SHAP features" or "filter with SHAP > 0.01" = CUSTOM_ANALYSIS (custom filtering)
+- "what are top 10 features by RFE" or "show me RFE ranking" = QUERY (display results, don't modify data)
+- "keep top 10 RFE features" or "filter with RFE" = CUSTOM_ANALYSIS (modify/filter data)
 - "how many features remain" or "current state" = QUERY (general info)
 
 CORRELATION ANALYSIS TYPES:
@@ -210,6 +212,8 @@ CLASSIFICATION EXAMPLES:
 - "how many features have SHAP > 0.01" → STANDARD_ANALYSIS_QUERY
 - "what are the highest CSI values" → STANDARD_ANALYSIS_QUERY
 - "show me VIF scores" → STANDARD_ANALYSIS_QUERY
+- "top 10 features by IV analysis" → STANDARD_ANALYSIS_QUERY
+- "best features by correlation analysis" → STANDARD_ANALYSIS_QUERY
 
 **QUERY** examples:
 - "top 20 features by correlation with target" → QUERY
@@ -226,6 +230,21 @@ CLASSIFICATION EXAMPLES:
 - "give me top 10 important features after training decision tree" → QUERY
 - "show me feature importance from random forest" → QUERY
 - "train XGBoost and show feature rankings" → QUERY
+- "what are top 10 features by RFE method" → QUERY
+- "top features by RFE" → QUERY
+- "what are top 10 features by LASSO" → QUERY
+- "top features by LASSO" → QUERY
+- "what are top 10 features by PCA" → QUERY
+- "what are top 10 features based on PCA analysis" → QUERY
+- "top features by PCA" → QUERY
+- "features by PCA" → QUERY
+- "show me RFE ranking" → QUERY
+- "display LASSO coefficients" → QUERY
+- "show PCA results" → QUERY
+- "display PCA analysis" → QUERY
+- "what are RFE results" → QUERY
+- "show LASSO feature importance" → QUERY
+- "PCA feature importance" → QUERY
 - "how many features remain" → QUERY
 - "what analyses have been done" → QUERY
 - "current dataset info" → QUERY
@@ -236,6 +255,13 @@ CLASSIFICATION EXAMPLES:
 - "run IV analysis" → STANDARD_ANALYSIS
 - "apply correlation filter" → STANDARD_ANALYSIS
 - "do CSI analysis" → STANDARD_ANALYSIS
+- "IV 0.02" → STANDARD_ANALYSIS
+- "IV 0.2" → STANDARD_ANALYSIS
+- "CSI 0.05" → STANDARD_ANALYSIS
+- "CSI 0.5" → STANDARD_ANALYSIS
+- "correlation 0.8" → STANDARD_ANALYSIS
+- "SHAP 0.01" → STANDARD_ANALYSIS
+- "VIF 5" → STANDARD_ANALYSIS
 
 **CUSTOM_ANALYSIS** examples:
 - "filter features with VIF > 5" → CUSTOM_ANALYSIS
@@ -243,6 +269,17 @@ CLASSIFICATION EXAMPLES:
 - "keep only top 10 SHAP features" → CUSTOM_ANALYSIS
 - "filter features with SHAP > 0.01" → CUSTOM_ANALYSIS
 - "apply SHAP filtering with threshold 0.05" → CUSTOM_ANALYSIS
+- "run RFE with 10 features" → CUSTOM_ANALYSIS
+- "keep top 10 RFE features" → CUSTOM_ANALYSIS
+- "filter with RFE" → CUSTOM_ANALYSIS
+- "apply RFE selection" → CUSTOM_ANALYSIS
+- "run LASSO regularization" → CUSTOM_ANALYSIS
+- "keep top 20 LASSO features" → CUSTOM_ANALYSIS
+- "filter with LASSO" → CUSTOM_ANALYSIS
+- "apply LASSO selection" → CUSTOM_ANALYSIS
+- "PCA analysis" → CUSTOM_ANALYSIS
+- "principal component analysis" → CUSTOM_ANALYSIS
+- "run PCA with 95% variance" → CUSTOM_ANALYSIS
 
 **GENERAL_QUERY** examples:
 - "what can you do" → GENERAL_QUERY
@@ -274,7 +311,7 @@ CRITICAL DISTINCTIONS:
 - Query requests should be classified based on whether they need code execution or not
 
 For analysis requests, carefully extract:
-- The analysis type (iv, correlation, csi, vif, pca, lasso)
+- The analysis type (iv, correlation, csi, vif, pca, lasso, rfe, shap)
 - Any threshold values mentioned (look for numbers like 0.04, 0.05, 0.8, 0.1, 0.2, etc.)
 - Any comparison operators (>, <, greater than, less than, above, below)
 
@@ -2444,7 +2481,21 @@ RESPONSE FORMAT:
             analysis_results = {"success": True, "vif_scores": vif_scores}
         else:
             logger.warning(f"⚠️ UNKNOWN ANALYSIS TYPE | User: {session.user_id} | Type: {analysis_type}")
-            say(f"❌ **Unknown analysis type:** {analysis_type}")
+            logger.info(f"🔄 FALLBACK TO CUSTOM ANALYSIS | User: {session.user_id} | Type: {analysis_type}")
+            say(f"🔄 **{analysis_type.upper()} not available in standard analyses, routing to custom code execution...**")
+            
+            # Fallback: Route to CUSTOM_ANALYSIS for code execution
+            fallback_intent_data = {
+                "intent": "CUSTOM_ANALYSIS",
+                "analysis_type": analysis_type,
+                "threshold": intent_data.get("threshold"),
+                "comparison": intent_data.get("comparison"),
+                "query_details": intent_data.get("query_details", f"Custom {analysis_type} analysis"),
+                "extracted_info": intent_data.get("extracted_info", "")
+            }
+            
+            # Route to custom analysis handler
+            self.run_custom_analysis(session, fallback_intent_data, say)
             return
         
         if not analysis_results or not analysis_results.get("success"):
