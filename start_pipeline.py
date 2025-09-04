@@ -28,7 +28,7 @@ def parse_arguments():
                        help='Slack App Token (xapp-...)')
     parser.add_argument('--mode', choices=['slack', 'api', 'test', 'demo'],
                        help='Run mode: slack bot, api testing, direct testing, or demo')
-    parser.add_argument('--model', default='qwen2.5-coder:32b-instruct-q4_K_M',
+    parser.add_argument('--model', default=os.environ.get('DEFAULT_MODEL', 'gpt-4o'),
                        help='Default LLM model to use')
     parser.add_argument('--persistence', action='store_true', default=True,
                        help='Enable state persistence (default: True)')
@@ -364,6 +364,9 @@ def main():
     """Main startup function"""
     args = parse_arguments()
     
+    # Setup instance-specific logging
+    log_file = setup_colored_logging()
+    print(f"📝 Logs will be saved to: {log_file}")
     # Basic logging setup (removed colored logging dependency)
     import logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')

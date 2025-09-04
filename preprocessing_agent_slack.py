@@ -88,7 +88,7 @@ class PreprocessingSession:
     thread_ts: Optional[str] = None
     
     # Configuration
-    model_name: str = "gpt-4o"
+    model_name: str = os.environ.get("DEFAULT_MODEL", "gpt-4o")
     missing_threshold: float = 50.0
     outlier_threshold: float = 10.0
     high_cardinality_threshold: int = 50
