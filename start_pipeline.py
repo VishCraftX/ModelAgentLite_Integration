@@ -11,7 +11,7 @@ import sys
 import os
 import argparse
 from pathlib import Path
-# Removed logging_config import - module was deleted
+from logging_config import setup_colored_logging
 
 # Try to load .env file if it exists
 try:
@@ -359,7 +359,6 @@ def run_direct_tests():
         print(f"❌ Direct tests failed: {e}")
         import traceback
         traceback.print_exc()
-
 def main():
     """Main startup function"""
     args = parse_arguments()
@@ -367,10 +366,6 @@ def main():
     # Setup instance-specific logging
     log_file = setup_colored_logging()
     print(f"📝 Logs will be saved to: {log_file}")
-    # Basic logging setup (removed colored logging dependency)
-    import logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
-    print(f"📝 Using basic logging configuration")
     
     # Print system status
     if not print_system_status():
