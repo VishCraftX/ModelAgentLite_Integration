@@ -239,35 +239,70 @@ class MultiAgentMLPipeline:
         return state
     
     def _code_execution_node(self, state: PipelineState) -> PipelineState:
-        """Code execution node - handles general code execution requests"""
+        """Code execution node - handles general code execution requests by generating Python code first"""
         print(f"\n💻 [Code Execution] Processing code execution request")
         
-        # Use the ExecutionAgent from toolbox for code execution
         try:
-            # Generate code using LLM (similar to ModelBuildingAgent approach)
+            # Import the LLM-based code generation from ModelBuildingAgent
+            from model_building_agent_impl import generate_model_code
             from toolbox import execution_agent
             
-            # For now, we'll use a simple approach - the user query is treated as code
-            # In a more sophisticated implementation, we'd use LLM to generate code
-            user_code = state.user_query
+            user_query = state.user_query
+            user_id = state.chat_session
             
-            # If the query doesn't look like code, generate a response
-            if not any(keyword in user_code.lower() for keyword in ['print', 'plot', 'calculate', 'import', '=', 'def']):
-                # This looks like a request for code generation, not direct code
-                state.last_response = f"I can help you execute code! Please provide Python code or be more specific about what you'd like me to calculate or analyze. For example:\n- 'print(sample_data.describe())'\n- 'plot correlation matrix'\n- 'calculate mean of numeric columns'"
+            print(f"🔍 [Code Execution] Query: '{user_query}'")
+            print(f"🔍 [Code Execution] Raw data: {'✅' if state.raw_data is not None else '❌'}")
+            print(f"🔍 [Code Execution] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
+            
+            # Generate Python code using LLM (similar to ModelBuildingAgent approach)
+            code_generation_prompt = f"""You are a Python expert. Generate executable Python code for the user's request.
+
+CRITICAL INSTRUCTIONS:
+- Return ONLY executable Python code (no markdown, no explanations)
+- The variable `sample_data` is ALREADY LOADED and available
+- Use `safe_plt_savefig()` for saving plots (already available, no import needed)
+- DO NOT import datasets or load external data
+- Code should be complete and ready to execute
+- For calculations, return results in a `result` dictionary
+
+AVAILABLE DATA:
+- `sample_data`: Main DataFrame with shape {state.raw_data.shape if state.raw_data is not None else 'No data'}
+- Standard libraries: pandas (pd), numpy (np), matplotlib.pyplot (plt), seaborn (sns)
+
+USER REQUEST: {user_query}
+
+Generate Python code to fulfill this request:"""
+
+            # Generate code using the same LLM as ModelBuildingAgent
+            print(f"🤔 Generating Python code for: {user_query}")
+            
+            # Use the same code generation function as ModelBuildingAgent
+            generated_code, error_msg = generate_model_code(code_generation_prompt, user_id)
+            
+            if error_msg:
+                state.last_response = f"❌ Code generation failed: {error_msg}"
                 return state
             
-            # Execute the code
+            if not generated_code or generated_code.strip() == "":
+                state.last_response = f"❌ No code was generated. Please provide a more specific request."
+                return state
+            
+            print(f"✅ Generated {len(generated_code)} characters of Python code")
+            print(f"📝 Code preview: {generated_code[:100]}...")
+            
+            # Execute the generated code using ExecutionAgent
             context = {
                 "raw_data": state.raw_data,
                 "cleaned_data": state.cleaned_data,
                 "selected_features": state.selected_features,
-                "trained_model": state.trained_model
+                "trained_model": state.trained_model,
+                "sample_data": state.raw_data or state.cleaned_data  # Ensure sample_data is available
             }
             
-            result_state = execution_agent.run_code(state, user_code, context)
+            print(f"⚙️ Executing generated code...")
+            result_state = execution_agent.run_code(state, generated_code, context)
             
-            # Update response
+            # Update response based on execution result
             if result_state.last_error:
                 state.last_response = f"❌ Code execution failed: {result_state.last_error}"
             else:
@@ -277,6 +312,8 @@ class MultiAgentMLPipeline:
             
         except Exception as e:
             print(f"❌ Code execution error: {e}")
+            import traceback
+            print(f"🔍 Full traceback: {traceback.format_exc()}")
             state.last_error = str(e)
             state.last_response = f"❌ Code execution failed: {str(e)}"
             return state
