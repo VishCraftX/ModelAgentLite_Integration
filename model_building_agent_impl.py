@@ -2307,7 +2307,11 @@ y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
     })
 
 # Step 3: Create buckets/deciles (CRITICAL: use duplicates='drop')
-    test_df['bucket'] = pd.qcut(test_df['probability'], q=10, labels=False, duplicates='drop')
+    # Extract number of deciles from user query (default to 10)
+    import re
+    decile_match = re.search(r'(\d+)\s*deciles?', query.lower()) if 'query' in globals() else None
+    num_deciles = int(decile_match.group(1)) if decile_match else 10
+    test_df['bucket'] = pd.qcut(test_df['probability'], q=num_deciles, labels=False, duplicates='drop')
     
 # Step 4: Calculate rank ordering metrics
     rank_metrics = test_df.groupby('bucket').agg({
@@ -2357,9 +2361,10 @@ height = int(max(15, min(50, safe_tree_depth * 3)))
 # Calculate font size with strict bounds to avoid FreeType errors  
 calculated_font_size = 80 / (safe_tree_depth + max_feature_len/10)
 font_size = max(6, min(12, int(calculated_font_size)))
-# Extra safety check to ensure font size is never too small
+# Extra safety check to ensure font size is never too small - CRITICAL for FreeType
 if font_size < 6:
     font_size = 6
+print(f"🔍 Font size safety check: calculated={calculated_font_size:.2f}, final={font_size} (min=6, max=12)")
 
 # Step 3: Set plot depth (limit for readability)
 max_depth_plot = min(5, safe_tree_depth)
@@ -2688,7 +2693,73 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             return "\n".join(response_parts)
         
         elif routing_decision == "use_existing_model":
-            return "✅ Existing Model Operation Completed!\n\n🎯 Your existing model has been used successfully for the requested operation."
+            # Check if this was a rank ordering request
+            if 'rank_ordering_table' in result and result['rank_ordering_table']:
+                rank_table = result['rank_ordering_table']
+                if isinstance(rank_table, list) and len(rank_table) > 0:
+                    response_parts = ["✅ **Rank Ordering Analysis Completed!**\n"]
+                    response_parts.append("📊 **Rank Ordering Table (Deciles):**")
+                    response_parts.append("```")
+                    
+                    # Create header
+                    response_parts.append("Decile | Bad Rate | Coverage | Cum Bad Rate | Total Users | Avg Prob")
+                    response_parts.append("-------|----------|----------|--------------|-------------|----------")
+                    
+                    # Add each decile row
+                    for row in rank_table:
+                        bucket = row.get('bucket', 0)
+                        badrate = row.get('badrate', 0)
+                        coverage = row.get('coverage', 0)
+                        cum_badrate = row.get('cum_badrate', 0)
+                        total_users = row.get('totalUsersCount', 0)
+                        avg_prob = row.get('avg_probability', 0)
+                        
+                        response_parts.append(f"  {bucket:2d}   | {badrate:8.4f} | {coverage:8.2f} | {cum_badrate:12.4f} | {total_users:11,d} | {avg_prob:8.4f}")
+                    
+                    response_parts.append("```")
+                    
+                    # Add insights
+                    top_decile = rank_table[0] if rank_table else {}
+                    bottom_decile = rank_table[-1] if rank_table else {}
+                    
+                    if top_decile and bottom_decile:
+                        top_badrate = top_decile.get('badrate', 0)
+                        bottom_badrate = bottom_decile.get('badrate', 0)
+                        if bottom_badrate > 0:
+                            lift = top_badrate / bottom_badrate
+                            response_parts.append(f"\n📈 **Key Insights:**")
+                            response_parts.append(f"• Top decile bad rate: {top_badrate:.4f} ({top_badrate*100:.2f}%)")
+                            response_parts.append(f"• Bottom decile bad rate: {bottom_badrate:.4f} ({bottom_badrate*100:.2f}%)")
+                            response_parts.append(f"• Lift (Top/Bottom): {lift:.2f}x")
+                    
+                    response_parts.append(f"\n🎯 **Analysis Summary:** {len(rank_table)} deciles created showing model discrimination power.")
+                    
+                    return "\n".join(response_parts)
+            
+            # Check if there are any metrics to display
+            elif any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score']):
+                response_parts = ["✅ **Existing Model Analysis Completed!**\n"]
+                response_parts.append("📊 **Model Performance:**")
+                
+                if 'accuracy' in result:
+                    response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
+                if 'precision' in result:
+                    response_parts.append(f"• Precision: {result['precision']:.4f}")
+                if 'recall' in result:
+                    response_parts.append(f"• Recall: {result['recall']:.4f}")
+                if 'f1_score' in result:
+                    response_parts.append(f"• F1 Score: {result['f1_score']:.4f}")
+                if 'roc_auc' in result:
+                    response_parts.append(f"• ROC AUC: {result['roc_auc']:.4f}")
+                if 'specificity' in result:
+                    response_parts.append(f"• Specificity: {result['specificity']:.4f}")
+                
+                response_parts.append(f"\n🎯 Model analysis completed successfully!")
+                return "\n".join(response_parts)
+            
+            # Default response for other operations
+            else:
+                return "✅ Existing Model Operation Completed!\n\n🎯 Your existing model has been used successfully for the requested operation."
         
         elif routing_decision == "execute_code":
             return "✅ Code Execution Completed!\n\n📊 Your custom analysis has been executed successfully. Check the results above."
