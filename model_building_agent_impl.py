@@ -799,16 +799,20 @@ CRITICAL CONTEXT RULES:
 - If context shows user just uploaded data or said "here is data" and current query says "use this", it means "use this DATA to build a model" → new_model
 - "use this data", "use this file", "here is data, use this" → new_model (not use_existing)
 - Only classify as "use_existing" if user explicitly refers to a previously BUILT MODEL
+- CRITICAL: "use this tree model", "use this model", "use the tree" = use_existing (refers to existing model)
+- CRITICAL: "use this tree" in context of model analysis = use_existing (not new model building)
 
 PRIORITY CLASSIFICATION RULES (check in this order):
 
 HIGHEST PRIORITY - "use_existing" if query contains:
 - "use this model", "use the model", "with this model", "for this model" (explicit model reference)
-- "use this tree", "use the tree", "with this tree", "for this tree" (tree model reference)
-- "existing model", "current model", "built model", "trained model"
+- "use this tree", "use the tree", "with this tree", "for this tree" (tree model reference)  
+- "use this tree model", "use this decision tree", "apply this model", "apply existing model"
+- "existing model", "current model", "built model", "trained model", "saved model"
 - "show plot", "visualize tree", "display tree" (when model exists)
 - "build segments", "build deciles", "build buckets", "build rankings" (these use existing models)
 - "rank ordering", "score", "predict", "classify" with existing model context
+- ANY combination of "use" + "this" + model terms (tree, model, classifier, etc.)
 
 SECOND PRIORITY - "multi_model" if query contains:
 - "build multiple models", "train several models", "create multiple", "build three models", "build 3 models"
@@ -882,7 +886,7 @@ def semantic_classify_model_intent(query: str) -> str:
         
         # Define model-specific intent definitions
         model_intent_definitions = {
-            "use_existing": "Use existing model, apply current model, utilize trained model, work with built model, use this model, apply this classifier, use previous model, existing model analysis, current model evaluation, built model application, trained model usage, model reuse, apply saved model, show plot, visualize tree, display tree, build segments, build deciles, build buckets, build rankings, rank ordering, score, predict, classify, create rank order table, create segments, create buckets, generate rankings, generate segments, generate buckets, generate rank order, create deciles, build rank order, create ranking table, generate decile table, score data, predict outcomes, classify records, apply model for scoring, use model for ranking, apply for segmentation",
+            "use_existing": "Use existing model, apply current model, utilize trained model, work with built model, use this model, apply this classifier, use previous model, existing model analysis, current model evaluation, built model application, trained model usage, model reuse, apply saved model, show plot, visualize tree, display tree, build segments, build deciles, build buckets, build rankings, rank ordering, score, predict, classify, create rank order table, create segments, create buckets, generate rankings, generate segments, generate buckets, generate rank order, create deciles, build rank order, create ranking table, generate decile table, score data, predict outcomes, classify records, apply model for scoring, use model for ranking, apply for segmentation, use this tree model, use this tree, use the tree, with this model, for this model, with this tree, for this tree, apply this model, apply existing model, use this decision tree, utilize this model, employ this model, leverage this model, work with this model, operate this model, run this model, execute this model",
             "multi_model": "Build multiple models, train several models, create multiple models, build three models, build 3 models, compare models, model comparison, best model, choose best model, pick best model, select best model, multiple algorithms, lgbm random forest xgboost, decision tree lgbm, all models, different models, various models, several algorithms, comparison plot, compare performance, roc curves, model metrics, benchmark models, evaluate models, test multiple models, try different models, multi model training, ensemble comparison, algorithm comparison, model benchmarking, performance comparison, multiple classifier training, various algorithm testing, comprehensive model evaluation, model selection process, algorithm evaluation, cross model comparison",
             "new_model": "Train single new model, build single new classifier, create single new predictor, develop single new algorithm, train fresh model, build from scratch, new model training, create classifier, develop predictor, train algorithm, build new, create new, fresh training, single machine learning model, single model development, single algorithm training, train fresh algorithm, develop fresh model, build brand new model, create entirely new model, individual model training, single predictor development"
         }
@@ -978,10 +982,11 @@ def fallback_classify_intent_keywords(query: str) -> str:
     """Keyword fallback classification logic - handles all model-specific intents"""
     query_lower = query.lower()
     
-    # Use existing patterns for existing models
+    # Use existing patterns for existing models (ENHANCED)
     use_existing_patterns = [
         "use this model", "use the model", "with this model", "for this model",
         "use this tree", "use the tree", "with this tree", "for this tree",
+        "use this tree model", "use this decision tree", "apply this model",
         "existing model", "current model", "built model", "trained model",
         "show plot", "visualize tree", "display tree",
         "build segments", "build deciles", "build buckets", "build rankings",
@@ -2311,12 +2316,26 @@ else:
         'probability': y_proba
     })
 
-# Step 3: Create buckets/deciles (CRITICAL: use duplicates='drop')
+# Step 3: Create buckets/deciles (ENHANCED with fallback handling)
     # Extract number of deciles from user query (default to 10)
     import re
     decile_match = re.search(r'(\d+)\s*deciles?', query.lower()) if 'query' in globals() else None
     num_deciles = int(decile_match.group(1)) if decile_match else 10
-    segmentation_df['bucket'] = pd.qcut(segmentation_df['probability'], q=num_deciles, labels=False, duplicates='drop')
+    
+    # Try quantile-based binning first
+    try:
+        segmentation_df['bucket'] = pd.qcut(segmentation_df['probability'], q=num_deciles, labels=False, duplicates='drop')
+        unique_buckets = segmentation_df['bucket'].nunique()
+        print(f"📊 Created {unique_buckets} buckets using quantile method")
+        
+        # If too few buckets created, fall back to equal-width binning
+        if unique_buckets < max(2, num_deciles // 2):
+            print("⚠️ Poor discrimination detected, using equal-width binning fallback")
+            segmentation_df['bucket'] = pd.cut(segmentation_df['probability'], bins=num_deciles, labels=False, include_lowest=True)
+            
+    except Exception as e:
+        print(f"⚠️ Quantile binning failed: {e}, using equal-width fallback")
+        segmentation_df['bucket'] = pd.cut(segmentation_df['probability'], bins=num_deciles, labels=False, include_lowest=True)
     
 # Step 4: Calculate rank ordering metrics
     rank_metrics = segmentation_df.groupby('bucket').agg({
@@ -2699,39 +2718,105 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     # Use the same format as in the actual ModelBuildingAgent implementation
                     response_parts = ["✅ **Rank Ordering Analysis Completed!**\n"]
                     
-                    # Display table data with PROPER financial analysis format (EXACT format from working implementation)
-                    response_parts.append("📊 **Rank Ordering Table (Deciles):**")
-                    response_parts.append("```")
-                    response_parts.append("Decile | Bad Rate | Coverage | Cum Bad Rate | Total Users | Avg Prob")
-                    response_parts.append("-------|----------|----------|--------------|-------------|----------")
+                    # EXACT FORMAT FROM ORIGINAL slack_client.py
+                    response_parts.append("📊 **Rank Ordering Table:**")
                     
-                    for row in rank_table:
-                        decile = row.get('bucket', 0)
-                        badrate = row.get('badrate', 0)
-                        coverage = row.get('coverage', 0)
-                        cum_badrate = row.get('cum_badrate', 0)
+                    # Create header with optimized column widths (EXACT from original)
+                    headers = ["Bucket", "Threshold", "BucketCount", "EventCount", "Event%", "CumEvent%", "Coverage%"]
+                    # Optimized widths: [6, 11, 11, 10, 7, 9, 9]
+                    widths = [6, 11, 11, 10, 7, 9, 9]
+                    header_line = "|" + "|".join(f" {h:^{w}} " for h, w in zip(headers, widths)) + "|"
+                    separator_line = "|" + "|".join("-" * (w + 2) for w in widths) + "|"
+                    
+                    table_lines = [
+                        "```",
+                        header_line,
+                        separator_line
+                    ]
+                    
+                    # Add data rows (EXACT logic from original)
+                    for i, row in enumerate(rank_table):
+                        bucket = row.get('bucket', 0)
                         total_users = row.get('totalUsersCount', 0)
-                        avg_prob = row.get('avg_probability', 0)
+                        no_of_events = row.get('numBads', 0)  # numBads = no of events
+                        event_rate = row.get('badrate', 0)    # badrate = event rate
+                        cum_event_rate = row.get('cum_badrate', 0)  # cum_badrate = cumulative event rate
+                        coverage = row.get('coverage', 0)
                         
-                        response_parts.append(f"  {decile:2d}   | {badrate:8.4f} | {coverage:8.2f} | {cum_badrate:12.4f} | {total_users:11,d} | {avg_prob:8.4f}")
-                    
-                    response_parts.append("```")
-                    
-                    # Financial analysis insights (EXACT format from working implementation)
-                    if len(rank_table) > 1:
-                        top_decile = rank_table[-1]  # Highest decile 
-                        bottom_decile = rank_table[0]  # Lowest decile
-                        top_badrate = top_decile.get('badrate', 0)
-                        bottom_badrate = bottom_decile.get('badrate', 0)
+                        # Get actual min/max probabilities for threshold range
+                        min_threshold = row.get('min_threshold', 0)
+                        max_threshold = row.get('max_threshold', 0)
                         
-                        response_parts.append(f"\n📈 **Key Insights:**")
-                        response_parts.append(f"• Top decile bad rate: {top_badrate:.4f} ({top_badrate*100:.2f}%)")
-                        response_parts.append(f"• Bottom decile bad rate: {bottom_badrate:.4f} ({bottom_badrate*100:.2f}%)")
-                        if bottom_badrate > 0:
-                            lift = top_badrate / bottom_badrate
-                            response_parts.append(f"• Lift (Top/Bottom): {lift:.2f}x")
+                        # Threshold formatting logic from original
+                        if min_threshold == 0 and max_threshold == 0:
+                            avg_prob = row.get('avg_probability', 0)
+                            # Estimate range based on bucket position (rough approximation)
+                            if i == 0:
+                                threshold = f"0.000-{avg_prob:.3f}"
+                            elif i == len(rank_table) - 1:
+                                threshold = f"{avg_prob:.3f}-1.000"
+                            else:
+                                # Use a small range around average
+                                range_size = 0.02  # Approximate range
+                                threshold = f"{max(0, avg_prob - range_size/2):.3f}-{min(1, avg_prob + range_size/2):.3f}"
+                        else:
+                            threshold = f"{min_threshold:.3f}-{max_threshold:.3f}"
+                        
+                        # Format with optimized widths: [6, 11, 11, 10, 7, 9, 9] (EXACT from original)
+                        data_line = f"| {bucket:^6} | {threshold:^11} | {total_users:^11,} | {no_of_events:^10,} | {event_rate:^7.4f} | {cum_event_rate:^9.4f} | {coverage:^8.1f}% |"
+                        table_lines.append(data_line)
                     
-                    # Add model discrimination metrics if available
+                    table_lines.append("```")
+                    response_parts.extend(table_lines)
+                    
+                    # COMPREHENSIVE FINANCIAL RISK ANALYSIS INSIGHTS
+                    if len(rank_table) >= 1:
+                        # Calculate overall model performance metrics
+                        total_population = sum(row.get('totalUsersCount', 0) for row in rank_table)
+                        total_bads = sum(row.get('numBads', 0) for row in rank_table)
+                        overall_badrate = total_bads / total_population if total_population > 0 else 0
+                        
+                        response_parts.append(f"\n📈 **Model Performance Analysis:**")
+                        response_parts.append(f"• Overall Bad Rate: {overall_badrate:.2%}")
+                        response_parts.append(f"• Total Population: {total_population:,}")
+                        response_parts.append(f"• Total Bads: {total_bads:,}")
+                        
+                        if len(rank_table) > 1:
+                            # Sort by bucket for proper top/bottom analysis
+                            sorted_by_bucket = sorted(rank_table, key=lambda x: x.get('bucket', 0))
+                            top_decile = sorted_by_bucket[-1]  # Highest risk decile
+                            bottom_decile = sorted_by_bucket[0]  # Lowest risk decile
+                            
+                            top_badrate = top_decile.get('badrate', 0)
+                            bottom_badrate = bottom_decile.get('badrate', 0)
+                            
+                            response_parts.append(f"\n🎯 **Discrimination Analysis:**")
+                            response_parts.append(f"• Top decile (highest risk): {top_badrate:.2%}")
+                            response_parts.append(f"• Bottom decile (lowest risk): {bottom_badrate:.2%}")
+                            
+                            if bottom_badrate > 0:
+                                lift = top_badrate / bottom_badrate
+                                response_parts.append(f"• Model Lift: {lift:.2f}x")
+                            else:
+                                response_parts.append(f"• Model Lift: Perfect separation (∞)")
+                            
+                            # Model discrimination assessment
+                            if lift >= 3.0:
+                                discrimination = "Excellent"
+                            elif lift >= 2.0:
+                                discrimination = "Good"
+                            elif lift >= 1.5:
+                                discrimination = "Fair"
+                            else:
+                                discrimination = "Poor"
+                            
+                            response_parts.append(f"• Discrimination Level: {discrimination}")
+                        else:
+                            response_parts.append(f"\n⚠️ **Model Issue:** Only {len(rank_table)} decile(s) created - model shows poor discrimination")
+                            response_parts.append(f"• This indicates all predictions are very similar (around {rank_table[0].get('avg_probability', 0):.4f})")
+                            response_parts.append(f"• Consider retraining with different parameters or features")
+                    
+                    # Add advanced metrics if available
                     gini_coefficient = result.get('gini_coefficient')
                     ks_statistic = result.get('ks_statistic')
                     if gini_coefficient:
@@ -2739,7 +2824,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     if ks_statistic:
                         response_parts.append(f"• KS Statistic: {ks_statistic:.4f}")
                     
-                    response_parts.append(f"\n🎯 **Analysis Summary:** {len(rank_table)} deciles created showing model discrimination power.")
+                    response_parts.append(f"\n🎯 **Summary:** {len(rank_table)} segment(s) created for risk analysis.")
                     
                     return "\n".join(response_parts)
             
