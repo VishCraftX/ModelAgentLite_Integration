@@ -2679,6 +2679,60 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             if 'model_path' in result and result['model_path']:
                 response_parts.append(f"\n💾 Model saved: {result['model_path'].split('/')[-1]}")
             
+            # Check for rank ordering table (SAME logic as use_existing_model)
+            if 'rank_ordering_table' in result:
+                rank_table = result['rank_ordering_table']
+                if isinstance(rank_table, list) and len(rank_table) > 0:
+                    response_parts.append(f"\n📊 *Rank Ordering Table:*")
+                    
+                    # Create header with optimized column widths
+                    headers = ["Bucket", "Threshold", "BucketCount", "EventCount", "Event%", "CumEvent%", "Coverage%"]
+                    # Optimized widths: [6, 11, 11, 10, 7, 9, 9]
+                    widths = [6, 11, 11, 10, 7, 9, 9]
+                    header_line = "|" + "|".join(f" {h:^{w}} " for h, w in zip(headers, widths)) + "|"
+                    separator_line = "|" + "|".join("-" * (w + 2) for w in widths) + "|"
+                    
+                    table_lines = [
+                        "```",
+                        header_line,
+                        separator_line
+                    ]
+                    
+                    # Add data rows
+                    for i, row in enumerate(rank_table):
+                        bucket = row.get('bucket', 0)
+                        total_users = row.get('totalUsersCount', 0)
+                        no_of_events = row.get('numBads', 0)  # numBads = no of events
+                        event_rate = row.get('badrate', 0)    # badrate = event rate
+                        cum_event_rate = row.get('cum_badrate', 0)  # cum_badrate = cumulative event rate
+                        coverage = row.get('coverage', 0)
+                        
+                        # Get actual min/max probabilities for threshold range
+                        min_threshold = row.get('min_threshold', 0)
+                        max_threshold = row.get('max_threshold', 0)
+                        
+                        # If min/max not available, use avg_probability as fallback
+                        if min_threshold == 0 and max_threshold == 0:
+                            avg_prob = row.get('avg_probability', 0)
+                            # Estimate range based on bucket position (rough approximation)
+                            if i == 0:
+                                threshold = f"0.000-{avg_prob:.3f}"
+                            elif i == len(rank_table) - 1:
+                                threshold = f"{avg_prob:.3f}-1.000"
+                            else:
+                                # Use a small range around average
+                                range_size = 0.02  # Approximate range
+                                threshold = f"{max(0, avg_prob - range_size/2):.3f}-{min(1, avg_prob + range_size/2):.3f}"
+                        else:
+                            threshold = f"{min_threshold:.3f}-{max_threshold:.3f}"
+                        
+                        # Format with optimized widths: [6, 11, 11, 10, 7, 9, 9]
+                        data_line = f"| {bucket:^6} | {threshold:^11} | {total_users:^11,} | {no_of_events:^10,} | {event_rate:^7.4f} | {cum_event_rate:^9.4f} | {coverage:^8.1f}% |"
+                        table_lines.append(data_line)
+                    
+                    table_lines.append("```")
+                    response_parts.extend(table_lines)
+            
             response_parts.append(f"\n🎯 You can now use this model for predictions, visualizations, or further analysis!")
             
             return "\n".join(response_parts)
