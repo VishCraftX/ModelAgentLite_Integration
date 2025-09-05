@@ -587,35 +587,46 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             bool: True if this is a direct feature selection request (skip preprocessing)
         """
         try:
-            # Define examples for direct vs standard feature selection
+            # Define examples for direct vs standard approaches (without "feature selection" noise)
             direct_fs_examples = [
-                "skip preprocessing and do feature selection",
-                "bypass preprocessing for feature selection", 
-                "direct feature selection on raw data",
-                "use raw data for feature selection",
-                "feature selection without preprocessing",
-                "no preprocessing needed, just feature selection",
-                "skip data cleaning, go to features",
+                "skip preprocessing",
+                "bypass preprocessing", 
+                "directly on raw data",
+                "use raw data",
+                "without preprocessing",
+                "no preprocessing needed",
+                "skip data cleaning",
                 "bypass data preparation",
-                "direct fs on unprocessed data",
-                "raw data feature analysis",
-                "immediate feature selection",
-                "skip cleaning step"
+                "on unprocessed data",
+                "raw data analysis",
+                "immediately",
+                "skip cleaning step",
+                "directly",
+                "straight to analysis",
+                "without cleaning",
+                "raw analysis",
+                "immediate analysis",
+                "no cleaning required",
+                "bypass cleaning"
             ]
             
             standard_fs_examples = [
-                "do feature selection",
-                "perform feature selection", 
-                "analyze features",
-                "select best features",
-                "feature engineering",
-                "reduce dimensionality",
-                "choose important features",
-                "feature importance analysis",
-                "correlation analysis",
-                "feature selection process",
-                "identify key features",
-                "optimize features"
+                "analyze",
+                "process data first", 
+                "clean the data",
+                "prepare data",
+                "standard process",
+                "normal workflow",
+                "typical approach",
+                "regular analysis",
+                "standard procedure",
+                "clean first",
+                "prepare first",
+                "process then analyze",
+                "standard analysis",
+                "normal process",
+                "clean and analyze",
+                "prepare and select"
             ]
             
             # Use BGE embeddings if available
@@ -677,7 +688,7 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
                 print(f"   Confidence diff: {confidence_diff:.3f}")
                 
                 # Use BGE result if confidence is high enough
-                if confidence_diff > 0.05:  # Minimum confidence threshold
+                if confidence_diff > 0.01:  # Minimum confidence threshold (lowered from 0.05)
                     result = is_direct
                     method = "BGE"
                     print(f"🎯 [Direct FS BGE] Classified as {'DIRECT' if result else 'STANDARD'} (confidence: {confidence_diff:.3f})")
@@ -715,7 +726,10 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             "direct feature selection", "skip preprocessing", "raw data", "without preprocessing",
             "bypass preprocessing", "use raw data", "no preprocessing", "direct fs",
             "skip cleaning", "bypass cleaning", "unprocessed data", "immediate feature",
-            "skip data preparation", "raw feature analysis", "without cleaning"
+            "skip data preparation", "raw feature analysis", "without cleaning",
+            "skip data cleaning", "bypass data preparation", "raw analysis",
+            "directly", "feature selection directly", "directly feature selection",
+            "straight to features", "immediate analysis"
         ]
         
         # Check for explicit direct keywords
