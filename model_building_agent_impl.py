@@ -2298,47 +2298,20 @@ RANK_ORDERING_PROMPT = """
 
 COMPLETE STEP-BY-STEP PROCESS:
 
-# Step 1: Get predictions for segmentation (use full dataset for existing models, or test set for new models)
-# For existing models: use X and y (from sample_data split)
-# For new models: use X_test and y_test
-if 'current_model' in locals():
-    # Existing model - use full dataset
-    y_proba = current_model.predict_proba(X)[:,1]  # Get positive class probabilities
-    segmentation_df = pd.DataFrame({
-        'actual': y.values,
-        'probability': y_proba
-    })
-else:
-    # New model - use test set
-    y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
-    segmentation_df = pd.DataFrame({
+# Step 1: Get predictions for segmentation (use test set only)
+y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
+
+# Step 2: Create segmentation dataframe
+    test_df = pd.DataFrame({
         'actual': y_test.values,
         'probability': y_proba
     })
 
-# Step 3: Create buckets/deciles (ENHANCED with fallback handling)
-    # Extract number of deciles from user query (default to 10)
-    import re
-    decile_match = re.search(r'(\d+)\s*deciles?', query.lower()) if 'query' in globals() else None
-    num_deciles = int(decile_match.group(1)) if decile_match else 10
-    
-    # Try quantile-based binning first
-    try:
-        segmentation_df['bucket'] = pd.qcut(segmentation_df['probability'], q=num_deciles, labels=False, duplicates='drop')
-        unique_buckets = segmentation_df['bucket'].nunique()
-        print(f"📊 Created {unique_buckets} buckets using quantile method")
-        
-        # If too few buckets created, fall back to equal-width binning
-        if unique_buckets < max(2, num_deciles // 2):
-            print("⚠️ Poor discrimination detected, using equal-width binning fallback")
-            segmentation_df['bucket'] = pd.cut(segmentation_df['probability'], bins=num_deciles, labels=False, include_lowest=True)
-            
-    except Exception as e:
-        print(f"⚠️ Quantile binning failed: {e}, using equal-width fallback")
-        segmentation_df['bucket'] = pd.cut(segmentation_df['probability'], bins=num_deciles, labels=False, include_lowest=True)
+# Step 3: Create buckets/deciles (CRITICAL: use duplicates='drop')
+    test_df['bucket'] = pd.qcut(test_df['probability'], q=10, labels=False, duplicates='drop')
     
 # Step 4: Calculate rank ordering metrics
-    rank_metrics = segmentation_df.groupby('bucket').agg({
+    rank_metrics = test_df.groupby('bucket').agg({
     'actual': ['sum','count'],
     'probability': ['mean','min','max']
     }).reset_index()
@@ -2353,7 +2326,7 @@ rank_metrics['bucket'] = rank_metrics['bucket'] + 1  # Start from 1, not 0
     rank_metrics['cum_numBads'] = rank_metrics['numBads'].cumsum()
     rank_metrics['cum_totalUsers'] = rank_metrics['totalUsersCount'].cumsum()
     rank_metrics['cum_badrate'] = rank_metrics['cum_numBads'] / rank_metrics['cum_totalUsers']
-rank_metrics['coverage'] = (rank_metrics['cum_totalUsers']/len(segmentation_df))*100
+rank_metrics['coverage'] = (rank_metrics['cum_totalUsers']/len(test_df))*100
     
 # Step 6: Format results (round to appropriate decimal places)
 for col in ['badrate','cum_badrate','avg_probability','min_threshold','max_threshold']:
@@ -2711,17 +2684,13 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             return "\n".join(response_parts)
         
         elif routing_decision == "use_existing_model":
-            # Check if this was a rank ordering request
-            if 'rank_ordering_table' in result and result['rank_ordering_table']:
+            # Handle rank ordering table (EXACT from original slack_client.py)
+            if 'rank_ordering_table' in result:
                 rank_table = result['rank_ordering_table']
                 if isinstance(rank_table, list) and len(rank_table) > 0:
-                    # Use the same format as in the actual ModelBuildingAgent implementation
-                    response_parts = ["✅ **Rank Ordering Analysis Completed!**\n"]
+                    response_parts = ["📊 *Rank Ordering Table:*"]
                     
-                    # EXACT FORMAT FROM ORIGINAL slack_client.py
-                    response_parts.append("📊 **Rank Ordering Table:**")
-                    
-                    # Create header with optimized column widths (EXACT from original)
+                    # Create header with optimized column widths
                     headers = ["Bucket", "Threshold", "BucketCount", "EventCount", "Event%", "CumEvent%", "Coverage%"]
                     # Optimized widths: [6, 11, 11, 10, 7, 9, 9]
                     widths = [6, 11, 11, 10, 7, 9, 9]
@@ -2734,7 +2703,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                         separator_line
                     ]
                     
-                    # Add data rows (EXACT logic from original)
+                    # Add data rows
                     for i, row in enumerate(rank_table):
                         bucket = row.get('bucket', 0)
                         total_users = row.get('totalUsersCount', 0)
@@ -2747,7 +2716,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                         min_threshold = row.get('min_threshold', 0)
                         max_threshold = row.get('max_threshold', 0)
                         
-                        # Threshold formatting logic from original
+                        # If min/max not available, use avg_probability as fallback
                         if min_threshold == 0 and max_threshold == 0:
                             avg_prob = row.get('avg_probability', 0)
                             # Estimate range based on bucket position (rough approximation)
@@ -2762,69 +2731,12 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                         else:
                             threshold = f"{min_threshold:.3f}-{max_threshold:.3f}"
                         
-                        # Format with optimized widths: [6, 11, 11, 10, 7, 9, 9] (EXACT from original)
+                        # Format with optimized widths: [6, 11, 11, 10, 7, 9, 9]
                         data_line = f"| {bucket:^6} | {threshold:^11} | {total_users:^11,} | {no_of_events:^10,} | {event_rate:^7.4f} | {cum_event_rate:^9.4f} | {coverage:^8.1f}% |"
                         table_lines.append(data_line)
                     
                     table_lines.append("```")
                     response_parts.extend(table_lines)
-                    
-                    # COMPREHENSIVE FINANCIAL RISK ANALYSIS INSIGHTS
-                    if len(rank_table) >= 1:
-                        # Calculate overall model performance metrics
-                        total_population = sum(row.get('totalUsersCount', 0) for row in rank_table)
-                        total_bads = sum(row.get('numBads', 0) for row in rank_table)
-                        overall_badrate = total_bads / total_population if total_population > 0 else 0
-                        
-                        response_parts.append(f"\n📈 **Model Performance Analysis:**")
-                        response_parts.append(f"• Overall Bad Rate: {overall_badrate:.2%}")
-                        response_parts.append(f"• Total Population: {total_population:,}")
-                        response_parts.append(f"• Total Bads: {total_bads:,}")
-                        
-                        if len(rank_table) > 1:
-                            # Sort by bucket for proper top/bottom analysis
-                            sorted_by_bucket = sorted(rank_table, key=lambda x: x.get('bucket', 0))
-                            top_decile = sorted_by_bucket[-1]  # Highest risk decile
-                            bottom_decile = sorted_by_bucket[0]  # Lowest risk decile
-                            
-                            top_badrate = top_decile.get('badrate', 0)
-                            bottom_badrate = bottom_decile.get('badrate', 0)
-                            
-                            response_parts.append(f"\n🎯 **Discrimination Analysis:**")
-                            response_parts.append(f"• Top decile (highest risk): {top_badrate:.2%}")
-                            response_parts.append(f"• Bottom decile (lowest risk): {bottom_badrate:.2%}")
-                            
-                            if bottom_badrate > 0:
-                                lift = top_badrate / bottom_badrate
-                                response_parts.append(f"• Model Lift: {lift:.2f}x")
-                            else:
-                                response_parts.append(f"• Model Lift: Perfect separation (∞)")
-                            
-                            # Model discrimination assessment
-                            if lift >= 3.0:
-                                discrimination = "Excellent"
-                            elif lift >= 2.0:
-                                discrimination = "Good"
-                            elif lift >= 1.5:
-                                discrimination = "Fair"
-                            else:
-                                discrimination = "Poor"
-                            
-                            response_parts.append(f"• Discrimination Level: {discrimination}")
-                        else:
-                            response_parts.append(f"\n⚠️ **Model Issue:** Only {len(rank_table)} decile(s) created - model shows poor discrimination")
-                            response_parts.append(f"• This indicates all predictions are very similar (around {rank_table[0].get('avg_probability', 0):.4f})")
-                            response_parts.append(f"• Consider retraining with different parameters or features")
-                    
-                    # Add advanced metrics if available
-                    gini_coefficient = result.get('gini_coefficient')
-                    ks_statistic = result.get('ks_statistic')
-                    if gini_coefficient:
-                        response_parts.append(f"• Gini Coefficient: {gini_coefficient:.4f}")
-                    if ks_statistic:
-                        response_parts.append(f"• KS Statistic: {ks_statistic:.4f}")
-                    
-                    response_parts.append(f"\n🎯 **Summary:** {len(rank_table)} segment(s) created for risk analysis.")
                     
                     return "\n".join(response_parts)
             
