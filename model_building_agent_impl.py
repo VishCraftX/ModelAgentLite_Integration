@@ -834,11 +834,17 @@ USER QUERY: "{query}"
 Respond with ONLY one word: new_model, multi_model, or use_existing"""
 
     try:
-        response = ollama.chat(
-            # model="krith/qwen2.5-coder-14b-instruct:IQ2_M",
-            model=MAIN_MODEL,
-            messages=[{"role": "user", "content": classification_prompt}]
-        )
+        # Get progress tracker for thinking animation during LLM classification
+        from toolbox import progress_tracker
+        session_id = state.get("chat_session", state.get("user_id", "default"))
+        
+        # Use thinking animation during LLM classification
+        with progress_tracker.thinking_context(session_id, "understanding your request"):
+            response = ollama.chat(
+                # model="krith/qwen2.5-coder-14b-instruct:IQ2_M",
+                model=MAIN_MODEL,
+                messages=[{"role": "user", "content": classification_prompt}]
+            )
         
         intent = response["message"]["content"].strip().lower()
         
@@ -1565,7 +1571,14 @@ else:
             # Start thinking animation for LLM call
             if progress_callback:
                 progress_callback("🤔 Generating code using AI...", "Code Generation")
-            reply, code = generate_model_code(code_prompt, user_id)
+            
+            # Get progress tracker from global toolbox for thinking animation
+            from toolbox import progress_tracker
+            session_id = state.get("chat_session", user_id)
+            
+            # Use thinking animation during LLM call
+            with progress_tracker.thinking_context(session_id, "analysis code generation"):
+                reply, code = generate_model_code(code_prompt, user_id)
             
             if not code.strip():
                 state["response"] = reply
@@ -1790,7 +1803,13 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             if progress_callback:
                 progress_callback("🧠 Building multiple models...", "Code Generation")
             
-            reply, code = generate_model_code(multi_model_prompt, user_id)
+            # Get progress tracker from global toolbox for thinking animation
+            from toolbox import progress_tracker
+            session_id = state.get("chat_session", user_id)
+            
+            # Use thinking animation during LLM call
+            with progress_tracker.thinking_context(session_id, "multi-model code generation"):
+                reply, code = generate_model_code(multi_model_prompt, user_id)
             
             if not code.strip():
                 state["response"] = f"❌ Failed to generate multi-model code: {reply}"
@@ -1989,12 +2008,19 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         if should_compare_models:
             modified_prompt += "\n\nIMPORTANT: Compare multiple models (Random Forest, Decision Tree, LightGBM) and provide comprehensive metrics comparison including rank ordering for each model."
     
-    # Generate code using LLM
+    # Generate code using LLM with thinking animation
     try:
         print("🤔 Generating code...")
         if progress_callback:
             progress_callback("🤔 Creating your model...", "Code Generation")
-        reply, code = generate_model_code(modified_prompt, user_id)
+        
+        # Get progress tracker from global toolbox for thinking animation
+        from toolbox import progress_tracker
+        session_id = state.get("chat_session", user_id)
+        
+        # Use thinking animation during LLM call
+        with progress_tracker.thinking_context(session_id, "code generation"):
+            reply, code = generate_model_code(modified_prompt, user_id)
         
         if not code.strip():
             state["response"] = reply
@@ -2467,21 +2493,30 @@ def generate_model_code(prompt: str, user_id: str) -> tuple[str, str]:
     print(f"   📏 Total system prompt length: {len(system_prompt)} characters")
     print(f"   📝 User prompt length: {len(prompt)} characters")
 
-    # Call LLM with much smaller, focused prompt
+    # Call LLM with much smaller, focused prompt and thinking animation
     try:
-        response = ollama.chat(
-            model=MAIN_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            options={
-                "num_predict": -1,    # No limit on response length (unlimited)
-                "temperature": 0.1,   # Low temperature for consistent code generation
-                "top_p": 0.9,         # Nucleus sampling
-                "stop": []            # No early stopping
-            }
-        )
+        # Get session ID for thinking animation
+        # Note: user_id here contains the session info
+        session_id = user_id if user_id and "_" in user_id else "default"
+        
+        # Get progress tracker for thinking animation
+        from toolbox import progress_tracker
+        
+        # Use thinking animation during code generation
+        with progress_tracker.thinking_context(session_id, "generating code"):
+            response = ollama.chat(
+                model=MAIN_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                options={
+                    "num_predict": -1,    # No limit on response length (unlimited)
+                    "temperature": 0.1,   # Low temperature for consistent code generation
+                    "top_p": 0.9,         # Nucleus sampling
+                    "stop": []            # No early stopping
+                }
+            )
         
         reply = response["message"]["content"]
         code = extract_first_code_block(reply)

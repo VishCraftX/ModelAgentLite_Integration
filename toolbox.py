@@ -285,27 +285,63 @@ class ProgressTracker:
         self._thinking_emojis = ["🤔", "💭", "🧠", "⚡", "🔍", "✨"]
         self._emoji_index = 0
     
-    def start_thinking(self, state: PipelineState, message: str = "Thinking..."):
-        """Start a thinking animation for long-running operations"""
-        if self.slack_manager and state.chat_session:
+    def start_thinking(self, session_id: str, message: str = "Thinking..."):
+        """Start a thinking animation - show initial thinking message"""
+        if self.slack_manager:
             emoji = self._thinking_emojis[self._emoji_index % len(self._thinking_emojis)]
             self._emoji_index += 1
             thinking_text = f"{emoji} {message}"
-            self.slack_manager.send_message(state.chat_session, thinking_text)
+            self.slack_manager.send_message(session_id, thinking_text)
     
-    def update_thinking(self, state: PipelineState, message: str):
-        """Update thinking message with animation"""
-        if self.slack_manager and state.chat_session:
+    def update_thinking(self, session_id: str, message: str):
+        """Update thinking with new emoji - simulates animation"""
+        if self.slack_manager:
             emoji = self._thinking_emojis[self._emoji_index % len(self._thinking_emojis)]
             self._emoji_index += 1
             thinking_text = f"{emoji} {message}"
-            # Send new message (Slack doesn't support message editing in this context)
-            self.slack_manager.send_message(state.chat_session, thinking_text)
+            self.slack_manager.send_message(session_id, thinking_text)
     
-    def stop_thinking(self, state: PipelineState, final_message: str = "Done!"):
+    def stop_thinking(self, session_id: str, final_message: str = "Done!"):
         """Stop thinking and show completion"""
-        if self.slack_manager and state.chat_session:
-            self.slack_manager.send_message(state.chat_session, f"✅ {final_message}")
+        if self.slack_manager:
+            self.slack_manager.send_message(session_id, f"✅ {final_message}")
+    
+    def thinking_context(self, session_id: str, operation_name: str):
+        """Context manager for thinking animation during long operations"""
+        import threading
+        import time
+        
+        class ThinkingContext:
+            def __init__(self, tracker, session_id, operation_name):
+                self.tracker = tracker
+                self.session_id = session_id
+                self.operation_name = operation_name
+                self.stop_animation = False
+                self.animation_thread = None
+            
+            def __enter__(self):
+                # Start initial thinking message
+                self.tracker.start_thinking(self.session_id, f"Working on {self.operation_name}...")
+                
+                # Start animation thread
+                def animate():
+                    while not self.stop_animation:
+                        time.sleep(3)  # Update every 3 seconds
+                        if not self.stop_animation:
+                            self.tracker.update_thinking(self.session_id, f"Still working on {self.operation_name}...")
+                
+                self.animation_thread = threading.Thread(target=animate, daemon=True)
+                self.animation_thread.start()
+                return self
+            
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                self.stop_animation = True
+                if exc_type is None:
+                    self.tracker.stop_thinking(self.session_id, f"{self.operation_name} complete!")
+                else:
+                    self.tracker.stop_thinking(self.session_id, f"{self.operation_name} failed!")
+        
+        return ThinkingContext(self, session_id, operation_name)
     
     def update(self, state: PipelineState, message: str, stage: str = None, send_to_slack: bool = True):
         """Update progress - ONLY for important user-facing updates"""
