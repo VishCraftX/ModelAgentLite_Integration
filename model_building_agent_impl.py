@@ -1378,8 +1378,12 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
             state["response"] = f"❌ Failed to load existing model: {e}"
             return state
 
+        # Check for analysis/computation requests first (higher priority than just visualization)
+        analysis_intent = any(k in query.lower() for k in ["rank ordering", "ranking", "decile", "bucket", "segment", "predict", "classify", "score", "table"])
+        
         # If the request is to show/plot/visualize the decision tree, generate plot directly
-        plot_intent = any(k in query.lower() for k in ["show", "plot", "visualize", "display"]) and any(
+        # BUT only if it's not asking for analysis/computation
+        plot_intent = (not analysis_intent) and any(k in query.lower() for k in ["show", "plot", "visualize", "display"]) and any(
             t in query.lower() for t in ["tree", "decision tree", "decision-tree", "decisiontree"]
         )
 
@@ -1484,7 +1488,15 @@ REQUIRED - YOU MUST DO THIS:
 - Use the variable 'current_model' which contains the already trained model
 - For any predictions: current_model.predict() or current_model.predict_proba()
 - For plotting: plot_tree(current_model, ...)
+- For rank ordering/deciles: Use current_model.predict_proba() with sample_data
+- For segmentation: Create buckets using qcut() with predicted probabilities
 - The model is already fitted and ready to use
+
+CRITICAL: If user asks for rank ordering, deciles, or buckets:
+1. Use current_model.predict_proba(X)[:,1] to get probabilities  
+2. Create segments with pd.qcut(probabilities, q=N, duplicates='drop')
+3. Calculate badrate, coverage, and cumulative metrics for each segment
+4. Return as a structured table with segment details
 
 Your specific task: {query}
 
