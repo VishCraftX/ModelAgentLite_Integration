@@ -1439,13 +1439,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     nodes_at_max_level = 2 ** safe_tree_depth
                     width = int(max(25, min(100, nodes_at_max_level * 0.1 * max_feature_len)))
                     height = int(max(15, min(50, safe_tree_depth * 3)))
-                    # Calculate font size with strict bounds to avoid FreeType errors
-                    calculated_font_size = 80 / (safe_tree_depth + (max_feature_len or 10)/10)
-                    font_size = max(6, min(12, int(calculated_font_size)))
-                    # Extra safety check to ensure font size is never too small
-                    if font_size < 6:
-                        font_size = 6
-                    print(f"🔍 Font size calculation: calculated={calculated_font_size:.2f}, final={font_size}")
+                    font_size = int(max(6, min(12, 80 / (safe_tree_depth + (max_feature_len or 10)/10))))
                     max_depth_plot = min(5, safe_tree_depth)
 
                     plt.figure(figsize=(width, height))
@@ -1483,24 +1477,26 @@ ABSOLUTELY FORBIDDEN - DO NOT DO ANY OF THESE:
 - DO NOT use .fit() method
 - DO NOT import or use any model creation code
 - DO NOT retrain anything
+- DO NOT generate any plots or visualizations unless specifically requested
 
 REQUIRED - YOU MUST DO THIS:
 - Use the variable 'current_model' which contains the already trained model
 - For any predictions: current_model.predict() or current_model.predict_proba()
-- For plotting: plot_tree(current_model, ...)
 - For rank ordering/deciles: Use current_model.predict_proba() with sample_data
 - For segmentation: Create buckets using qcut() with predicted probabilities
 - The model is already fitted and ready to use
 
-CRITICAL: If user asks for rank ordering, deciles, or buckets:
-1. Use current_model.predict_proba(X)[:,1] to get probabilities  
-2. Create segments with pd.qcut(probabilities, q=N, duplicates='drop')
-3. Calculate badrate, coverage, and cumulative metrics for each segment
-4. Return as a structured table with segment details
+CRITICAL: If user asks for rank ordering, deciles, or buckets, follow the EXACT process:
+1. Split data: X = sample_data.drop('target', axis=1); y = sample_data['target']
+2. Use current_model.predict_proba(X)[:,1] to get probabilities  
+3. Create test_df with actual and probability columns
+4. Create segments with pd.qcut(probabilities, q=N, duplicates='drop')
+5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
+6. Include ALL required columns: bucket, badrate, totalUsersCount, cum_badrate, coverage, avg_probability, min_threshold, max_threshold
 
 Your specific task: {query}
 
-REMEMBER: Use 'current_model' for everything. Do not create any new models."""
+REMEMBER: Use 'current_model' for everything. Do not create any new models. Do not generate plots unless explicitly requested."""
         
     elif routing_decision == "no_model_available":
         state["response"] = """❌ You're asking to use an existing model, but no model has been built yet in this session.
@@ -2297,11 +2293,20 @@ RANK_ORDERING_PROMPT = """
 
 COMPLETE STEP-BY-STEP PROCESS:
 
-# Step 1: Get predictions for segmentation (use test set only)
-y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
-
-# Step 2: Create segmentation dataframe
-    test_df = pd.DataFrame({
+# Step 1: Get predictions for segmentation (use full dataset for existing models, or test set for new models)
+# For existing models: use X and y (from sample_data split)
+# For new models: use X_test and y_test
+if 'current_model' in locals():
+    # Existing model - use full dataset
+    y_proba = current_model.predict_proba(X)[:,1]  # Get positive class probabilities
+    segmentation_df = pd.DataFrame({
+        'actual': y.values,
+        'probability': y_proba
+    })
+else:
+    # New model - use test set
+    y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
+    segmentation_df = pd.DataFrame({
         'actual': y_test.values,
         'probability': y_proba
     })
@@ -2311,10 +2316,10 @@ y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
     import re
     decile_match = re.search(r'(\d+)\s*deciles?', query.lower()) if 'query' in globals() else None
     num_deciles = int(decile_match.group(1)) if decile_match else 10
-    test_df['bucket'] = pd.qcut(test_df['probability'], q=num_deciles, labels=False, duplicates='drop')
+    segmentation_df['bucket'] = pd.qcut(segmentation_df['probability'], q=num_deciles, labels=False, duplicates='drop')
     
 # Step 4: Calculate rank ordering metrics
-    rank_metrics = test_df.groupby('bucket').agg({
+    rank_metrics = segmentation_df.groupby('bucket').agg({
     'actual': ['sum','count'],
     'probability': ['mean','min','max']
     }).reset_index()
@@ -2329,7 +2334,7 @@ rank_metrics['bucket'] = rank_metrics['bucket'] + 1  # Start from 1, not 0
     rank_metrics['cum_numBads'] = rank_metrics['numBads'].cumsum()
     rank_metrics['cum_totalUsers'] = rank_metrics['totalUsersCount'].cumsum()
     rank_metrics['cum_badrate'] = rank_metrics['cum_numBads'] / rank_metrics['cum_totalUsers']
-rank_metrics['coverage'] = (rank_metrics['cum_totalUsers']/len(test_df))*100
+rank_metrics['coverage'] = (rank_metrics['cum_totalUsers']/len(segmentation_df))*100
     
 # Step 6: Format results (round to appropriate decimal places)
 for col in ['badrate','cum_badrate','avg_probability','min_threshold','max_threshold']:
@@ -2358,13 +2363,7 @@ safe_tree_depth = min(tree_depth, 15)  # Cap at 15 to prevent huge plots
 nodes_at_max_level = 2 ** safe_tree_depth
 width = int(max(25, min(100, nodes_at_max_level * 0.1 * max_feature_len)))
 height = int(max(15, min(50, safe_tree_depth * 3)))
-# Calculate font size with strict bounds to avoid FreeType errors  
-calculated_font_size = 80 / (safe_tree_depth + max_feature_len/10)
-font_size = max(6, min(12, int(calculated_font_size)))
-# Extra safety check to ensure font size is never too small - CRITICAL for FreeType
-if font_size < 6:
-    font_size = 6
-print(f"🔍 Font size safety check: calculated={calculated_font_size:.2f}, final={font_size} (min=6, max=12)")
+font_size = int(max(6, min(12, 80 / (safe_tree_depth + max_feature_len/10))))
 
 # Step 3: Set plot depth (limit for readability)
 max_depth_plot = min(5, safe_tree_depth)
@@ -2697,40 +2696,48 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             if 'rank_ordering_table' in result and result['rank_ordering_table']:
                 rank_table = result['rank_ordering_table']
                 if isinstance(rank_table, list) and len(rank_table) > 0:
+                    # Use the same format as in the actual ModelBuildingAgent implementation
                     response_parts = ["✅ **Rank Ordering Analysis Completed!**\n"]
+                    
+                    # Display table data with PROPER financial analysis format (EXACT format from working implementation)
                     response_parts.append("📊 **Rank Ordering Table (Deciles):**")
                     response_parts.append("```")
-                    
-                    # Create header
                     response_parts.append("Decile | Bad Rate | Coverage | Cum Bad Rate | Total Users | Avg Prob")
                     response_parts.append("-------|----------|----------|--------------|-------------|----------")
                     
-                    # Add each decile row
                     for row in rank_table:
-                        bucket = row.get('bucket', 0)
+                        decile = row.get('bucket', 0)
                         badrate = row.get('badrate', 0)
                         coverage = row.get('coverage', 0)
                         cum_badrate = row.get('cum_badrate', 0)
                         total_users = row.get('totalUsersCount', 0)
                         avg_prob = row.get('avg_probability', 0)
                         
-                        response_parts.append(f"  {bucket:2d}   | {badrate:8.4f} | {coverage:8.2f} | {cum_badrate:12.4f} | {total_users:11,d} | {avg_prob:8.4f}")
+                        response_parts.append(f"  {decile:2d}   | {badrate:8.4f} | {coverage:8.2f} | {cum_badrate:12.4f} | {total_users:11,d} | {avg_prob:8.4f}")
                     
                     response_parts.append("```")
                     
-                    # Add insights
-                    top_decile = rank_table[0] if rank_table else {}
-                    bottom_decile = rank_table[-1] if rank_table else {}
-                    
-                    if top_decile and bottom_decile:
+                    # Financial analysis insights (EXACT format from working implementation)
+                    if len(rank_table) > 1:
+                        top_decile = rank_table[-1]  # Highest decile 
+                        bottom_decile = rank_table[0]  # Lowest decile
                         top_badrate = top_decile.get('badrate', 0)
                         bottom_badrate = bottom_decile.get('badrate', 0)
+                        
+                        response_parts.append(f"\n📈 **Key Insights:**")
+                        response_parts.append(f"• Top decile bad rate: {top_badrate:.4f} ({top_badrate*100:.2f}%)")
+                        response_parts.append(f"• Bottom decile bad rate: {bottom_badrate:.4f} ({bottom_badrate*100:.2f}%)")
                         if bottom_badrate > 0:
                             lift = top_badrate / bottom_badrate
-                            response_parts.append(f"\n📈 **Key Insights:**")
-                            response_parts.append(f"• Top decile bad rate: {top_badrate:.4f} ({top_badrate*100:.2f}%)")
-                            response_parts.append(f"• Bottom decile bad rate: {bottom_badrate:.4f} ({bottom_badrate*100:.2f}%)")
                             response_parts.append(f"• Lift (Top/Bottom): {lift:.2f}x")
+                    
+                    # Add model discrimination metrics if available
+                    gini_coefficient = result.get('gini_coefficient')
+                    ks_statistic = result.get('ks_statistic')
+                    if gini_coefficient:
+                        response_parts.append(f"• Gini Coefficient: {gini_coefficient:.4f}")
+                    if ks_statistic:
+                        response_parts.append(f"• KS Statistic: {ks_statistic:.4f}")
                     
                     response_parts.append(f"\n🎯 **Analysis Summary:** {len(rank_table)} deciles created showing model discrimination power.")
                     
