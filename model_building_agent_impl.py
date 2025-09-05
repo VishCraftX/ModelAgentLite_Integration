@@ -417,9 +417,7 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
     print(f"🔍 ExecutionAgent called with verbose={verbose}, max_retries={max_retries}")
     print(f"🔍 Tiered LLM error fixing is ENABLED")
     
-    # Send progress update
-    if progress_callback:
-        progress_callback("Setting up execution environment...", "Code Execution")
+    # Setup is fast - no progress needed
     
     # Initialize environment with data and current model if it exists
     env = {
@@ -544,12 +542,9 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
     
     # Execute code with retries
     for attempts in range(1, max_retries + 1):
-        # Send progress update for execution attempt
-        if progress_callback:
-            if attempts == 1:
-                progress_callback("Executing your code...", "Code Execution")
-            else:
-                progress_callback(f"Retrying code execution (attempt {attempts})...", "Code Execution")
+        # Send progress update only for first execution attempt
+        if progress_callback and attempts == 1:
+            progress_callback("⚡ Running your code...", "Code Execution")
         
         try:
             if verbose:
@@ -563,9 +558,7 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                 print(f"🔍 Environment has sample_data shape: {df.shape}")
                 print("🔍 Starting execution now...")
             
-            # Send progress update for execution start
-            if progress_callback:
-                progress_callback("Running your code now...", "Code Execution")
+            # Execution start - no additional progress needed
             
             # Execute the code with timeout (if supported)
             print("🔍 About to call exec()...")
@@ -597,9 +590,9 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                 exec(code, env)
                 print("🔍 exec() completed successfully!")
             
-            # Send progress update for successful execution
+            # Success - show final completion only
             if progress_callback:
-                progress_callback("Code executed successfully! Processing results...", "Processing Results")
+                progress_callback("✅ Analysis complete!", "Completed")
             
             # Get result
             if 'result' not in env:
@@ -646,9 +639,7 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             result_info = f"Dict: {len(result)} keys" if isinstance(result, dict) else f"Type: {type(result).__name__}"
             print(f"✅ EXEC SUCCESS [{user_id}] {result_info}")
             
-            # Send final progress update
-            if progress_callback:
-                progress_callback("Analysis completed successfully!", "Completed")
+            # Final completion already sent above
             
             return result
             
@@ -1214,10 +1205,7 @@ def controller_agent(state: AgentState) -> AgentState:
     """
     print(f"🎛️ CONTROLLER AGENT - Routing based on intent: {state['intent']}")
     
-    # Send progress update
-    progress_callback = state.get("progress_callback")
-    if progress_callback:
-        progress_callback("Determining the best approach for your request...", "Request Routing")
+    # No progress update needed - internal routing is fast
     
     intent = state["intent"]
     user_id = state["user_id"]
@@ -1274,21 +1262,6 @@ def model_building_agent(state: AgentState) -> AgentState:
     # Get progress callback from state
     progress_callback = state.get("progress_callback")
     routing_decision = state.get("routing_decision", "")
-    
-    if progress_callback:
-        progress_callback("Starting model building process...", "Model Building")
-    
-    if progress_callback:
-        if routing_decision == "build_new_model":
-            progress_callback("Generating code to build your new model...", "Code Generation")
-        elif routing_decision == "build_multi_model":
-            progress_callback("Preparing multi-model comparison workflow...", "Multi-Model Setup")
-        elif routing_decision == "use_existing_model":
-            progress_callback("Generating code to use your existing model...", "Code Generation")
-        elif routing_decision == "execute_code":
-            progress_callback("Preparing to execute your code...", "Code Generation")
-        else:
-            progress_callback("Generating response...", "Processing")
     
     query = state["query"]
     user_id = state["user_id"]
@@ -1589,8 +1562,9 @@ else:
 
         try:
             print("🤔 Generating code for general analysis...")
+            # Start thinking animation for LLM call
             if progress_callback:
-                progress_callback("Generating analysis code using AI...", "Code Generation")
+                progress_callback("🤔 Generating code using AI...", "Code Generation")
             reply, code = generate_model_code(code_prompt, user_id)
             
             if not code.strip():
@@ -1620,9 +1594,7 @@ else:
                 print(f"⚠️ Failed to create artifacts directory: {e}")
                 artifacts_dir = None
             
-            # Send execution progress update
-            if progress_callback:
-                progress_callback("Executing generated code...", "Code Execution")
+            # ExecutionAgent will handle progress updates
             
             result = ExecutionAgent(
                 code, 
@@ -1816,7 +1788,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
         try:
             print("🤔 Generating multi-model comparison code...")
             if progress_callback:
-                progress_callback("Generating multi-model comparison code using AI...", "Code Generation")
+                progress_callback("🧠 Building multiple models...", "Code Generation")
             
             reply, code = generate_model_code(multi_model_prompt, user_id)
             
@@ -1842,8 +1814,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             except Exception as e:
                 print(f"⚠️ Failed to create artifacts directory: {e}")
             
-            if progress_callback:
-                progress_callback("Training multiple models and generating comparisons...", "Multi-Model Execution")
+            # ExecutionAgent will handle progress
             
             result = ExecutionAgent(
                 code, 
@@ -2022,7 +1993,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
     try:
         print("🤔 Generating code...")
         if progress_callback:
-            progress_callback("Generating model building code using AI...", "Code Generation")
+            progress_callback("🤔 Creating your model...", "Code Generation")
         reply, code = generate_model_code(modified_prompt, user_id)
         
         if not code.strip():
@@ -2051,9 +2022,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
             artifacts_dir = None
         
         try:
-            # Send execution progress update
-            if progress_callback:
-                progress_callback("Executing generated code...", "Code Execution")
+            # ExecutionAgent will handle progress updates
             
             result = ExecutionAgent(
                 code, 

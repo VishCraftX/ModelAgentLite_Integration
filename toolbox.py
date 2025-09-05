@@ -274,39 +274,82 @@ class ArtifactManager:
 
 class ProgressTracker:
     """
-    Tracks progress and sends updates to both state and Slack
+    Tracks progress and sends updates to both state and Slack - MINIMAL MODE
+    Only shows updates during actual wait times (LLM generation, code execution)
     """
     
     def __init__(self, slack_manager: SlackManager = None):
         self.slack_manager = slack_manager
-        self._last_message = None  # Simple debounce mechanism
+        self._last_message = None
+        self._thinking_message_id = None  # Track thinking message for updates
+        self._thinking_emojis = ["🤔", "💭", "🧠", "⚡", "🔍", "✨"]
+        self._emoji_index = 0
+    
+    def start_thinking(self, state: PipelineState, message: str = "Thinking..."):
+        """Start a thinking animation for long-running operations"""
+        if self.slack_manager and state.chat_session:
+            emoji = self._thinking_emojis[self._emoji_index % len(self._thinking_emojis)]
+            self._emoji_index += 1
+            thinking_text = f"{emoji} {message}"
+            self.slack_manager.send_message(state.chat_session, thinking_text)
+    
+    def update_thinking(self, state: PipelineState, message: str):
+        """Update thinking message with animation"""
+        if self.slack_manager and state.chat_session:
+            emoji = self._thinking_emojis[self._emoji_index % len(self._thinking_emojis)]
+            self._emoji_index += 1
+            thinking_text = f"{emoji} {message}"
+            # Send new message (Slack doesn't support message editing in this context)
+            self.slack_manager.send_message(state.chat_session, thinking_text)
+    
+    def stop_thinking(self, state: PipelineState, final_message: str = "Done!"):
+        """Stop thinking and show completion"""
+        if self.slack_manager and state.chat_session:
+            self.slack_manager.send_message(state.chat_session, f"✅ {final_message}")
     
     def update(self, state: PipelineState, message: str, stage: str = None, send_to_slack: bool = True):
-        """Update progress in state and optionally send to Slack"""
+        """Update progress - ONLY for important user-facing updates"""
         # Create full message for deduplication
         full_message = f"{stage}: {message}" if stage else message
         
-        # Skip if this is the same message as last time (simple debounce)
+        # Skip if this is the same message as last time
         if full_message == self._last_message:
             return
         self._last_message = full_message
         
-        # Filter out internal routing/technical messages from Slack
-        routing_keywords = ["routed to", "routing to", "generating conversational", "generating educational", 
-                           "pipeline summary", "orchestrator", "classifier", "semantic classification"]
-        is_internal_message = any(keyword in message.lower() for keyword in routing_keywords)
+        # STRICT filtering - only allow these important stages to reach Slack
+        important_stages = [
+            "Model Building",    # Starting model building
+            "Code Generation",   # Only when actually calling LLM
+            "Code Execution",    # Only when actually running code
+            "Completed"         # Final completion
+        ]
         
-        # Send to Slack only if not internal and enabled
-        if send_to_slack and not is_internal_message and self.slack_manager and state.chat_session:
+        # STRICT message filtering - only these message types reach Slack
+        important_messages = [
+            "starting model building",
+            "generating code",
+            "executing code", 
+            "training complete",
+            "analysis complete",
+            "completed successfully"
+        ]
+        
+        # Check if this is an important update that users should see
+        is_important = (stage in important_stages or 
+                       any(important_msg in message.lower() for important_msg in important_messages))
+        
+        # Console logging (always show for debugging)
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        agent_info = f" [{state.current_agent}]" if state.current_agent else ""
+        print(f"[{timestamp}]{agent_info} {message}")
+        
+        # Send to Slack ONLY for important updates
+        if send_to_slack and is_important and self.slack_manager and state.chat_session:
             if stage:
                 self.slack_manager.send_progress_update(state.chat_session, stage, message)
             else:
                 self.slack_manager.send_message(state.chat_session, f"⏳ {message}")
-        
-        # Console logging (single source of truth)
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        agent_info = f" [{state.current_agent}]" if state.current_agent else ""
-        print(f"[{timestamp}]{agent_info} {message}")
         
         # Update state (after logging to avoid duplicate console output)
         if stage:
