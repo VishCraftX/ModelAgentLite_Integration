@@ -422,41 +422,75 @@ class ModelBuildingAgentWrapper:
                         "metrics": result['metrics']
                     }
                 
-                # Handle file uploads (plots, etc.)
+                # Handle file uploads (plots, etc.) - Check execution_result
                 print(f"🔍 UPLOAD DEBUG: Checking for artifacts in result...")
                 print(f"🔍 UPLOAD DEBUG: Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
-                if isinstance(result, dict) and 'artifacts' in result:
-                    print(f"🔍 UPLOAD DEBUG: Found artifacts: {result['artifacts']}")
-                    if 'files' in result['artifacts']:
-                        print(f"🔍 UPLOAD DEBUG: Found files: {result['artifacts']['files']}")
-                        try:
-                            from toolbox import slack_manager
-                            for file_info in result['artifacts']['files']:
-                                print(f"🔍 UPLOAD DEBUG: Processing file_info: {file_info}")
-                                if isinstance(file_info, dict) and 'path' in file_info:
-                                    file_path = file_info['path']
-                                    title = file_info.get('title', 'Generated Plot')
-                                    print(f"🔍 UPLOAD DEBUG: Attempting upload - Path: {file_path}, Title: {title}")
-                                    if os.path.exists(file_path):
-                                        print(f"📤 Uploading {title}: {file_path}")
+                
+                # The actual execution result is in result['execution_result']
+                execution_result = result.get('execution_result') if isinstance(result, dict) else None
+                print(f"🔍 UPLOAD DEBUG: Execution result type: {type(execution_result)}")
+                
+                if execution_result and isinstance(execution_result, dict):
+                    print(f"🔍 UPLOAD DEBUG: Execution result keys: {list(execution_result.keys())}")
+                    
+                    # Check for artifacts structure first
+                    if 'artifacts' in execution_result:
+                        print(f"🔍 UPLOAD DEBUG: Found artifacts: {execution_result['artifacts']}")
+                        if 'files' in execution_result['artifacts']:
+                            print(f"🔍 UPLOAD DEBUG: Found files: {execution_result['artifacts']['files']}")
+                            self._upload_files_to_slack(execution_result['artifacts']['files'], state.chat_session)
+                        else:
+                            print(f"🔍 UPLOAD DEBUG: No 'files' key in artifacts")
+                    
+                    # Check for direct plot_path (from logs we see this exists)
+                    elif 'plot_path' in execution_result and execution_result['plot_path']:
+                        plot_path = execution_result['plot_path']
+                        print(f"🔍 UPLOAD DEBUG: Found plot_path: {plot_path}")
+                        if os.path.exists(plot_path):
+                            try:
+                                from toolbox import slack_manager
+                                print(f"📤 Uploading decision tree plot: {plot_path}")
+                                slack_manager.upload_file(
+                                    session_id=state.chat_session,
+                                    file_path=plot_path,
+                                    title="Decision Tree Visualization",
+                                    comment="Generated decision tree plot"
+                                )
+                                print(f"✅ Successfully uploaded plot: {plot_path}")
+                            except Exception as e:
+                                print(f"❌ Failed to upload plot: {e}")
+                                import traceback
+                                print(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
+                        else:
+                            print(f"⚠️ Plot file not found: {plot_path}")
+                    
+                    # Check for any other file paths in execution result
+                    else:
+                        print(f"🔍 UPLOAD DEBUG: Searching for file paths in execution result...")
+                        file_found = False
+                        for key, value in execution_result.items():
+                            if isinstance(value, str) and any(ext in value.lower() for ext in ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xlsx']):
+                                if os.path.exists(value):
+                                    print(f"🔍 UPLOAD DEBUG: Found file via key '{key}': {value}")
+                                    try:
+                                        from toolbox import slack_manager
+                                        title = self._get_title_from_path(value)
+                                        print(f"📤 Uploading {title}: {value}")
                                         slack_manager.upload_file(
                                             session_id=state.chat_session,
-                                            file_path=file_path,
+                                            file_path=value,
                                             title=title,
                                             comment=f"Generated {title.lower()}"
                                         )
-                                    else:
-                                        print(f"⚠️ File not found for upload: {file_path}")
-                                else:
-                                    print(f"🔍 UPLOAD DEBUG: Invalid file_info format: {file_info}")
-                        except Exception as e:
-                            print(f"❌ Failed to upload files: {e}")
-                            import traceback
-                            print(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
-                    else:
-                        print(f"🔍 UPLOAD DEBUG: No 'files' key in artifacts")
+                                        file_found = True
+                                        break
+                                    except Exception as e:
+                                        print(f"❌ Failed to upload file: {e}")
+                        
+                        if not file_found:
+                            print(f"🔍 UPLOAD DEBUG: No file artifacts found in execution result")
                 else:
-                    print(f"🔍 UPLOAD DEBUG: No artifacts in result")
+                    print(f"🔍 UPLOAD DEBUG: No execution result or not a dict")
             
             print("✅ Model building completed")
             return state
@@ -466,6 +500,59 @@ class ModelBuildingAgentWrapper:
             import traceback
             traceback.print_exc()
             return state
+    
+    def _upload_files_to_slack(self, files_list, session_id):
+        """Upload a list of files to Slack"""
+        try:
+            from toolbox import slack_manager
+            for file_info in files_list:
+                print(f"🔍 UPLOAD DEBUG: Processing file_info: {file_info}")
+                if isinstance(file_info, dict) and 'path' in file_info:
+                    file_path = file_info['path']
+                    title = file_info.get('title', 'Generated File')
+                    print(f"🔍 UPLOAD DEBUG: Attempting upload - Path: {file_path}, Title: {title}")
+                    if os.path.exists(file_path):
+                        print(f"📤 Uploading {title}: {file_path}")
+                        slack_manager.upload_file(
+                            session_id=session_id,
+                            file_path=file_path,
+                            title=title,
+                            comment=f"Generated {title.lower()}"
+                        )
+                    else:
+                        print(f"⚠️ File not found for upload: {file_path}")
+                else:
+                    print(f"🔍 UPLOAD DEBUG: Invalid file_info format: {file_info}")
+        except Exception as e:
+            print(f"❌ Failed to upload files: {e}")
+            import traceback
+            print(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
+    
+    def _get_title_from_path(self, file_path):
+        """Generate appropriate title from file path"""
+        if not file_path:
+            return "Generated File"
+        
+        filename = os.path.basename(file_path).lower()
+        
+        if 'decision_tree' in filename or 'tree' in filename:
+            return "Decision Tree Plot"
+        elif 'rank_order' in filename or 'rank' in filename:
+            return "Rank Order Table"  
+        elif 'confusion_matrix' in filename:
+            return "Confusion Matrix"
+        elif 'roc' in filename:
+            return "ROC Curve"
+        elif filename.endswith('.csv'):
+            return "Data Table (CSV)"
+        elif filename.endswith('.xlsx'):
+            return "Data Table (Excel)"
+        elif filename.endswith(('.png', '.jpg', '.jpeg')):
+            return "Generated Plot"
+        elif filename.endswith('.pdf'):
+            return "Generated Report"
+        else:
+            return "Generated File"
 
 
 # Global instances - these are the agents the orchestrator will use

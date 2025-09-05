@@ -1435,7 +1435,13 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     nodes_at_max_level = 2 ** safe_tree_depth
                     width = int(max(25, min(100, nodes_at_max_level * 0.1 * max_feature_len)))
                     height = int(max(15, min(50, safe_tree_depth * 3)))
-                    font_size = int(max(5, min(10, 80 / (safe_tree_depth + (max_feature_len or 10)/10))))
+                    # Calculate font size with strict bounds to avoid FreeType errors
+                    calculated_font_size = 80 / (safe_tree_depth + (max_feature_len or 10)/10)
+                    font_size = max(6, min(12, int(calculated_font_size)))
+                    # Extra safety check to ensure font size is never too small
+                    if font_size < 6:
+                        font_size = 6
+                    print(f"🔍 Font size calculation: calculated={calculated_font_size:.2f}, final={font_size}")
                     max_depth_plot = min(5, safe_tree_depth)
 
                     plt.figure(figsize=(width, height))
@@ -2336,7 +2342,12 @@ safe_tree_depth = min(tree_depth, 15)  # Cap at 15 to prevent huge plots
 nodes_at_max_level = 2 ** safe_tree_depth
 width = int(max(25, min(100, nodes_at_max_level * 0.1 * max_feature_len)))
 height = int(max(15, min(50, safe_tree_depth * 3)))
-font_size = int(max(5, min(10, 80 / (safe_tree_depth + max_feature_len/10))))
+# Calculate font size with strict bounds to avoid FreeType errors  
+calculated_font_size = 80 / (safe_tree_depth + max_feature_len/10)
+font_size = max(6, min(12, int(calculated_font_size)))
+# Extra safety check to ensure font size is never too small
+if font_size < 6:
+    font_size = 6
 
 # Step 3: Set plot depth (limit for readability)
 max_depth_plot = min(5, safe_tree_depth)
