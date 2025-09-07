@@ -314,14 +314,10 @@ Just upload your data and start asking questions in natural language! 🎉"""
             # Pipeline summary moved to logs only - user doesn't need technical details
             if result.get("data_summary"):
                 summary = result["data_summary"]
-<<<<<<< HEAD
-                if any(summary.values()):  # Log data summary for debugging
-=======
                 # ✅ SKIP PIPELINE SUMMARY FOR FEATURE SELECTION (user has built-in waterfall summary)
                 is_feature_selection = summary.get("current_agent") == "feature_selection" or summary.get("feature_selection_active", False)
                 
                 if any(summary.values()) and not is_feature_selection:  # Skip for feature selection
->>>>>>> 7661a77 (integrated feature selection agent)
                     summary_text = self._format_pipeline_summary(summary)
                     print(f"📋 [DEBUG] Pipeline Summary: {summary_text}")
                     # Note: Not sending to Slack - user doesn't need technical pipeline details

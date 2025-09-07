@@ -11,6 +11,7 @@ import sys
 import os
 import argparse
 from pathlib import Path
+from logging_config import setup_colored_logging
 # Removed logging_config import - module was deleted
 
 # Try to load .env file if it exists
