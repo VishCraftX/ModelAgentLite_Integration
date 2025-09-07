@@ -472,6 +472,11 @@ def get_library_install_guidance(library_name: str) -> dict:
             "description": "Optuna - Hyperparameter optimization",
             "alternatives": ["sklearn.model_selection.GridSearchCV", "sklearn.model_selection.RandomizedSearchCV"]
         },
+        "bayes_opt": {
+            "install_cmd": "pip install bayesian-optimization",
+            "description": "Bayesian Optimization - Hyperparameter tuning using Gaussian processes",
+            "alternatives": ["sklearn.model_selection.GridSearchCV", "sklearn.model_selection.RandomizedSearchCV", "optuna"]
+        },
         "bayesian-optimization": {
             "install_cmd": "pip install bayesian-optimization",
             "description": "Bayesian optimization library",
@@ -502,13 +507,24 @@ def get_library_fallback_code(original_code: str, missing_library: str) -> str:
             "from lightgbm import LGBMClassifier": "from sklearn.ensemble import GradientBoostingClassifier as LGBMClassifier",
             "from lightgbm import LGBMRegressor": "from sklearn.ensemble import GradientBoostingRegressor as LGBMRegressor",
             "LGBMClassifier(": "GradientBoostingClassifier(",
-            "LGBMRegressor(": "GradientBoostingRegressor("
+            "LGBRegressor(": "GradientBoostingRegressor("
         },
         "xgboost": {
             "from xgboost import XGBClassifier": "from sklearn.ensemble import GradientBoostingClassifier as XGBClassifier",
             "from xgboost import XGBRegressor": "from sklearn.ensemble import GradientBoostingRegressor as XGBRegressor",
             "XGBClassifier(": "GradientBoostingClassifier(",
             "XGBRegressor(": "GradientBoostingRegressor("
+        },
+        "bayes_opt": {
+            "from bayes_opt import BayesianOptimization": "# FALLBACK: Using sklearn GridSearchCV instead of Bayesian Optimization\nfrom sklearn.model_selection import GridSearchCV",
+            "BayesianOptimization(": "GridSearchCV(",
+            "optimizer.maximize(": "# Using GridSearchCV instead of Bayesian optimization\n# optimizer.maximize(",
+            "optimizer.probe(": "# optimizer.probe("
+        },
+        "optuna": {
+            "import optuna": "# FALLBACK: Using sklearn GridSearchCV instead of Optuna\nfrom sklearn.model_selection import GridSearchCV",
+            "optuna.create_study": "# Using GridSearchCV instead of Optuna study",
+            "study.optimize": "# Using GridSearchCV instead of study.optimize"
         },
         "seaborn": {
             "import seaborn as sns": "# seaborn not available - using matplotlib",
@@ -823,6 +839,13 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                     
                     if fallback_code and attempts == 1:
                         print(f"🔧 ATTEMPTING FALLBACK: Replacing {missing_library} with alternative...")
+                        
+                        # Notify user about fallback via progress callback
+                        if progress_callback:
+                            alternatives = install_guidance.get('alternatives', [])
+                            alt_text = alternatives[0] if alternatives else "sklearn alternative"
+                            progress_callback(f"📦 {missing_library} not found, using {alt_text} instead", "Library Fallback")
+                        
                         code = fallback_code
                         continue  # Retry with fallback code
                     else:
@@ -2132,7 +2155,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         
         modified_prompt = query
         # Enforce preprocessed-data rules in generation
-        modified_prompt += "\n\nASSUME DATA IS PREPROCESSED. Do NOT add scalers, encoders, ColumnTransformer, or Pipelines. Fit models directly.\n\nCRITICAL LIBRARY POLICY:\n- ONLY use libraries that are commonly pre-installed: pandas, numpy, sklearn, matplotlib\n- DO NOT import: lightgbm, xgboost, catboost, seaborn, plotly, shap, optuna unless specifically requested\n- If user requests a specific library (e.g., \"lgbm model\"), use it but add try-except import blocks\n- For advanced libraries, always provide sklearn alternatives as fallback"
+        modified_prompt += "\n\nASSUME DATA IS PREPROCESSED. Do NOT add scalers, encoders, ColumnTransformer, or Pipelines. Fit models directly.\n\nLIBRARY USAGE POLICY:\n- Use any library the user requests (lightgbm, xgboost, catboost, optuna, bayes_opt, etc.)\n- Always wrap imports in try-except blocks with informative error messages\n- If a library is not available, provide sklearn alternatives as fallback\n- For missing libraries, print a clear message: 'Library [name] not installed. Please ask admin to install: pip install [name]'"
         if should_generate_plot:
             if is_decision_tree_request:
                 modified_prompt += "\n\nCRITICAL: You MUST generate a decision tree visualization plot. This is mandatory for decision tree models. Use the dynamic sizing code provided in the guidelines and add 'plot_path' to the result dictionary."
@@ -2211,6 +2234,17 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
             state["response"] = "❌ Code execution failed - no results generated"
         elif isinstance(result, str) and ("error" in result.lower() or "failed" in result.lower()):
             state["response"] = f"❌ Code execution failed: {result}"
+        elif isinstance(result, dict) and result.get("execution_status") == "failed_missing_library":
+            # Handle missing library case with Slack notification
+            missing_lib = result.get("error", "").replace("Missing library: ", "")
+            admin_message = result.get('admin_message', 'Please install the required library')
+            
+            # Send Slack notification about missing library
+            if progress_callback:
+                progress_callback(f"❌ Missing library: {missing_lib}. {admin_message}", "Error")
+            
+            # Format detailed response with metrics
+            state["response"] = format_model_response(result, routing_decision, query)
         else:
             # Format detailed response with metrics
             state["response"] = format_model_response(result, routing_decision, query)
