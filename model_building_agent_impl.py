@@ -405,6 +405,135 @@ class AgentState(TypedDict):
     progress_callback: Optional[callable]
 
 # =============================================================================
+# LIBRARY MANAGEMENT UTILITIES
+# =============================================================================
+
+def extract_missing_library(error_msg: str) -> str:
+    """Extract the missing library name from import error message"""
+    import re
+    
+    # Common patterns for missing libraries
+    patterns = [
+        r"No module named '([^']+)'",
+        r"No module named ([^\s]+)",
+        r"cannot import name '([^']+)'",
+        r"ImportError: (.+)",
+        r"ModuleNotFoundError: (.+)"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, error_msg)
+        if match:
+            library_name = match.group(1).strip()
+            # Clean up library name
+            if library_name.startswith("No module named "):
+                library_name = library_name.replace("No module named ", "").strip("'\"")
+            return library_name.split('.')[0]  # Get base library name
+    
+    return None
+
+def get_library_install_guidance(library_name: str) -> dict:
+    """Get installation guidance for missing libraries"""
+    
+    # Common ML/Data Science libraries and their install commands
+    library_guidance = {
+        "lightgbm": {
+            "install_cmd": "pip install lightgbm",
+            "description": "LightGBM - Gradient boosting framework",
+            "alternatives": ["sklearn.ensemble.GradientBoostingClassifier", "xgboost"]
+        },
+        "xgboost": {
+            "install_cmd": "pip install xgboost", 
+            "description": "XGBoost - Gradient boosting library",
+            "alternatives": ["lightgbm", "sklearn.ensemble.GradientBoostingClassifier"]
+        },
+        "catboost": {
+            "install_cmd": "pip install catboost",
+            "description": "CatBoost - Gradient boosting library",
+            "alternatives": ["lightgbm", "xgboost"]
+        },
+        "seaborn": {
+            "install_cmd": "pip install seaborn",
+            "description": "Seaborn - Statistical data visualization",
+            "alternatives": ["matplotlib.pyplot"]
+        },
+        "plotly": {
+            "install_cmd": "pip install plotly",
+            "description": "Plotly - Interactive plotting library",
+            "alternatives": ["matplotlib.pyplot", "seaborn"]
+        },
+        "shap": {
+            "install_cmd": "pip install shap",
+            "description": "SHAP - Model explainability library",
+            "alternatives": ["sklearn.inspection.permutation_importance"]
+        },
+        "optuna": {
+            "install_cmd": "pip install optuna",
+            "description": "Optuna - Hyperparameter optimization",
+            "alternatives": ["sklearn.model_selection.GridSearchCV", "sklearn.model_selection.RandomizedSearchCV"]
+        },
+        "bayesian-optimization": {
+            "install_cmd": "pip install bayesian-optimization",
+            "description": "Bayesian optimization library",
+            "alternatives": ["sklearn.model_selection.RandomizedSearchCV", "optuna"]
+        },
+        "skopt": {
+            "install_cmd": "pip install scikit-optimize",
+            "description": "Scikit-optimize - Bayesian optimization",
+            "alternatives": ["sklearn.model_selection.RandomizedSearchCV"]
+        }
+    }
+    
+    # Default guidance for unknown libraries
+    default_guidance = {
+        "install_cmd": f"pip install {library_name}",
+        "description": f"{library_name} - External library",
+        "alternatives": ["Check if there's a sklearn equivalent"]
+    }
+    
+    return library_guidance.get(library_name.lower(), default_guidance)
+
+def get_library_fallback_code(original_code: str, missing_library: str) -> str:
+    """Generate fallback code when a library is missing"""
+    
+    # Define fallback replacements
+    fallbacks = {
+        "lightgbm": {
+            "from lightgbm import LGBMClassifier": "from sklearn.ensemble import GradientBoostingClassifier as LGBMClassifier",
+            "from lightgbm import LGBMRegressor": "from sklearn.ensemble import GradientBoostingRegressor as LGBMRegressor",
+            "LGBMClassifier(": "GradientBoostingClassifier(",
+            "LGBMRegressor(": "GradientBoostingRegressor("
+        },
+        "xgboost": {
+            "from xgboost import XGBClassifier": "from sklearn.ensemble import GradientBoostingClassifier as XGBClassifier",
+            "from xgboost import XGBRegressor": "from sklearn.ensemble import GradientBoostingRegressor as XGBRegressor",
+            "XGBClassifier(": "GradientBoostingClassifier(",
+            "XGBRegressor(": "GradientBoostingRegressor("
+        },
+        "seaborn": {
+            "import seaborn as sns": "# seaborn not available - using matplotlib",
+            "sns.": "plt.",
+            "seaborn": "matplotlib.pyplot"
+        },
+        "plotly": {
+            "import plotly": "# plotly not available - using matplotlib",
+            "plotly.": "plt."
+        }
+    }
+    
+    library_key = missing_library.lower()
+    if library_key in fallbacks:
+        modified_code = original_code
+        for old_pattern, new_pattern in fallbacks[library_key].items():
+            modified_code = modified_code.replace(old_pattern, new_pattern)
+        
+        # Add a comment about the fallback
+        modified_code = f"# FALLBACK: {missing_library} not available, using alternative\n" + modified_code
+        return modified_code
+    
+    return None
+
+# =============================================================================
 # EXECUTION AGENT (From original core.py)
 # =============================================================================
 
@@ -682,6 +811,32 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             print(f"🔍 Current attempt: {attempts}/{max_retries}")
             print(f"🔍 Should try tiered LLM? {attempts <= 2}")
             
+            # Handle import/library errors specifically
+            if error_type in ["ImportError", "ModuleNotFoundError"] or "No module named" in error_msg:
+                missing_library = extract_missing_library(error_msg)
+                if missing_library:
+                    print(f"📦 MISSING LIBRARY DETECTED: {missing_library}")
+                    
+                    # Try to provide installation guidance and fallback
+                    install_guidance = get_library_install_guidance(missing_library)
+                    fallback_code = get_library_fallback_code(code, missing_library)
+                    
+                    if fallback_code and attempts == 1:
+                        print(f"🔧 ATTEMPTING FALLBACK: Replacing {missing_library} with alternative...")
+                        code = fallback_code
+                        continue  # Retry with fallback code
+                    else:
+                        # Return helpful error with admin request message
+                        return {
+                            "error": f"Missing library: {missing_library}",
+                            "error_type": "ImportError",
+                            "admin_message": f"Please contact your system administrator to install: {install_guidance['install_cmd']}",
+                            "description": install_guidance["description"],
+                            "alternatives": install_guidance["alternatives"],
+                            "execution_status": "failed_missing_library",
+                            "user_friendly_message": f"The code requires '{missing_library}' library which is not installed. Please contact your admin to install it, or I can try using an alternative approach."
+                        }
+            
             if verbose:
                 print(f"❌ {error_type} during execution: {error_msg}")
                 if "dictionary changed size during iteration" in error_msg:
@@ -834,17 +989,11 @@ USER QUERY: "{query}"
 Respond with ONLY one word: new_model, multi_model, or use_existing"""
 
     try:
-        # Get progress tracker for thinking animation during LLM classification
-        from toolbox import progress_tracker
-        session_id = state.get("chat_session", state.get("user_id", "default"))
-        
-        # Use thinking animation during LLM classification
-        with progress_tracker.thinking_context(session_id, "understanding your request"):
-            response = ollama.chat(
-                # model="krith/qwen2.5-coder-14b-instruct:IQ2_M",
-                model=MAIN_MODEL,
-                messages=[{"role": "user", "content": classification_prompt}]
-            )
+        response = ollama.chat(
+            # model="krith/qwen2.5-coder-14b-instruct:IQ2_M",
+            model=MAIN_MODEL,
+            messages=[{"role": "user", "content": classification_prompt}]
+        )
         
         intent = response["message"]["content"].strip().lower()
         
@@ -1572,13 +1721,7 @@ else:
             if progress_callback:
                 progress_callback("🤔 Generating code using AI...", "Code Generation")
             
-            # Get progress tracker from global toolbox for thinking animation
-            from toolbox import progress_tracker
-            session_id = state.get("chat_session", user_id)
-            
-            # Use thinking animation during LLM call
-            with progress_tracker.thinking_context(session_id, "analysis code generation"):
-                reply, code = generate_model_code(code_prompt, user_id)
+            reply, code = generate_model_code(code_prompt, user_id)
             
             if not code.strip():
                 state["response"] = reply
@@ -1803,13 +1946,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             if progress_callback:
                 progress_callback("🧠 Building multiple models...", "Code Generation")
             
-            # Get progress tracker from global toolbox for thinking animation
-            from toolbox import progress_tracker
-            session_id = state.get("chat_session", user_id)
-            
-            # Use thinking animation during LLM call
-            with progress_tracker.thinking_context(session_id, "multi-model code generation"):
-                reply, code = generate_model_code(multi_model_prompt, user_id)
+            reply, code = generate_model_code(multi_model_prompt, user_id)
             
             if not code.strip():
                 state["response"] = f"❌ Failed to generate multi-model code: {reply}"
@@ -1995,7 +2132,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         
         modified_prompt = query
         # Enforce preprocessed-data rules in generation
-        modified_prompt += "\n\nASSUME DATA IS PREPROCESSED. Do NOT add scalers, encoders, ColumnTransformer, or Pipelines. Fit models directly."
+        modified_prompt += "\n\nASSUME DATA IS PREPROCESSED. Do NOT add scalers, encoders, ColumnTransformer, or Pipelines. Fit models directly.\n\nCRITICAL LIBRARY POLICY:\n- ONLY use libraries that are commonly pre-installed: pandas, numpy, sklearn, matplotlib\n- DO NOT import: lightgbm, xgboost, catboost, seaborn, plotly, shap, optuna unless specifically requested\n- If user requests a specific library (e.g., \"lgbm model\"), use it but add try-except import blocks\n- For advanced libraries, always provide sklearn alternatives as fallback"
         if should_generate_plot:
             if is_decision_tree_request:
                 modified_prompt += "\n\nCRITICAL: You MUST generate a decision tree visualization plot. This is mandatory for decision tree models. Use the dynamic sizing code provided in the guidelines and add 'plot_path' to the result dictionary."
@@ -2014,13 +2151,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         if progress_callback:
             progress_callback("🤔 Creating your model...", "Code Generation")
         
-        # Get progress tracker from global toolbox for thinking animation
-        from toolbox import progress_tracker
-        session_id = state.get("chat_session", user_id)
-        
-        # Use thinking animation during LLM call
-        with progress_tracker.thinking_context(session_id, "code generation"):
-            reply, code = generate_model_code(modified_prompt, user_id)
+        reply, code = generate_model_code(modified_prompt, user_id)
         
         if not code.strip():
             state["response"] = reply
@@ -2493,30 +2624,21 @@ def generate_model_code(prompt: str, user_id: str) -> tuple[str, str]:
     print(f"   📏 Total system prompt length: {len(system_prompt)} characters")
     print(f"   📝 User prompt length: {len(prompt)} characters")
 
-    # Call LLM with much smaller, focused prompt and thinking animation
+    # Call LLM with much smaller, focused prompt
     try:
-        # Get session ID for thinking animation
-        # Note: user_id here contains the session info
-        session_id = user_id if user_id and "_" in user_id else "default"
-        
-        # Get progress tracker for thinking animation
-        from toolbox import progress_tracker
-        
-        # Use thinking animation during code generation
-        with progress_tracker.thinking_context(session_id, "generating code"):
-            response = ollama.chat(
-                model=MAIN_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                options={
-                    "num_predict": -1,    # No limit on response length (unlimited)
-                    "temperature": 0.1,   # Low temperature for consistent code generation
-                    "top_p": 0.9,         # Nucleus sampling
-                    "stop": []            # No early stopping
-                }
-            )
+        response = ollama.chat(
+            model=MAIN_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            options={
+                "num_predict": -1,    # No limit on response length (unlimited)
+                "temperature": 0.1,   # Low temperature for consistent code generation
+                "top_p": 0.9,         # Nucleus sampling
+                "stop": []            # No early stopping
+            }
+        )
         
         reply = response["message"]["content"]
         code = extract_first_code_block(reply)
@@ -2577,6 +2699,36 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
     try:
         if not isinstance(result, dict):
             return "✅ Model operation completed successfully!"
+        
+        # Handle missing library errors
+        if result.get("execution_status") == "failed_missing_library":
+            missing_lib = result.get("error", "").replace("Missing library: ", "")
+            response_parts = [
+                f"📦 **Missing Library: {missing_lib}**",
+                f"",
+                f"🔒 **For System Administrator:**",
+                f"• {result.get('admin_message', 'Please install the required library')}",
+                f"• Description: {result.get('description', 'External library required')}",
+                f"",
+                f"🔄 **Available Alternatives:**"
+            ]
+            
+            alternatives = result.get('alternatives', [])
+            if alternatives:
+                for alt in alternatives:
+                    response_parts.append(f"• {alt}")
+            else:
+                response_parts.append("• No direct alternatives available")
+            
+            response_parts.extend([
+                f"",
+                f"💡 **Next Steps:**",
+                f"1. Contact your system administrator to install the library",
+                f"2. Or ask me to try a different approach using available libraries",
+                f"3. Or specify which libraries you have available"
+            ])
+            
+            return "\n".join(response_parts)
         
         # Check if we have model metrics (classification or regression)
         if routing_decision == "build_new_model" and any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score', 'r2_score', 'mean_squared_error', 'mean_absolute_error']):
