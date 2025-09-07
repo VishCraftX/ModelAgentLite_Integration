@@ -274,8 +274,9 @@ class ArtifactManager:
 
 class ProgressTracker:
     """
-    Tracks progress and sends updates to both state and Slack - MINIMAL MODE
-    Only shows updates during actual wait times (LLM generation, code execution)
+    Tracks progress and sends updates to both state and Slack - BALANCED MODE
+    Shows key milestones and processing confirmations so users know their request is being handled
+    Filters out only very verbose internal debugging messages
     """
     
     def __init__(self, slack_manager: SlackManager = None):
@@ -289,7 +290,7 @@ class ProgressTracker:
     # Users don't want constant message updates - keep it minimal
     
     def update(self, state: PipelineState, message: str, stage: str = None, send_to_slack: bool = True):
-        """Update progress - ONLY for important user-facing updates"""
+        """Update progress - Balanced approach: key milestones + processing confirmations"""
         # Create full message for deduplication
         full_message = f"{stage}: {message}" if stage else message
         
@@ -298,35 +299,61 @@ class ProgressTracker:
             return
         self._last_message = full_message
         
-        # STRICT filtering - only allow these important stages to reach Slack
-        important_stages = [
-            "Model Building",    # Starting model building
-            "Code Generation",   # Only when actually calling LLM
-            "Code Execution",    # Only when actually running code
-            "Completed"         # Final completion
+        # Key stages that users should always see
+        key_stages = [
+            "Preprocessing",     # Data preprocessing started
+            "Feature Selection", # Feature selection started
+            "Model Building",    # Model building started
+            "Code Generation",   # LLM generating code
+            "Code Execution",    # Code being executed
+            "Analysis",          # Analysis in progress
+            "Completed",         # Task completed
+            "Error"             # Errors
         ]
         
-        # STRICT message filtering - only these message types reach Slack
-        important_messages = [
-            "starting model building",
-            "generating code",
-            "executing code", 
-            "training complete",
-            "analysis complete",
-            "completed successfully"
+        # Important messages that indicate processing/progress
+        key_messages = [
+            "request received",
+            "starting",
+            "processing",
+            "analyzing", 
+            "generating",
+            "executing",
+            "training",
+            "building",
+            "complete",
+            "finished",
+            "ready",
+            "error",
+            "failed"
         ]
         
-        # Check if this is an important update that users should see
-        is_important = (stage in important_stages or 
-                       any(important_msg in message.lower() for important_msg in important_messages))
+        # Skip only very verbose internal messages
+        skip_messages = [
+            "debug",
+            "trace",
+            "internal",
+            "cache hit",
+            "loading cached"
+        ]
+        
+        # Check if this should be sent to Slack
+        should_send = (
+            # Always send key stages
+            stage in key_stages or
+            # Send messages with key progress indicators
+            any(key_msg in message.lower() for key_msg in key_messages) or
+            # Send unless it's a skip message
+            not any(skip_msg in message.lower() for skip_msg in skip_messages)
+        )
         
         # Console logging (always show for debugging)
         timestamp = datetime.now().strftime("%H:%M:%S")
         agent_info = f" [{state.current_agent}]" if state.current_agent else ""
         print(f"[{timestamp}]{agent_info} {message}")
         
-        # Send to Slack ONLY for important updates
-        if send_to_slack and is_important and self.slack_manager and state.chat_session:
+        # Send to Slack with better user experience
+        if send_to_slack and should_send and self.slack_manager and state.chat_session:
             if stage:
                 self.slack_manager.send_progress_update(state.chat_session, stage, message)
             else:
