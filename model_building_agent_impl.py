@@ -86,7 +86,81 @@ def extract_failing_code_block(full_code: str, error_msg: str) -> tuple[str, int
     # For short code, return everything
     return full_code, 0, len(lines), imports_context
 
-def fix_code_with_tiered_llm(original_code: str, error_msg: str, error_type: str, data_shape: tuple, user_query: str = "", intent: str = "", attempt: int = 1) -> str:
+def fix_code_with_complete_rewrite(original_code: str, error_msg: str, error_type: str, user_query: str = "", intent: str = "", attempt: int = 1, original_system_prompt: str = "") -> str:
+    """Complete code rewrite approach - pass full code, error, AND original system prompt to LLM"""
+    
+    # Select model based on attempt
+    if attempt == 1:
+        model_to_use = ERROR_FIXING_MODEL_1
+        model_description = "same model (consistency)"
+    elif attempt == 2:
+        model_to_use = ERROR_FIXING_MODEL_2
+        model_description = "different model (fresh perspective)"
+    else:
+        print("⚠️ Maximum attempts reached")
+        return None
+    
+    print(f"🔧 Attempt {attempt}: Complete rewrite using {model_description}")
+    print(f"🔧 Using original system prompt ({len(original_system_prompt)} chars) to maintain requirements")
+    
+    try:
+        # Create error fixing prompt that preserves original system requirements
+        error_fixing_prompt = f"""The following code was generated based on specific system requirements but failed with an error. 
+Please rewrite the COMPLETE code to fix the error while maintaining ALL original requirements.
+
+ORIGINAL USER REQUEST: {user_query}
+INTENT: {intent}
+
+FAILING CODE:
+```python
+{original_code}
+```
+
+ERROR MESSAGE: {error_msg}
+ERROR TYPE: {error_type}
+
+CRITICAL: Fix the error but maintain ALL the original system requirements and code structure specified in the system prompt.
+
+REWRITTEN CODE:"""
+
+        # Use the ORIGINAL system prompt as the system message (this is the key!)
+        # This ensures the fixing LLM follows the same rules as the original generation
+        system_message = original_system_prompt if original_system_prompt else BASE_SYSTEM_PROMPT
+
+        # Call LLM for complete rewrite with ORIGINAL system prompt
+        response = ollama.chat(
+            model=model_to_use,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": error_fixing_prompt}
+            ],
+            options={
+                "num_predict": -1,
+                "temperature": 0.1,
+                "top_p": 0.9
+            }
+        )
+        
+        if response and "message" in response and "content" in response["message"]:
+            reply = response["message"]["content"]
+            # Extract code from response
+            rewritten_code = extract_first_code_block(reply)
+            
+            if rewritten_code and rewritten_code.strip():
+                print(f"📝 Complete rewrite successful: {len(original_code)} → {len(rewritten_code)} chars")
+                return rewritten_code
+            else:
+                print(f"⚠️ No valid code extracted from LLM response")
+                return None
+        else:
+            print(f"⚠️ Invalid LLM response format")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error in complete rewrite: {e}")
+        return None
+
+def fix_code_with_tiered_llm_DEPRECATED(original_code: str, error_msg: str, error_type: str, data_shape: tuple, user_query: str = "", intent: str = "", attempt: int = 1) -> str:
     """Use tiered LLM approach for surgical error fixing"""
     
     # Select model based on attempt
@@ -553,14 +627,14 @@ def get_library_fallback_code(original_code: str, missing_library: str) -> str:
 # EXECUTION AGENT (From original core.py)
 # =============================================================================
 
-def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retries=2, verbose=True, model_states=None, user_query="", intent="", artifacts_dir=None, progress_callback=None):
+def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retries=2, verbose=True, model_states=None, user_query="", intent="", artifacts_dir=None, progress_callback=None, original_system_prompt=""):
     """Execute generated code with proper environment and error handling"""
     
     # Single line execution start
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"⚙️ EXEC START [{timestamp}] Session: {user_id} | Data: {df.shape} | Code: {len(code)} chars")
     print(f"🔍 ExecutionAgent called with verbose={verbose}, max_retries={max_retries}")
-    print(f"🔍 Tiered LLM error fixing is ENABLED")
+    print(f"🔍 Complete code rewrite error fixing is ENABLED (replaced broken surgical approach)")
     
     # Setup is fast - no progress needed
     
@@ -868,20 +942,20 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                     print("   Common causes: for k,v in dict.items(): dict[new_key] = value")
                     print("   Solution: Create a copy first or collect changes separately")
             
-            # Smart error handling - use tiered LLM approach for error fixing
-            if attempts <= 2:  # Try LLM fixes for first two attempts
-                print(f"🔧 STARTING tiered LLM error fixing for attempt {attempts}...")
-                print(f"🔧 Attempting to fix {error_type} using tiered LLM approach...")
-                fixed_code = fix_code_with_tiered_llm(code, error_msg, error_type, df.shape, user_query, intent, attempts)
+            # NEW APPROACH: Complete code rewrite with full context (much more reliable)
+            if attempts <= 2:  # Try LLM complete rewrite for first two attempts
+                print(f"🔧 STARTING complete code rewrite for attempt {attempts}...")
+                print(f"🔧 Passing full code and error to LLM for complete rewrite...")
+                fixed_code = fix_code_with_complete_rewrite(code, error_msg, error_type, user_query, intent, attempts, original_system_prompt)
                 if fixed_code and fixed_code != code:
-                    print(f"✅ Tiered error-fixing provided a solution")
+                    print(f"✅ Complete rewrite provided a solution")
                     print(f"📝 Code length: {len(code)} → {len(fixed_code)} characters")
                     code = fixed_code
-                    print(f"🔄 RETRYING with fixed code immediately...")
-                    continue  # Retry with LLM-fixed code immediately
+                    print(f"🔄 RETRYING with rewritten code immediately...")
+                    continue  # Retry with rewritten code immediately
                 else:
-                    print(f"⚠️ Tiered error-fixing couldn't provide a different solution")
-                    # Try rule-based fallback when tiered LLM fails
+                    print(f"⚠️ Complete rewrite couldn't provide a different solution")
+                    # Try rule-based fallback when LLM rewrite fails
                     print(f"🔧 Falling back to rule-based error fixing...")
                     fallback_code = auto_fix_code_errors_fallback(code, error_msg, error_type)
                     if fallback_code and fallback_code != code:
@@ -891,7 +965,7 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                         print(f"🔄 RETRYING with fallback-fixed code immediately...")
                         continue  # Retry with fallback-fixed code immediately
             else:
-                print(f"🚫 Skipping tiered LLM (attempt {attempts} > 2)")
+                print(f"🚫 Skipping LLM rewrite (attempt {attempts} > 2)")
                 # For attempts > 2, go straight to rule-based fallback
                 print(f"🔧 Using rule-based error fixing for attempt {attempts}...")
                 fallback_code = auto_fix_code_errors_fallback(code, error_msg, error_type)
@@ -1744,7 +1818,7 @@ else:
             if progress_callback:
                 progress_callback("🤔 Generating code using AI...", "Code Generation")
             
-            reply, code = generate_model_code(code_prompt, user_id)
+            reply, code, system_prompt = generate_model_code(code_prompt, user_id)
             
             if not code.strip():
                 state["response"] = reply
@@ -1784,7 +1858,8 @@ else:
                 intent=intent,
                 model_states=global_model_states,
                 artifacts_dir=artifacts_dir,
-                progress_callback=progress_callback  # Pass progress callback to ExecutionAgent
+                progress_callback=progress_callback,  # Pass progress callback to ExecutionAgent
+                original_system_prompt=system_prompt  # Pass original system prompt for error fixing
             )
             
             print(f"🔍 EXECUTION RESULT DEBUG:")
@@ -1969,7 +2044,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             if progress_callback:
                 progress_callback("🧠 Building multiple models...", "Code Generation")
             
-            reply, code = generate_model_code(multi_model_prompt, user_id)
+            reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id)
             
             if not code.strip():
                 state["response"] = f"❌ Failed to generate multi-model code: {reply}"
@@ -2004,7 +2079,8 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 intent=intent,
                 model_states=global_model_states,
                 artifacts_dir=artifacts_dir,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                original_system_prompt=system_prompt  # Pass original system prompt for error fixing
             )
             
             # Store results and format comprehensive response
@@ -2174,7 +2250,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         if progress_callback:
             progress_callback("🤔 Creating your model...", "Code Generation")
         
-        reply, code = generate_model_code(modified_prompt, user_id)
+        reply, code, system_prompt = generate_model_code(modified_prompt, user_id)
         
         if not code.strip():
             state["response"] = reply
@@ -2213,7 +2289,8 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                 user_query=query,
                 intent=intent,
                 artifacts_dir=artifacts_dir,
-                progress_callback=progress_callback  # Pass progress callback to ExecutionAgent
+                progress_callback=progress_callback,  # Pass progress callback to ExecutionAgent
+                original_system_prompt=system_prompt  # Pass original system prompt for error fixing
             )
             
             if isinstance(result, str) and "error" in result.lower():
@@ -2547,8 +2624,8 @@ def detect_problem_type(y: pd.Series) -> str:
         return "classification"
 
 
-def generate_model_code(prompt: str, user_id: str) -> tuple[str, str]:
-    """Generate model code using modular LLM prompts"""
+def generate_model_code(prompt: str, user_id: str) -> tuple[str, str, str]:
+    """Generate model code using modular LLM prompts - returns (reply, code, system_prompt)"""
     
     print(f"🔍 DEBUG - generate_model_code called with user_id: {user_id}")
     print(f"🔍 DEBUG - global_model_states keys: {list(global_model_states.keys())}")
@@ -2676,13 +2753,13 @@ def generate_model_code(prompt: str, user_id: str) -> tuple[str, str]:
         
         reply = response["message"]["content"]
         code = extract_first_code_block(reply)
-        return reply, code
+        return reply, code, system_prompt
         
     except Exception as e:
         print(f"🔥 Error in generate_model_code: {e}")
         import traceback
         print(f"🔥 Full traceback: {traceback.format_exc()}")
-        return f"LLM error: {e}", ""
+        return f"LLM error: {e}", "", ""
 
 
 # =============================================================================
