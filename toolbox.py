@@ -925,7 +925,7 @@ pattern_classifier = UniversalPatternClassifier()
 
 def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None):
     """Initialize global toolbox with custom configuration"""
-    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager
+    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager, pattern_classifier
     
     # Preserve existing session data if slack_manager already exists
     existing_sessions = {}
@@ -938,9 +938,6 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
         print(f"🔍 DEBUG: Existing threads: {existing_threads}")
         print(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
         print(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
-    
-    if slack_token:
-    global slack_manager, artifact_manager, progress_tracker, execution_agent, user_directory_manager, pattern_classifier
     
     if slack_token and not hasattr(slack_manager, 'client'):
         # Only create new SlackManager if one doesn't exist yet
