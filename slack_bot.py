@@ -8,6 +8,7 @@ import os
 import pandas as pd
 import numpy as np
 import requests
+import logging
 from io import StringIO, BytesIO
 from datetime import datetime
 from typing import Dict, Any, Optional, List
@@ -502,5 +503,9 @@ Just upload your data and start asking questions in natural language! 🎉"""
 
 
 if __name__ == "__main__":
+    # Reduce Slack connection logging noise
+    logging.getLogger("slack_bolt.App").setLevel(logging.WARNING)
+    logging.getLogger("slack_bolt.adapter.socket_mode").setLevel(logging.WARNING)
+    
     bot = SlackMLBot()
     bot.start()

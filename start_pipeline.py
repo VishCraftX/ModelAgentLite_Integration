@@ -10,6 +10,7 @@ Usage:
 import sys
 import os
 import argparse
+import logging
 from pathlib import Path
 from logging_config import setup_colored_logging
 # Removed logging_config import - module was deleted
@@ -422,4 +423,9 @@ def main():
             print("❌ Invalid choice. Please enter 1-5.")
 
 if __name__ == "__main__":
+    # Reduce Slack WebSocket reconnection logging noise
+    logging.getLogger("slack_bolt.App").setLevel(logging.WARNING)
+    logging.getLogger("slack_bolt.adapter.socket_mode").setLevel(logging.WARNING)
+    logging.getLogger("slack_sdk").setLevel(logging.WARNING)
+    
     main()
