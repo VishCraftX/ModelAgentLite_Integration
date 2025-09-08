@@ -13,9 +13,6 @@ from datetime import datetime
 # Import thread logging system
 from thread_logger import get_thread_logger, close_thread_logger
 
-# Import thread logging system
-from thread_logger import get_thread_logger, close_thread_logger
-
 try:
     from langgraph.graph import StateGraph, END
     LANGGRAPH_AVAILABLE = True
@@ -770,7 +767,6 @@ Generate Python code to fulfill this request:"""
         
         # Generate session ID if not provided
         if not session_id:
-            import time
             session_id = f"session_{int(time.time())}"
         
         # Extract user_id and thread_id from session_id (format: user_id_thread_id)
