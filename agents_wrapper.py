@@ -293,6 +293,9 @@ class PreprocessingAgentWrapper:
                         print(f"✅ SUCCESS: Preprocessing to Feature Selection transition completed!")
                         print(f"✅ Feature selection agent initialized with {clean_df.shape[1]} features")
                         
+                        # Set proper response message
+                        state.last_response = f"🚀 **Feature Selection Started!** Initialized with {clean_df.shape[1]} clean features. Menu sent to Slack - ready for analysis!"
+                        
                         # Clean up temp file
                         try:
                             os.unlink(temp_csv_path)
