@@ -66,12 +66,11 @@ def validate_config():
     except:
         pass
     
-    # Check OpenAI
-    if OPENAI_API_KEY:
-        model_available = True
+    # OpenAI check removed - using Qwen models only
+    # model_available = True  # Always true with Ollama/Qwen
     
     if not model_available:
-        errors.append("No model endpoint available (Ollama or OpenAI)")
+        errors.append("No model endpoint available (Ollama required)")
     
     return errors
 

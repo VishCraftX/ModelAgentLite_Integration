@@ -14,7 +14,7 @@ from pipeline_state import PipelineState
 # LLM imports (with optional fallback)
 try:
     import ollama
-    from langchain_openai import ChatOpenAI
+    # from langchain_openai import ChatOpenAI  # Removed - using Qwen models only
     from langchain_core.messages import HumanMessage
     import numpy as np
     from sklearn.metrics.pairwise import cosine_similarity
@@ -858,29 +858,9 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             except Exception as ollama_error:
                 print(f"[Orchestrator] Ollama LLM error: {ollama_error}")
                 
-            # Fallback to OpenAI if available
-            try:
-                import openai
-                client = openai.OpenAI()
-                
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=20,
-                    temperature=0
-                )
-                
-                skip_type = response.choices[0].message.content.strip().lower()
-                
-                valid_types = ["skip_to_modeling", "skip_preprocessing_to_features", 
-                             "skip_preprocessing_to_modeling", "no_skip"]
-                
-                for valid_type in valid_types:
-                    if valid_type in skip_type:
-                        return valid_type
-                        
-            except Exception as openai_error:
-                print(f"[Orchestrator] OpenAI LLM error: {openai_error}")
+            # Use keyword fallback instead of OpenAI
+            print(f"[Orchestrator] Using keyword fallback for skip pattern classification")
+            return self._keyword_classify_skip_patterns(query)
                 
         except Exception as e:
             print(f"[Orchestrator] LLM skip pattern classification failed: {e}")

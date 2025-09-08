@@ -48,13 +48,13 @@ except ImportError:
 # LLM for fallback mechanism (optional)
 try:
     import ollama
-    from langchain_openai import ChatOpenAI
+    # from langchain_openai import ChatOpenAI  # Removed - using Qwen models only
     from langchain_community.chat_models import ChatOllama
     from langchain_core.messages import HumanMessage, SystemMessage
     LLM_AVAILABLE = True
 except ImportError:
     ollama = None
-    ChatOpenAI = None
+    # ChatOpenAI = None  # Removed - using Qwen models only
     ChatOllama = None
     HumanMessage = None
     SystemMessage = None
@@ -936,12 +936,9 @@ FIXED CODE:"""
         if not LLM_AVAILABLE:
             raise Exception("LLM libraries not available")
             
-        if model_name.startswith("gpt-") and ChatOpenAI:
-            return ChatOpenAI(
-                model=model_name,
-                temperature=0,
-                openai_api_key=os.getenv("OPENAI_API_KEY")
-            )
+        # Check for unsupported OpenAI models
+        if model_name.startswith("gpt-"):
+            raise ValueError(f"OpenAI models not supported. Use Qwen models instead. Model requested: {model_name}")
         elif ChatOllama:
             return ChatOllama(
                 model=model_name,

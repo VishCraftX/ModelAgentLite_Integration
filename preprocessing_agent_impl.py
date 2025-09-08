@@ -9,7 +9,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI  # Removed - using Qwen models only
 from langchain_ollama import ChatOllama
 import json
 import os
@@ -26,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 load_dotenv()
 
 print(f"🔧 DEBUG: Environment loaded - DEFAULT_MODEL: {os.getenv('DEFAULT_MODEL', 'Not set')}")
-print(f"🔧 DEBUG: OPENAI_API_KEY available: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
+print(f"🔧 DEBUG: Using Qwen models only (OpenAI disabled)")
 
 class PreprocessingPhase:
     """Enum-like class for preprocessing phases"""
@@ -89,62 +89,39 @@ def get_llm_from_state(state: SequentialState):
         # Handle None state
         if state is None:
             print("🔧 DEBUG: State is None, using default LLM configuration")
-            if default_model.startswith("gpt-"):
-                openai_key = os.getenv("OPENAI_API_KEY")
-                print(f"🔧 DEBUG: OpenAI key available: {'Yes' if openai_key else 'No'}")
-                return ChatOpenAI(
-                    model=default_model,
-                    temperature=0,
-                    openai_api_key=openai_key
-                )
-            else:
-                return ChatOllama(
-                    model=default_model,
-                    temperature=0
-                )
+            # OpenAI support removed - always use Qwen models
+            print(f"🔧 DEBUG: Using Qwen models only")
+            return ChatOllama(
+                model=default_model,
+                temperature=0
+            )
         
         # Handle missing model_name
         if not hasattr(state, 'model_name') or state.model_name is None:
             print("🔧 DEBUG: State has no model_name, using default")
-            if default_model.startswith("gpt-"):
-                openai_key = os.getenv("OPENAI_API_KEY")
-                print(f"🔧 DEBUG: OpenAI key available: {'Yes' if openai_key else 'No'}")
-                return ChatOpenAI(
-                    model=default_model,
-                    temperature=0,
-                    openai_api_key=openai_key
-                )
-            else:
-                return ChatOllama(
-                    model=default_model,
-                    temperature=0
-                )
-        
-        # Check if it's an OpenAI model (starts with gpt-)
-        if state.model_name.startswith("gpt-"):
-            openai_key = os.getenv("OPENAI_API_KEY")
-            print(f"🔧 DEBUG: Using ChatOpenAI with key: {'Available' if openai_key else 'Missing'}")
-            return ChatOpenAI(
-                model=state.model_name,
-                temperature=0,
-                openai_api_key=openai_key
-            )
-        else:
-            print(f"🔧 DEBUG: Using ChatOllama with model: {state.model_name}")
+            # OpenAI support removed - always use Qwen models
+            print(f"🔧 DEBUG: Using Qwen models only")
             return ChatOllama(
-                model=state.model_name,
+                model=default_model,
                 temperature=0
             )
+        
+        # OpenAI support removed - always use Qwen models
+        print(f"🔧 DEBUG: Using Qwen models only")
+        # Use default model if gpt model was requested
+        model_to_use = default_model if state.model_name.startswith("gpt-") else state.model_name
+        print(f"🔧 DEBUG: Using ChatOllama with model: {model_to_use}")
+        return ChatOllama(
+            model=model_to_use,
+            temperature=0
+        )
     except Exception as e:
         print(f"❌ Error creating LLM: {e}")
         # Fallback to default model
         default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         print(f"🔧 DEBUG: Fallback to default model: {default_model}")
-        if default_model.startswith("gpt-"):
-            openai_key = os.getenv("OPENAI_API_KEY")
-            return ChatOpenAI(model=default_model, temperature=0, openai_api_key=openai_key)
-        else:
-            return ChatOllama(model=default_model, temperature=0)
+        # OpenAI support removed - always use Qwen models
+        return ChatOllama(model=default_model, temperature=0)
 
 # Part 2: Enhanced Statistical Analysis Functions
 
