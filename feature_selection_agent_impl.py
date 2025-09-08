@@ -1465,27 +1465,10 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 else:
                     say(f"❌ CSI Analysis failed: {result.get('error', 'Unknown error')}")
             
-        else:
-            say(f"🔧 Analysis type '{analysis_type}' is not yet implemented. Coming soon!")
-    
-    def run_custom_analysis(self, session: UserSession, intent_data: Dict[str, Any], say):
-        """Run custom analyses like VIF, PCA, LASSO"""
-        analysis_type = intent_data.get("analysis_type", "").lower()
-        query_details = intent_data.get("query_details", "")
-        
-        say(f"🔄 **Running {analysis_type.upper()} Analysis**...")
-        
-        if analysis_type == "vif":
-            # Extract threshold from query
-            threshold = intent_data.get("threshold", 5.0)
-            try:
-                # Try to extract threshold from text
-                import re
-                threshold_match = re.search(r'(?:>|>=|above|greater than)\s*([0-9]*\.?[0-9]+)', query_details.lower())
-                if threshold_match:
-                    threshold = float(threshold_match.group(1))
-            except:
-                pass
+        elif analysis_type == "vif":
+            # Extract threshold from intent data or use default
+            if threshold is None:
+                threshold = 5.0  # Default VIF threshold
             
             print(f"🔧 DEBUG VIF: About to run VIF analysis with threshold {threshold}")
             result = AnalysisEngine.run_vif_analysis(session, threshold)
@@ -1519,8 +1502,18 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 error_msg = f"❌ VIF Analysis failed: Unexpected result format: {result}"
                 print(f"🔧 DEBUG VIF: Sending unexpected result error to Slack: {error_msg}")
                 say(error_msg)
-                
-        elif analysis_type == "shap":
+            
+        else:
+            say(f"🔧 Analysis type '{analysis_type}' is not yet implemented. Coming soon!")
+    
+    def run_custom_analysis(self, session: UserSession, intent_data: Dict[str, Any], say):
+        """Run custom analyses like PCA, LASSO, advanced techniques"""
+        analysis_type = intent_data.get("analysis_type", "").lower()
+        query_details = intent_data.get("query_details", "")
+        
+        say(f"🔄 **Running {analysis_type.upper()} Analysis**...")
+        
+        if analysis_type == "shap":
             # Handle SHAP analysis as a direct tool
             threshold = intent_data.get("threshold", 0.01)
             top_n = None
