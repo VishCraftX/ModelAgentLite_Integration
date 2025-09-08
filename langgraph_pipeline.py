@@ -168,12 +168,12 @@ class MultiAgentMLPipeline:
         
         # Don't send routing details to Slack - user doesn't need to see internal routing
         
-        # Send agent-specific next-steps message via Slack
+        # Send agent-specific interactive menus ONLY when user needs guidance
         try:
             slack_manager = self.slack_manager
             if slack_manager and state.chat_session:
                 if selected_agent == 'preprocessing':
-                    # Send comprehensive preprocessing menu when first routed
+                    # Preprocessing is complex and always needs interactive menu
                     preprocessing_menu = f"""🧹 **Sequential Preprocessing Agent**
 
 📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
@@ -214,15 +214,10 @@ class MultiAgentMLPipeline:
                     
                     slack_manager.send_message(state.chat_session, preprocessing_menu)
                     print("✅ Sent comprehensive preprocessing menu to Slack")
-                else:
-                    # Send simple hint for other agents
-                    next_hint = {
-                        'feature_selection': "Feature selection menu and options are displayed above. Choose an analysis to begin.",
-                        'model_building': "Type `proceed` to begin model building, or `help` for options.",
-                        'general_response': "You can ask a question or say `help` for options.",
-                        'code_execution': "Type your code question or `help` for options.",
-                    }.get(selected_agent, "Type `help` for options.")
-                    slack_manager.send_message(state.chat_session, f"{explanation}\n\n{next_hint}")
+                
+                # For all other agents (model_building, feature_selection, code_execution, etc.):
+                # Don't send ANY additional messages - the agents will handle their own responses
+                
         except Exception as e:
             print(f"⚠️ Failed to send orchestrator message: {e}")
         
@@ -291,7 +286,7 @@ class MultiAgentMLPipeline:
             
             # Use LLM for conversational response
             response = ollama.chat(
-                model=os.getenv("DEFAULT_MODEL", "gpt-4o"),  # Use environment variable
+                model=os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M"),  # Use environment variable
                 messages=[
                     {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."},
                     {"role": "user", "content": context_prompt}
@@ -349,10 +344,10 @@ Generate Python code to fulfill this request:"""
             print(f"🤔 Generating Python code for: {user_query}")
             
             # Use the same code generation function as ModelBuildingAgent
-            generated_code, error_msg = generate_model_code(code_generation_prompt, user_id)
+            reply, generated_code, system_prompt = generate_model_code(code_generation_prompt, user_id, user_query)
             
-            if error_msg:
-                state.last_response = f"❌ Code generation failed: {error_msg}"
+            if not generated_code:
+                state.last_response = f"❌ Code generation failed: {reply}"
                 return state
             
             if not generated_code or generated_code.strip() == "":

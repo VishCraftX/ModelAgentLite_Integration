@@ -44,7 +44,7 @@ class SequentialState(BaseModel):
     df: Optional[pd.DataFrame] = None
     df_path: str
     target_column: str
-    model_name: str = os.environ.get("DEFAULT_MODEL", "gpt-4o")
+    model_name: str = os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
     
     # Phase management
     current_phase: str = PreprocessingPhase.OVERVIEW
@@ -83,7 +83,7 @@ def get_llm_from_state(state: SequentialState):
     """Get LLM instance based on state configuration"""
     try:
         # Get default model from environment
-        default_model = os.getenv("DEFAULT_MODEL", "gpt-4o")
+        default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         print(f"🔧 DEBUG: Using model: {default_model}")
         
         # Handle None state
@@ -138,7 +138,7 @@ def get_llm_from_state(state: SequentialState):
     except Exception as e:
         print(f"❌ Error creating LLM: {e}")
         # Fallback to default model
-        default_model = os.getenv("DEFAULT_MODEL", "gpt-4o")
+        default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         print(f"🔧 DEBUG: Fallback to default model: {default_model}")
         if default_model.startswith("gpt-"):
             openai_key = os.getenv("OPENAI_API_KEY")
@@ -2374,7 +2374,7 @@ def run_sequential_agent(df_path: str, target_column: str, model_name: str = Non
     
     # Use provided model_name or get from environment
     if model_name is None:
-        model_name = os.environ.get("DEFAULT_MODEL", "gpt-4o")
+        model_name = os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
     
     # Initialize state
     initial_state = SequentialState(
@@ -3883,6 +3883,6 @@ if __name__ == "__main__":
     
     csv_path = sys.argv[1]
     target_col = sys.argv[2]
-    model = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("DEFAULT_MODEL", "gpt-4o")
+    model = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
     
     run_sequential_agent(csv_path, target_col, model) 

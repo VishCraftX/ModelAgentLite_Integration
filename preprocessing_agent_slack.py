@@ -88,7 +88,7 @@ class PreprocessingSession:
     thread_ts: Optional[str] = None
     
     # Configuration
-    model_name: str = os.environ.get("DEFAULT_MODEL", "gpt-4o")
+    model_name: str = os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
     missing_threshold: float = 50.0
     outlier_threshold: float = 10.0
     high_cardinality_threshold: int = 50
@@ -265,7 +265,7 @@ class SlackPreprocessingBot:
                 user_id=user_id,
                 original_df=df.copy(),
                 current_df=df.copy(),
-                model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
             )
             
             self.users[user_id] = session
