@@ -1859,45 +1859,44 @@ def create_sequential_preprocessing_agent():
         })
     
     def outliers_node(state: SequentialState) -> SequentialState:
-    """Analyze and present outlier treatment recommendations"""
-    print("⚠️  Phase 1: Outlier Analysis")
-    
-    # Get thread logger
-    if hasattr(state, 'chat_session') and state.chat_session:
-        # Extract user_id and thread_id from session_id
-        session_id = state.chat_session
-        if '_' in session_id:
-            parts = session_id.split('_')
-            user_id = parts[0] if len(parts) >= 1 else session_id
-            thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+        """Analyze and present outlier treatment recommendations"""
+        print("⚠️  Phase 1: Outlier Analysis")
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            # Extract user_id and thread_id from session_id
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_analysis("outlier_detection", {}, {"status": "starting"})
         else:
-            user_id = session_id
-            thread_id = session_id
-        thread_logger = get_thread_logger(user_id, thread_id)
-        thread_logger.log_analysis("outlier_detection", {}, {"status": "starting"})
-    else:
-        thread_logger = None
-    
-    # Run outlier analysis
-    outlier_results = analyze_outliers_with_llm(state)
-    
-    # Log analysis results
-    if thread_logger:
-        thread_logger.log_analysis("outlier_detection", {}, {
-            "success": True,
-            "outlier_columns": len(outlier_results.get('outlier_columns', [])),
-            "processing_time": outlier_results.get('processing_time', 0)
-        })
+            thread_logger = None
         
-        if not outlier_results['outlier_columns']:
-            summary = "✅ **No Outliers Detected**\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
-        else:
-            outlier_cols = outlier_results['outlier_columns']
-            recommendations = outlier_results['llm_recommendations']
+        # Run outlier analysis
+        outlier_results = analyze_outliers_with_llm(state)
+        
+        # Log analysis results
+        if thread_logger:
+            thread_logger.log_analysis("outlier_detection", {}, {
+                "success": True,
+                "outlier_columns": len(outlier_results.get('outlier_columns', [])),
+                "processing_time": outlier_results.get('processing_time', 0)
+            })
             
-            # Group by severity
-            severe_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'severe']
-            moderate_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'moderate']
+            if not outlier_results['outlier_columns']:
+                summary = "✅ **No Outliers Detected**\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
+            else:
+                outlier_cols = outlier_results['outlier_columns']
+                recommendations = outlier_results['llm_recommendations']
+                
+                # Group by severity
+                severe_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'severe']
+                moderate_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'moderate']
             mild_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'mild']
             
             summary = f"""⚠️  **Outlier Detection Results ({len(outlier_cols)} columns):**
@@ -1939,7 +1938,7 @@ def create_sequential_preprocessing_agent():
             "current_step": "awaiting_user_input",
             "query_response": summary
         })
-    
+        
     def missing_values_node(state: SequentialState) -> SequentialState:
         """Analyze and present missing value imputation strategies"""
         print("📈 Phase 2: Missing Values Analysis")
