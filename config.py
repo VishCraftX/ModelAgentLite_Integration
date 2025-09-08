@@ -17,8 +17,7 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
 FALLBACK_MODEL_1 = os.getenv("FALLBACK_MODEL_1", DEFAULT_MODEL)
 FALLBACK_MODEL_2 = os.getenv("FALLBACK_MODEL_2", "deepseek-coder-v2:latest")
 
-# OpenAI Configuration (for fallback)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# OpenAI Configuration removed - using Qwen models only
 
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -85,7 +84,6 @@ def print_config():
     print(f"  DEFAULT_MODEL: {DEFAULT_MODEL}")
     print(f"  FALLBACK_MODEL_1: {FALLBACK_MODEL_1}")
     print(f"  FALLBACK_MODEL_2: {FALLBACK_MODEL_2}")
-    print(f"  OPENAI_API_KEY: {'✅ Set' if OPENAI_API_KEY else '❌ Not set'}")
     print(f"  LOG_LEVEL: {LOG_LEVEL}")
     print(f"  MAX_FILE_SIZE_MB: {MAX_FILE_SIZE_MB}")
     print(f"  SUPPORTED_FILE_TYPES: {', '.join(SUPPORTED_FILE_TYPES)}")
