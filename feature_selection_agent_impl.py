@@ -28,7 +28,6 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 # LLM imports
-from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -38,7 +37,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.stats import chi2
 
 # Global configuration
-GLOBAL_DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "gpt-4o")
+GLOBAL_DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
 
 @dataclass
 class AnalysisStep:
@@ -93,12 +92,8 @@ class LLMManager:
         """Get appropriate LLM instance for different model providers"""
         model_name_lower = model_name.lower()
         
-        # OpenAI models
-        if model_name_lower in ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]:
-            return ChatOpenAI(model=model_name, temperature=0)
-        
         # Ollama models (local)
-        elif any(name in model_name_lower for name in ["qwen", "llama", "mistral", "codellama", "gemma"]):
+        if any(name in model_name_lower for name in ["qwen", "llama", "mistral", "codellama", "gemma"]):
             return ChatOllama(model=model_name, temperature=0)
         
         # Default to Ollama for unknown models

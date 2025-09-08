@@ -1823,7 +1823,7 @@ else:
             if progress_callback:
                 progress_callback("🤔 Generating code using AI...", "Code Generation")
             
-            reply, code, system_prompt = generate_model_code(code_prompt, user_id)
+            reply, code, system_prompt = generate_model_code(code_prompt, user_id, query)
             
             if not code.strip():
                 state["response"] = reply
@@ -2049,7 +2049,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             if progress_callback:
                 progress_callback("🧠 Building multiple models...", "Code Generation")
             
-            reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id)
+            reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id, query)
             
             if not code.strip():
                 state["response"] = f"❌ Failed to generate multi-model code: {reply}"
@@ -2255,7 +2255,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         if progress_callback:
             progress_callback("🤔 Creating your model...", "Code Generation")
         
-        reply, code, system_prompt = generate_model_code(modified_prompt, user_id)
+        reply, code, system_prompt = generate_model_code(modified_prompt, user_id, query)
         
         if not code.strip():
             state["response"] = reply
@@ -2635,7 +2635,7 @@ def detect_problem_type(y: pd.Series) -> str:
         return "classification"
 
 
-def generate_model_code(prompt: str, user_id: str) -> tuple[str, str, str]:
+def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> tuple[str, str, str]:
     """Generate model code using modular LLM prompts - returns (reply, code, system_prompt)"""
     
     print(f"🔍 DEBUG - generate_model_code called with user_id: {user_id}")
@@ -2696,27 +2696,81 @@ def generate_model_code(prompt: str, user_id: str) -> tuple[str, str, str]:
     print(f"   🎯 Rank ordering keywords found: {is_rank_ordering_request}")
     print(f"   🌳 Tree keywords found: {'tree' in prompt.lower()}")
     
-    # Tree plot detection logic - only for DecisionTree models
-    tree_in_prompt = "tree" in prompt.lower()
-    wants_tree_plot = tree_in_prompt and any(keyword in prompt.lower() for keyword in [
-        "build tree", "create tree", "train tree", "decision tree",
-        "show tree", "plot tree", "visualize tree", "display tree", "tree plot"
-    ])
-    using_existing_tree = any(phrase in prompt.lower() for phrase in [
-        "use this tree", "use the tree", "with this tree", "for this tree"
+    # Use original_query if available to avoid false matches in system instructions
+    detection_text = original_query.lower() if original_query else prompt.lower()
+    
+    # 🧠 SEMANTIC + KEYWORD HYBRID APPROACH for Decision Tree Detection
+    from toolbox import UniversalPatternClassifier
+    
+    # Define decision tree patterns for semantic classification
+    decision_tree_patterns = {
+        "decision_tree_request": "train decision tree, build decision tree, create decision tree, decision tree model, classification tree, tree classifier, dt model, tree algorithm, train tree, build tree, make tree, fit tree, tree model, decision tree classification",
+        "other_tree_models": "random forest, extra trees, gradient boosting trees, lgbm tree, xgboost tree, lightgbm, xgboost, catboost, random forest classifier, ensemble trees",
+        "general_modeling": "train model, build model, create classifier, machine learning model, fit algorithm"
+    }
+    
+    # Use semantic classification with fallback
+    classifier = UniversalPatternClassifier()
+    detection_query = original_query if original_query else prompt
+    
+    pattern_result, confidence, method = classifier.classify_pattern(
+        detection_query, 
+        decision_tree_patterns,
+        use_case="model_sub_classification"  # Liberal thresholds for better detection
+    )
+    
+    # Semantic decision tree detection
+    semantic_decision_tree = (pattern_result == "decision_tree_request")
+    is_other_tree_model = (pattern_result == "other_tree_models")
+    
+    # Keyword fallback for edge cases
+    keyword_decision_tree = any(phrase in detection_text for phrase in [
+        "decision tree", "decisiontree", "decision-tree", "dt", "classification tree"
+    ]) and not any(phrase in detection_text for phrase in [
+        "random forest", "lgbm", "lightgbm", "xgb", "xgboost", "catboost"
     ])
     
-    # Check if user is asking for DecisionTree specifically (not LGBM/XGB tree visualization)
-    is_decision_tree_request = any(phrase in prompt.lower() for phrase in [
-        "decision tree", "decisiontree", "decision-tree"
-    ]) and not any(phrase in prompt.lower() for phrase in [
-        "lgbm", "lightgbm", "xgb", "xgboost", "random forest"
+    # Context-aware "tree" detection (when semantic isn't confident)
+    contextual_tree = (
+        "tree" in detection_text and 
+        any(verb in detection_text for verb in ["train", "build", "create", "make", "fit", "model"]) and
+        not any(exclude in detection_text for exclude in ["random", "forest", "gradient", "boost"])
+    )
+    
+    # Final decision: Semantic primary, keyword + contextual as fallback
+    if method == "semantic" and confidence > 0.1:  # Trust semantic if confident enough
+        is_decision_tree_request = semantic_decision_tree and not is_other_tree_model
+        detection_method = f"semantic (confidence: {confidence:.3f})"
+    else:
+        is_decision_tree_request = keyword_decision_tree or contextual_tree
+        detection_method = f"keyword_fallback (semantic_confidence: {confidence:.3f})"
+    
+    # Tree plot detection logic
+    tree_in_prompt = is_decision_tree_request  # Use the robust detection
+    wants_tree_plot = tree_in_prompt and any(keyword in detection_text for keyword in [
+        "plot", "show", "visualize", "display", "draw", "chart", "graph"
+    ])
+    using_existing_tree = any(phrase in detection_text for phrase in [
+        "use this tree", "use the tree", "with this tree", "for this tree",
+        "existing tree", "current tree", "saved tree"
     ])
     
     print(f"   🌳 Tree keywords found: {tree_in_prompt}")
     print(f"   🌳 Wants tree plot: {wants_tree_plot}")
     print(f"   🌳 Using existing tree: {using_existing_tree}")
     print(f"   🌳 Is DecisionTree request: {is_decision_tree_request}")
+    
+    # Enhanced debug logging for decision tree detection
+    print(f"   🔍 Detection method: {detection_method}")
+    print(f"   🧠 Semantic result: {pattern_result} (confidence: {confidence:.3f})")
+    print(f"   🎯 Semantic decision tree: {semantic_decision_tree}")
+    print(f"   ❌ Other tree model detected: {is_other_tree_model}")
+    print(f"   🔤 Keyword fallback: {keyword_decision_tree}")
+    print(f"   📝 Contextual tree: {contextual_tree}")
+    if original_query:
+        print(f"   📋 Detection text: '{original_query}'")
+    else:
+        print(f"   ⚠️ Using modified prompt for detection")
 
     # Build system prompt
     print(f"🔍 PROMPT ASSEMBLY:")

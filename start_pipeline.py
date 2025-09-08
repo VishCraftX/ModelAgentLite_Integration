@@ -29,7 +29,7 @@ def parse_arguments():
                        help='Slack App Token (xapp-...)')
     parser.add_argument('--mode', choices=['slack', 'api', 'test', 'demo'],
                        help='Run mode: slack bot, api testing, direct testing, or demo')
-    parser.add_argument('--model', default=os.environ.get('DEFAULT_MODEL', 'gpt-4o'),
+    parser.add_argument('--model', default=os.environ.get('DEFAULT_MODEL', 'qwen2.5-coder:32b-instruct-q4_K_M'),
                        help='Default LLM model to use')
     parser.add_argument('--persistence', action='store_true', default=True,
                        help='Enable state persistence (default: True)')

@@ -282,7 +282,7 @@ Please wait while we analyze your features for selection."""
                         df=state.raw_data,
                         df_path=df_path,
                         target_column=state.target_column,
-                        model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                        model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
                     )
                     
                     # Initialize dataset analysis
@@ -509,7 +509,7 @@ Please wait while we analyze your features for selection."""
                             df=state.raw_data,
                             df_path=df_path,
                             target_column=state.target_column,
-                            model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                            model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
                         )
                         
                         # Initialize dataset analysis
@@ -831,7 +831,7 @@ Please wait while we analyze your features for selection."""
                                 df=data_to_analyze,
                                 df_path=df_path,
                                 target_column=state.target_column,
-                                model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                                model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
                             )
                             
                             # Run missing values analysis
@@ -1107,7 +1107,7 @@ Please wait while we analyze your features for selection."""
                                 df=data_to_analyze,
                                 df_path=df_path,
                                 target_column=state.target_column,
-                                model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                                model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
                             )
                             
                             # Run encoding analysis with confidence-based approach
@@ -1399,7 +1399,7 @@ Please wait while we analyze your features for selection."""
                                 df=data_to_analyze,
                                 df_path=df_path,
                                 target_column=state.target_column,
-                                model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                                model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
                             )
                             
                             # Run transformations analysis with confidence-based approach
@@ -1591,7 +1591,7 @@ Please wait while we analyze your features for selection."""
                             df=data_to_analyze,
                             df_path=df_path,
                             target_column=state.target_column,
-                            model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o")
+                            model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
                         )
                         
                         # Initialize LLM
@@ -1796,7 +1796,7 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                         df=data_to_analyze,
                         df_path=df_path,
                         target_column=state.target_column,
-                        model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o"),
+                        model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M"),
                         current_phase=state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
                     )
                     
@@ -2076,7 +2076,7 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                         df=data_to_analyze,
                         df_path=df_path,
                         target_column=state.target_column,
-                        model_name=os.environ.get("DEFAULT_MODEL", "gpt-4o"),
+                        model_name=os.environ.get("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M"),
                         current_phase=current_phase
                     )
                     
