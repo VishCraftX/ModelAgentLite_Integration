@@ -24,6 +24,9 @@ from langchain_core.tools import tool
 # Import utilities
 from model_agent_utils import extract_first_code_block, safe_joblib_dump, safe_plt_savefig, diagnose_io_error
 
+# Import thread logging system
+from thread_logger import get_thread_logger
+
 # Global model states registry
 global_model_states = {}
 
@@ -635,11 +638,30 @@ def get_library_fallback_code(original_code: str, missing_library: str) -> str:
 def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retries=2, verbose=True, model_states=None, user_query="", intent="", artifacts_dir=None, progress_callback=None, original_system_prompt=""):
     """Execute generated code with proper environment and error handling"""
     
+    # Get thread logger
+    if '_' in user_id:
+        parts = user_id.split('_')
+        actual_user_id = parts[0] if len(parts) >= 1 else user_id
+        thread_id = '_'.join(parts[1:]) if len(parts) > 1 else user_id
+    else:
+        actual_user_id = user_id
+        thread_id = user_id
+    
+    thread_logger = get_thread_logger(actual_user_id, thread_id)
+    
     # Single line execution start
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"⚙️ EXEC START [{timestamp}] Session: {user_id} | Data: {df.shape} | Code: {len(code)} chars")
     print(f"🔍 ExecutionAgent called with verbose={verbose}, max_retries={max_retries}")
     print(f"🔍 Complete code rewrite error fixing is ENABLED (replaced broken surgical approach)")
+    
+    # Log code execution start
+    thread_logger.log_data_operation("code_execution_start", {
+        "user_query": user_query,
+        "intent": intent,
+        "data_shape": df.shape,
+        "code_length": len(code)
+    })
     
     # Setup is fast - no progress needed
     
@@ -863,6 +885,15 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             result_info = f"Dict: {len(result)} keys" if isinstance(result, dict) else f"Type: {type(result).__name__}"
             print(f"✅ EXEC SUCCESS [{user_id}] {result_info}")
             
+            # Log successful execution
+            if thread_logger:
+                thread_logger.log_data_operation("code_execution_success", {
+                    "user_query": user_query,
+                    "intent": intent,
+                    "result_type": type(result).__name__,
+                    "result_info": result_info
+                })
+            
             # Final completion already sent above
             
             return result
@@ -872,6 +903,14 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             error_msg = f"I/O Error (Errno {getattr(io_exc, 'errno', 'unknown')}): {str(io_exc)}"
             if verbose:
                 print(f"💾 I/O Error during execution: {error_msg}")
+            
+            # Log I/O error
+            if thread_logger:
+                thread_logger.error("Code execution I/O error", io_exc, {
+                    "user_query": user_query,
+                    "intent": intent,
+                    "error_type": "IOError"
+                })
             
             # Get diagnostic information
             diagnosis = diagnose_io_error(error_msg)
@@ -1463,12 +1502,24 @@ def model_building_agent(state: AgentState) -> AgentState:
     """
     print(f"🏗️ MODEL BUILDING AGENT - Processing: {state['routing_decision']}")
     
+    # Get thread logger
+    user_id = state["user_id"]
+    if '_' in user_id:
+        parts = user_id.split('_')
+        actual_user_id = parts[0] if len(parts) >= 1 else user_id
+        thread_id = '_'.join(parts[1:]) if len(parts) > 1 else user_id
+    else:
+        actual_user_id = user_id
+        thread_id = user_id
+    
+    thread_logger = get_thread_logger(actual_user_id, thread_id)
+    thread_logger.log_query(state["query"], intent=state.get("intent"), agent="model_building")
+    
     # Get progress callback from state
     progress_callback = state.get("progress_callback")
     routing_decision = state.get("routing_decision", "")
     
     query = state["query"]
-    user_id = state["user_id"]
     routing_decision = state["routing_decision"]
     data = state["data"]
     intent = state["intent"]  # Extract intent from state

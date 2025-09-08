@@ -7,7 +7,14 @@ Main orchestration system that coordinates preprocessing, feature selection, and
 from typing import Dict, Any, Optional, Callable, List
 import tempfile
 import os
+import time
 from datetime import datetime
+
+# Import thread logging system
+from thread_logger import get_thread_logger, close_thread_logger
+
+# Import thread logging system
+from thread_logger import get_thread_logger, close_thread_logger
 
 try:
     from langgraph.graph import StateGraph, END
@@ -149,11 +156,29 @@ class MultiAgentMLPipeline:
         """Orchestrator node - routes queries to appropriate agents"""
         print(f"\n🎯 [Orchestrator] Processing query: '{state.user_query}'")
         
+        # Get thread logger
+        if hasattr(state, 'session_id') and state.session_id:
+            if '_' in state.session_id:
+                parts = state.session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else state.session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else state.session_id
+            else:
+                user_id = state.session_id
+                thread_id = state.session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+        else:
+            thread_logger = None
+        
         # Route the query
         selected_agent = orchestrator.route(state)
         
         # Get routing explanation
         explanation = orchestrator.get_routing_explanation(state, selected_agent)
+        
+        # Log routing decision
+        if thread_logger:
+            thread_logger.log_routing(state.user_query, selected_agent)
+            thread_logger.log_agent_switch(state.current_agent, selected_agent, explanation)
         
         # Update state
         state.current_agent = "Orchestrator"
@@ -748,9 +773,26 @@ Generate Python code to fulfill this request:"""
             import time
             session_id = f"session_{int(time.time())}"
         
+        # Extract user_id and thread_id from session_id (format: user_id_thread_id)
+        if '_' in session_id:
+            parts = session_id.split('_')
+            user_id = parts[0] if len(parts) >= 1 else session_id
+            thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+        else:
+            user_id = session_id
+            thread_id = session_id
+        
+        # Initialize thread logger
+        thread_logger = get_thread_logger(user_id, thread_id)
+        thread_logger.log_query(query)
+        
+        # Start performance tracking
+        start_time = time.time()
+        
         # Ensure user directory exists
         user_dir = self._get_user_session_dir(session_id)
         print(f"📁 User session directory: {user_dir}")
+        thread_logger.log_data_operation("user_directory_access", {"user_dir": user_dir})
         
         # Load conversation history
         conversation_history = self._load_conversation_history(session_id)
@@ -1155,6 +1197,15 @@ Generate Python code to fulfill this request:"""
             # Prepare response
             response = self._prepare_response(result_state)
             
+            # Log performance and response
+            processing_time = time.time() - start_time
+            thread_logger.log_performance("query_processing", processing_time, {
+                "session_id": session_id,
+                "query_length": len(query),
+                "success": response.get("success", True)
+            })
+            thread_logger.log_response(response['response'], success=response.get("success", True))
+            
             # Log the response for debugging/monitoring
             print(f"📤 Response: {response['response']}")
             print(f"✅ Query processing completed for session {session_id}")
@@ -1163,6 +1214,18 @@ Generate Python code to fulfill this request:"""
         except Exception as e:
             error_msg = f"Pipeline execution failed: {str(e)}"
             print(f"❌ {error_msg}")
+            
+            # Log error with thread logger
+            processing_time = time.time() - start_time
+            thread_logger.error(f"Pipeline execution failed", e, {
+                "session_id": session_id,
+                "query": query,
+                "processing_time": processing_time
+            })
+            thread_logger.log_performance("query_processing_failed", processing_time, {
+                "session_id": session_id,
+                "error": error_msg
+            })
             
             # Update state with error
             state.last_error = error_msg
@@ -1175,6 +1238,9 @@ Generate Python code to fulfill this request:"""
                 "session_id": session_id,
                 "response": f"❌ Sorry, I encountered an error: {error_msg}"
             }
+            
+            # Log error response
+            thread_logger.log_response(error_response['response'], success=False)
             
             # Log the error response for debugging/monitoring
             print(f"📤 Error Response: {error_response['response']}")
