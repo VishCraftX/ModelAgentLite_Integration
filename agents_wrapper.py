@@ -237,6 +237,7 @@ class PreprocessingAgentWrapper:
                         session = UserSession(
                             user_id=state.chat_session,
                             file_path=temp_csv_path,
+                            file_name=os.path.basename(temp_csv_path),
                             target_column=state.target_column,
                             current_features=list(data_to_use.columns),
                             analysis_chain=[],
@@ -283,6 +284,8 @@ class PreprocessingAgentWrapper:
                             "current_phase": "menu"
                         }
                         print(f"🔧 DEBUG: Updated state.interactive_session: {state.interactive_session}")
+                        print(f"✅ SUCCESS: Preprocessing to Feature Selection transition completed!")
+                        print(f"✅ Feature selection agent initialized with {clean_df.shape[1]} features")
                         
                         # Clean up temp file
                         try:
