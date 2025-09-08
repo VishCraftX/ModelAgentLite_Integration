@@ -3073,6 +3073,7 @@ Keep it concise and actionable."""
                 session.analysis_chain.append(cleaning_step)
             
             # ✅ Create the "after_cleaning" snapshot for revert functionality
+            from datetime import datetime  # Ensure datetime is available in this scope
             session.snapshots["after_cleaning"] = {
                 "df": clean_df.copy(),
                 "features": list(clean_df.columns),
