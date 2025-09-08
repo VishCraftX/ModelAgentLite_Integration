@@ -1858,7 +1858,7 @@ else:
         print("🔄 Starting multi-model comparison workflow...")
         
         if progress_callback:
-            progress_callback("Building multiple models for comparison...", "Multi-Model Training")
+            progress_callback("🔄 Processing your request...", "Multi-Model Training")
         
         # Check if data is available for model building
         if data is None:
@@ -1994,7 +1994,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
         try:
             print("🤔 Generating multi-model comparison code...")
             if progress_callback:
-                progress_callback("🧠 Building multiple models...", "Code Generation")
+                progress_callback("🤔 Generating code...", "Code Generation")
             
             reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id, query)
             
@@ -2200,7 +2200,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
     try:
         print("🤔 Generating code...")
         if progress_callback:
-            progress_callback("🤔 Creating your model...", "Code Generation")
+            progress_callback("🤔 Generating code...", "Code Generation")
         
         reply, code, system_prompt = generate_model_code(modified_prompt, user_id, query)
         
