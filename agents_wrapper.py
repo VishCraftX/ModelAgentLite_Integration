@@ -246,7 +246,12 @@ class PreprocessingAgentWrapper:
                         )
                         
                         # Apply intelligent data cleaning (this is what FS agent does on startup)
-                        clean_df = DataProcessor.load_and_clean_data(session)
+                        success = DataProcessor.load_and_clean_data(session)
+                        if not success:
+                            raise ValueError("Failed to load and clean data")
+                        
+                        # Get the cleaned DataFrame from the session
+                        clean_df = session.current_df
                         print(f"✅ Applied intelligent cleaning: {data_to_use.shape} → {clean_df.shape}")
                         
                         # Create the "after_cleaning" snapshot for revert functionality
