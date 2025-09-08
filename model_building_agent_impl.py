@@ -2424,6 +2424,7 @@ MANDATORY STRUCTURE:
 3. Train/test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 4. Model training: model = [UserRequestedModel](); model.fit(X_train, y_train)
    ✅ FOLLOW USER'S SPECIFIC REQUEST for model type and parameters
+   ✅ FOR DECISION TREES: Use max_depth=5 as default if user doesn't specify depth
 5. Predictions: y_pred = model.predict(X_test)
 6. Metrics calculation
 7. Model saving: model_path = safe_joblib_dump(model, 'model.joblib') (Not required for existing models)
@@ -2445,6 +2446,11 @@ REQUIRED:
 ✅ Save plots with safe_plt_savefig(), never plt.show()
 ✅ For DecisionTreeClassifier/Regressor → automatically generate plot
 ✅ Final result dictionary with model, model_path, and all metrics
+
+🌲 DECISION TREE DEFAULTS:
+- If user requests "decision tree" without depth: DecisionTreeClassifier(max_depth=5, random_state=42)
+- If user specifies depth: DecisionTreeClassifier(max_depth=USER_SPECIFIED, random_state=42)
+- Always include random_state=42 for reproducibility
 
 🚨 MANDATORY CODE COMPLETION TEMPLATE:
 Your code MUST follow this exact structure and be COMPLETE:
