@@ -71,10 +71,11 @@ def check_dependencies():
     except ImportError:
         optional_deps.append("Ollama: Not available (local LLM support)")
     
-    try:
-        import openai
-    except ImportError:
-        optional_deps.append("OpenAI: Not available (cloud LLM support)")
+    # OpenAI support removed - using Qwen models only
+    # try:
+    #     import openai
+    # except ImportError:
+    #     optional_deps.append("OpenAI: Not available (cloud LLM support)")
     
     return missing_deps, optional_deps
 

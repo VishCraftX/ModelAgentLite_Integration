@@ -10,7 +10,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI  # Removed - using Qwen models only
 from langchain_ollama import ChatOllama
 import json
 import os
