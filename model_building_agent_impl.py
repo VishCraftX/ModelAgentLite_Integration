@@ -1199,27 +1199,9 @@ def llm_classify_model_intent(query: str) -> str:
         except Exception as ollama_error:
             print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
             
-        # Fallback to OpenAI if available
-        try:
-            import openai
-            client = openai.OpenAI()
-            
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=10,
-                temperature=0
-            )
-            
-            intent = response.choices[0].message.content.strip().lower()
-            
-            if "use_existing" in intent:
-                return "use_existing"
-            elif "new_model" in intent:
-                return "new_model"
-                
-        except Exception as openai_error:
-            print(f"[ModelAgent] OpenAI LLM error: {openai_error}")
+        # Use keyword fallback instead of OpenAI
+        print(f"[ModelAgent] Using keyword fallback for intent classification")
+        return fallback_classify_intent_keywords(query)
             
     except Exception as e:
         print(f"[ModelAgent] LLM classification failed: {e}")
@@ -1360,27 +1342,9 @@ def llm_detect_plot_request(query: str) -> bool:
         except Exception as ollama_error:
             print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
             
-        # Fallback to OpenAI if available
-        try:
-            import openai
-            client = openai.OpenAI()
-            
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=5,
-                temperature=0
-            )
-            
-            answer = response.choices[0].message.content.strip().lower()
-            
-            if "yes" in answer:
-                return True
-            elif "no" in answer:
-                return False
-                
-        except Exception as openai_error:
-            print(f"[ModelAgent] OpenAI LLM error: {openai_error}")
+        # Use keyword fallback instead of OpenAI
+        print(f"[ModelAgent] Using keyword fallback for plot detection")
+        return keyword_detect_plot(query)
             
     except Exception as e:
         print(f"[ModelAgent] LLM plot detection failed: {e}")
@@ -1424,27 +1388,10 @@ def llm_detect_financial_analysis(query: str) -> bool:
         except Exception as ollama_error:
             print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
             
-        # Fallback to OpenAI if available
-        try:
-            import openai
-            client = openai.OpenAI()
-            
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=5,
-                temperature=0
-            )
-            
-            answer = response.choices[0].message.content.strip().lower()
-            
-            if "yes" in answer:
-                return True
-            elif "no" in answer:
-                return False
-                
-        except Exception as openai_error:
-            print(f"[ModelAgent] OpenAI LLM error: {openai_error}")
+        # Use keyword fallback instead of OpenAI
+        print(f"[ModelAgent] Using keyword fallback for financial analysis")
+        financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
+        return any(fk in query.lower() for fk in financial_keywords)
             
     except Exception as e:
         print(f"[ModelAgent] LLM financial analysis failed: {e}")
@@ -2713,7 +2660,7 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
     classifier = UniversalPatternClassifier()
     detection_query = original_query if original_query else prompt
     
-    pattern_result, confidence, method = classifier.classify_pattern(
+    pattern_result, method = classifier.classify_pattern(
         detection_query, 
         decision_tree_patterns,
         use_case="model_sub_classification"  # Liberal thresholds for better detection
@@ -2738,12 +2685,12 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
     )
     
     # Final decision: Semantic primary, keyword + contextual as fallback
-    if method == "semantic" and confidence > 0.1:  # Trust semantic if confident enough
+    if method == "semantic":  # Trust semantic if it was used
         is_decision_tree_request = semantic_decision_tree and not is_other_tree_model
-        detection_method = f"semantic (confidence: {confidence:.3f})"
+        detection_method = f"semantic (method: {method})"
     else:
         is_decision_tree_request = keyword_decision_tree or contextual_tree
-        detection_method = f"keyword_fallback (semantic_confidence: {confidence:.3f})"
+        detection_method = f"keyword_fallback (method: {method})"
     
     # Tree plot detection logic
     tree_in_prompt = is_decision_tree_request  # Use the robust detection
@@ -2762,7 +2709,7 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
     
     # Enhanced debug logging for decision tree detection
     print(f"   🔍 Detection method: {detection_method}")
-    print(f"   🧠 Semantic result: {pattern_result} (confidence: {confidence:.3f})")
+    print(f"   🧠 Semantic result: {pattern_result} (method: {method})")
     print(f"   🎯 Semantic decision tree: {semantic_decision_tree}")
     print(f"   ❌ Other tree model detected: {is_other_tree_model}")
     print(f"   🔤 Keyword fallback: {keyword_decision_tree}")
