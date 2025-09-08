@@ -50,6 +50,9 @@ class PipelineState(BaseModel):
     # Interactive session management
     interactive_session: Optional[Dict] = None
     
+    # Slack session management
+    slack_session_info: Optional[Dict] = Field(default_factory=dict)
+    
     # Execution context
     current_agent: Optional[str] = None
     execution_history: List[Dict] = Field(default_factory=list)
@@ -105,12 +108,34 @@ class PipelineState(BaseModel):
             "chat_session": self.chat_session
         }
         
+        # Add current agent information for context-aware summaries
+        if hasattr(self, 'interactive_session') and self.interactive_session:
+            summary["current_agent"] = self.interactive_session.get("agent_type")
+            if self.interactive_session.get("agent_type") == "feature_selection":
+                summary["feature_selection_active"] = True
+        
+        # Add feature selection state info
+        if hasattr(self, 'feature_selection_state') and self.feature_selection_state:
+            summary["feature_selection_active"] = self.feature_selection_state.get("session_active", False)
+        
         if self.raw_data is not None:
             summary["raw_data_shape"] = self.raw_data.shape
             summary["raw_data_columns"] = list(self.raw_data.columns)
         
         if self.cleaned_data is not None:
-            summary["cleaned_data_shape"] = self.cleaned_data.shape
+            # ✅ Use actual feature selection count if available, otherwise use cleaned_data shape
+            if (hasattr(self, 'feature_selection_state') and 
+                self.feature_selection_state and 
+                self.feature_selection_state.get("current_feature_count")):
+                # Use the cleaned feature count from feature selection
+                actual_feature_count = self.feature_selection_state["current_feature_count"]
+                summary["cleaned_data_shape"] = (self.cleaned_data.shape[0], actual_feature_count)
+                summary["actual_feature_count"] = actual_feature_count
+                summary["original_feature_count"] = self.cleaned_data.shape[1]
+            else:
+                # Use original cleaned_data shape
+                summary["cleaned_data_shape"] = self.cleaned_data.shape
+            
             summary["cleaned_data_columns"] = list(self.cleaned_data.columns)
         
         if self.selected_features:

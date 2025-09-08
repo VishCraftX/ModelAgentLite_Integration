@@ -576,6 +576,174 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         
         return best_intent, confidence_info
 
+    def _classify_direct_feature_selection(self, query: str) -> bool:
+        """
+        BGE-based classification to determine if a feature selection query should bypass preprocessing.
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            bool: True if this is a direct feature selection request (skip preprocessing)
+        """
+        try:
+            # Define examples for direct vs standard approaches (without "feature selection" noise)
+            direct_fs_examples = [
+                "skip preprocessing",
+                "bypass preprocessing", 
+                "directly on raw data",
+                "use raw data",
+                "without preprocessing",
+                "no preprocessing needed",
+                "skip data cleaning",
+                "bypass data preparation",
+                "on unprocessed data",
+                "raw data analysis",
+                "immediately",
+                "skip cleaning step",
+                "directly",
+                "straight to analysis",
+                "without cleaning",
+                "raw analysis",
+                "immediate analysis",
+                "no cleaning required",
+                "bypass cleaning"
+            ]
+            
+            standard_fs_examples = [
+                "analyze",
+                "process data first", 
+                "clean the data",
+                "prepare data",
+                "standard process",
+                "normal workflow",
+                "typical approach",
+                "regular analysis",
+                "standard procedure",
+                "clean first",
+                "prepare first",
+                "process then analyze",
+                "standard analysis",
+                "normal process",
+                "clean and analyze",
+                "prepare and select"
+            ]
+            
+            # Use BGE embeddings if available
+            if EMBEDDINGS_AVAILABLE and hasattr(self, '_get_embedding'):
+                print(f"🧠 [Direct FS BGE] Classifying query: '{query}'")
+                
+                # Get query embedding
+                query_embedding = self._get_embedding(query)
+                if query_embedding is None:
+                    print("⚠️ [Direct FS BGE] Failed to get query embedding, using keyword fallback")
+                    return self._classify_direct_fs_keywords(query)
+                
+                # Get embeddings for examples (with caching)
+                direct_embeddings = []
+                standard_embeddings = []
+                
+                for example in direct_fs_examples:
+                    emb = self._get_embedding(example)
+                    if emb is not None:
+                        direct_embeddings.append(emb)
+                
+                for example in standard_fs_examples:
+                    emb = self._get_embedding(example)
+                    if emb is not None:
+                        standard_embeddings.append(emb)
+                
+                if not direct_embeddings or not standard_embeddings:
+                    print("⚠️ [Direct FS BGE] Failed to get example embeddings, using keyword fallback")
+                    return self._classify_direct_fs_keywords(query)
+                
+                # Calculate average similarities
+                direct_similarities = []
+                for emb in direct_embeddings:
+                    similarity = cosine_similarity(
+                        query_embedding.reshape(1, -1),
+                        emb.reshape(1, -1)
+                    )[0][0]
+                    direct_similarities.append(float(similarity))
+                
+                standard_similarities = []
+                for emb in standard_embeddings:
+                    similarity = cosine_similarity(
+                        query_embedding.reshape(1, -1),
+                        emb.reshape(1, -1)
+                    )[0][0]
+                    standard_similarities.append(float(similarity))
+                
+                # Calculate average similarities
+                avg_direct_similarity = np.mean(direct_similarities)
+                avg_standard_similarity = np.mean(standard_similarities)
+                
+                # Determine classification
+                is_direct = avg_direct_similarity > avg_standard_similarity
+                confidence_diff = abs(avg_direct_similarity - avg_standard_similarity)
+                
+                print(f"🔍 [Direct FS BGE] Similarity scores:")
+                print(f"   Direct FS: {avg_direct_similarity:.3f}")
+                print(f"   Standard FS: {avg_standard_similarity:.3f}")
+                print(f"   Confidence diff: {confidence_diff:.3f}")
+                
+                # Use BGE result if confidence is high enough
+                if confidence_diff > 0.01:  # Minimum confidence threshold (lowered from 0.05)
+                    result = is_direct
+                    method = "BGE"
+                    print(f"🎯 [Direct FS BGE] Classified as {'DIRECT' if result else 'STANDARD'} (confidence: {confidence_diff:.3f})")
+                else:
+                    print(f"⚠️ [Direct FS BGE] Low confidence ({confidence_diff:.3f} < 0.05), using keyword fallback")
+                    result = self._classify_direct_fs_keywords(query)
+                    method = "BGE+Keyword"
+                
+                print(f"✅ [Direct FS {method}] Final result: {'DIRECT' if result else 'STANDARD'}")
+                return result
+                
+            else:
+                print("⚠️ [Direct FS BGE] BGE embeddings not available, using keyword fallback")
+                return self._classify_direct_fs_keywords(query)
+                
+        except Exception as e:
+            print(f"❌ [Direct FS BGE] Classification error: {e}")
+            print("🔧 [Direct FS BGE] Falling back to keyword classification")
+            return self._classify_direct_fs_keywords(query)
+    
+    def _classify_direct_fs_keywords(self, query: str) -> bool:
+        """
+        Keyword-based fallback for direct feature selection classification
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            bool: True if this is a direct feature selection request
+        """
+        query_lower = query.lower()
+        
+        # Strong indicators for direct feature selection (skip preprocessing)
+        direct_fs_keywords = [
+            "direct feature selection", "skip preprocessing", "raw data", "without preprocessing",
+            "bypass preprocessing", "use raw data", "no preprocessing", "direct fs",
+            "skip cleaning", "bypass cleaning", "unprocessed data", "immediate feature",
+            "skip data preparation", "raw feature analysis", "without cleaning",
+            "skip data cleaning", "bypass data preparation", "raw analysis",
+            "directly", "feature selection directly", "directly feature selection",
+            "straight to features", "immediate analysis"
+        ]
+        
+        # Check for explicit direct keywords
+        has_direct_keywords = any(keyword in query_lower for keyword in direct_fs_keywords)
+        
+        print(f"🔍 [Direct FS Keyword] Query: '{query}'")
+        print(f"🔍 [Direct FS Keyword] Has direct keywords: {has_direct_keywords}")
+        
+        if has_direct_keywords:
+            matched_keywords = [kw for kw in direct_fs_keywords if kw in query_lower]
+            print(f"🎯 [Direct FS Keyword] Matched keywords: {matched_keywords}")
+        
+        return has_direct_keywords
+
     def _should_analyze_skip_patterns(self, query: str) -> bool:
         """Determine if skip pattern analysis is relevant for this query"""
         
@@ -805,9 +973,17 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             return "preprocessing"
         
         elif intent == "feature_selection":
+            # ✅ ENHANCED DIRECT FEATURE SELECTION: BGE model classification with keyword fallback
             if state.cleaned_data is None and state.raw_data is not None:
-                print("[Orchestrator] Need to preprocess data first")
-                return "preprocessing"
+                # Use BGE model to classify if this is a direct feature selection request
+                is_direct_fs = self._classify_direct_feature_selection(state.user_query or "")
+                
+                if is_direct_fs:
+                    print("[Orchestrator] 🚀 Direct feature selection requested (BGE classified) - using raw data")
+                    return "feature_selection"
+                else:
+                    print("[Orchestrator] 📊 Standard feature selection request (BGE classified) - preprocessing first")
+                    return "preprocessing"
             return "feature_selection"
         
         elif intent == "model_building":
@@ -1119,9 +1295,10 @@ How can I help you with your ML workflow today?"""
         Semantic-first routing: Embedding similarity with keyword and LLM fallbacks
         """
         if not state.user_query:
-            return "preprocessing"  # Default
+            return "general_response"  # Do nothing until user provides intent
         
         print(f"[Orchestrator] Processing query: '{state.user_query}'")
+        
         
         # Use universal pattern classifier for main intent classification
         intent, method_used = self.pattern_classifier.classify_pattern(
