@@ -255,10 +255,11 @@ class PreprocessingAgentWrapper:
                         print(f"✅ Applied intelligent cleaning: {data_to_use.shape} → {clean_df.shape}")
                         
                         # Create the "after_cleaning" snapshot for revert functionality
+                        from datetime import datetime as dt
                         session.snapshots["after_cleaning"] = {
                             "df": clean_df.copy(),
                             "features": list(clean_df.columns),
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": dt.now().isoformat()
                         }
                         print(f"✅ Created 'after_cleaning' snapshot with {clean_df.shape[1]} clean features for revert functionality")
                         
