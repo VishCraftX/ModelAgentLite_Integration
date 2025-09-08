@@ -12,6 +12,7 @@ import json
 import os
 import pickle
 import tempfile
+import time
 
 
 class PipelineState(BaseModel):
@@ -285,7 +286,6 @@ class StateManager:
     
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up sessions older than specified hours"""
-        import time
         
         current_time = time.time()
         cutoff_time = current_time - (max_age_hours * 3600)
