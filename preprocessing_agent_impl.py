@@ -22,6 +22,9 @@ from dotenv import load_dotenv
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
+# Import thread logging system
+from thread_logger import get_thread_logger
+
 # Load environment variables
 load_dotenv()
 
@@ -1856,11 +1859,35 @@ def create_sequential_preprocessing_agent():
         })
     
     def outliers_node(state: SequentialState) -> SequentialState:
-        """Analyze and present outlier treatment recommendations"""
-        print("⚠️  Phase 1: Outlier Analysis")
-        
-        # Run outlier analysis
-        outlier_results = analyze_outliers_with_llm(state)
+    """Analyze and present outlier treatment recommendations"""
+    print("⚠️  Phase 1: Outlier Analysis")
+    
+    # Get thread logger
+    if hasattr(state, 'chat_session') and state.chat_session:
+        # Extract user_id and thread_id from session_id
+        session_id = state.chat_session
+        if '_' in session_id:
+            parts = session_id.split('_')
+            user_id = parts[0] if len(parts) >= 1 else session_id
+            thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+        else:
+            user_id = session_id
+            thread_id = session_id
+        thread_logger = get_thread_logger(user_id, thread_id)
+        thread_logger.log_analysis("outlier_detection", {}, {"status": "starting"})
+    else:
+        thread_logger = None
+    
+    # Run outlier analysis
+    outlier_results = analyze_outliers_with_llm(state)
+    
+    # Log analysis results
+    if thread_logger:
+        thread_logger.log_analysis("outlier_detection", {}, {
+            "success": True,
+            "outlier_columns": len(outlier_results.get('outlier_columns', [])),
+            "processing_time": outlier_results.get('processing_time', 0)
+        })
         
         if not outlier_results['outlier_columns']:
             summary = "✅ **No Outliers Detected**\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
@@ -1917,8 +1944,31 @@ def create_sequential_preprocessing_agent():
         """Analyze and present missing value imputation strategies"""
         print("📈 Phase 2: Missing Values Analysis")
         
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_analysis("missing_values_analysis", {}, {"status": "starting"})
+        else:
+            thread_logger = None
+        
         # Run missing value analysis
         missing_results = analyze_missing_values_with_llm(state)
+        
+        # Log analysis results
+        if thread_logger:
+            thread_logger.log_analysis("missing_values_analysis", {}, {
+                "success": True,
+                "missing_columns": len(missing_results.get('missing_columns', [])),
+                "processing_time": missing_results.get('processing_time', 0)
+            })
         
         if not missing_results['missing_columns']:
             summary = "✅ **No Missing Values Detected**\n\nAll columns are complete. Ready to proceed to Phase 3 (Encoding)?"

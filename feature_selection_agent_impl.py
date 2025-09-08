@@ -15,6 +15,9 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
 
+# Import thread logging system
+from thread_logger import get_thread_logger
+
 # Setup comprehensive logging
 logging.basicConfig(
     level=logging.INFO,
@@ -1470,9 +1473,17 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
             if threshold is None:
                 threshold = 5.0  # Default VIF threshold
             
+            # Get thread logger
+            thread_logger = get_thread_logger(session.user_id, session.user_id)
+            
             print(f"🔧 DEBUG VIF: About to run VIF analysis with threshold {threshold}")
+            thread_logger.log_analysis("vif", {"threshold": threshold}, {"status": "starting"})
+            
             result = AnalysisEngine.run_vif_analysis(session, threshold)
             print(f"🔧 DEBUG VIF: Analysis result: {result}")
+            
+            # Log analysis completion
+            thread_logger.log_analysis("vif", {"threshold": threshold}, result)
             
             if result.get("success"):
                 vif_scores = result.get("vif_scores", {})

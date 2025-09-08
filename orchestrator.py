@@ -11,6 +11,8 @@ from enum import Enum
 from datetime import datetime
 from pipeline_state import PipelineState
 
+# Import thread logging system
+from thread_logger import get_thread_logger
 # LLM imports (with optional fallback)
 try:
     import ollama
@@ -64,6 +66,24 @@ class Orchestrator:
     Fast keyword classification with intelligent LLM fallback for ambiguous cases
     """
     
+    def _get_thread_logger(self, state):
+        """Helper function to get thread logger from state"""
+        if hasattr(state, "session_id") and state.session_id:
+            session_id = state.session_id
+        elif hasattr(state, "chat_session") and state.chat_session:
+            session_id = state.chat_session
+        else:
+            return None
+        
+        if "_" in session_id:
+            parts = session_id.split("_")
+            user_id = parts[0] if len(parts) >= 1 else session_id
+            thread_id = "_".join(parts[1:]) if len(parts) > 1 else session_id
+        else:
+            user_id = session_id
+            thread_id = session_id
+        
+        return get_thread_logger(user_id, thread_id)
     def __init__(self):
         self.default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         
@@ -1295,6 +1315,10 @@ How can I help you with your ML workflow today?"""
         
         print(f"[Orchestrator] Processing query: '{state.user_query}'")
         
+        # Get thread logger
+        thread_logger = self._get_thread_logger(state)
+        if thread_logger:
+            thread_logger.log_query(state.user_query, agent="orchestrator")
         
         # Use universal pattern classifier for main intent classification
         intent, method_used = self.pattern_classifier.classify_pattern(
@@ -1304,7 +1328,23 @@ How can I help you with your ML workflow today?"""
         )
         
         print(f"[Orchestrator] Intent classification: {intent} (method: {method_used})")
-        return self._route_by_intent(state, intent)
+        
+        # Log classification results
+        if thread_logger:
+            thread_logger.log_classification(state.user_query, {
+                "intent": intent,
+                "method": method_used,
+                "confidence": getattr(self.pattern_classifier, "last_confidence", None)
+            })
+        
+        # Route by intent
+        route_decision = self._route_by_intent(state, intent)
+        
+        # Log routing decision
+        if thread_logger:
+            thread_logger.log_routing(state.user_query, route_decision)
+        
+        return route_decision
 
     def get_routing_explanation(self, state: PipelineState, routing_decision: str) -> str:
         """Get explanation for routing decision"""

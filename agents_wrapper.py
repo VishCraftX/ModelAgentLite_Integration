@@ -13,6 +13,9 @@ from datetime import datetime
 
 from pipeline_state import PipelineState
 
+# Import thread logging system
+from thread_logger import get_thread_logger
+
 # Import your working agents AS-IS
 try:
     from preprocessing_agent_impl import (
@@ -198,11 +201,30 @@ class PreprocessingAgentWrapper:
         if not self.available:
             print("❌ Preprocessing agent not available")
             return state
+        
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_query(command, agent="preprocessing")
+        else:
+            thread_logger = None
             
         try:
             # Check current phase and handle accordingly
             current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
             print(f"🔧 DEBUG: Current phase: {current_phase}, Command: {command}")
+            
+            # Log phase transition
+            if thread_logger:
+                thread_logger.debug(f"Preprocessing phase: {current_phase}", {"command": command})
             
             # ✅ COMPLETION PHASE HANDLER - Move to Feature Selection
             if current_phase == 'completion' and state.preprocessing_state.get('completed', False):
@@ -2657,6 +2679,21 @@ class FeatureSelectionAgentWrapper:
         
         print(f"🎯 Feature Selection Interactive Command: '{command}'")
         
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_query(command, agent="feature_selection")
+        else:
+            thread_logger = None
+        
         # Get slack_manager from state or fallback
         slack_manager = getattr(state, '_slack_manager', None)
         if not slack_manager:
@@ -3392,6 +3429,21 @@ class ModelBuildingAgentWrapper:
         if not self.available or not self.agent:
             print("❌ Model building agent not available")
             return state
+        
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_query(state.user_query, agent="model_building")
+        else:
+            thread_logger = None
             
         try:
             # Determine which data to use (cleaned > raw > None)
