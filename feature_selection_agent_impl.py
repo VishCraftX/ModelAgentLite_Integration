@@ -38,7 +38,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.stats import chi2
 
 # Global configuration
-GLOBAL_DEFAULT_MODEL = "gpt-4o"
+GLOBAL_DEFAULT_MODEL = os.environ.get("DEFAULT_MODEL", "gpt-4o")
 
 @dataclass
 class AnalysisStep:
@@ -180,36 +180,31 @@ Based on this request, determine the user's intent and extract relevant paramete
 3. **CUSTOM_ANALYSIS** - They want VIF filtering, PCA, LASSO, custom code analysis, or advanced techniques  
 4. **QUERY** - They're asking for general information about existing data (like feature counts, current state, etc.)
 5. **GENERAL_QUERY** - They're asking theoretical questions about feature selection concepts, bot capabilities, or general ML topics (no data needed)
-6. **SUGGESTION** - They want recommendations/suggestions about what analysis to run next based on current progress (not executing analysis)
-7. **STATUS_SUMMARY** - They want to see current progress, pipeline state, or analysis summary WITHOUT finishing
-8. **PROCEED** - They explicitly want to FINISH/COMPLETE the entire analysis and get final waterfall summary 
-9. **REVERT** - They want to go back to initial/original state (after cleaning)
-10. **SET_DATETIME** - They're providing datetime column info for CSI analysis
+6. **REVERT** - They want to go back to initial/original state (after cleaning)
 
 IMPORTANT DISTINCTION:
 - "run correlation analysis" or "filter highly correlated features" = STANDARD_ANALYSIS (removes correlated feature pairs)
 - "filter features with correlation > 0.8" = STANDARD_ANALYSIS (removes correlated feature pairs)
 - "show me top 10 SHAP features" or "give me IV scores" = STANDARD_ANALYSIS_QUERY (query built-in analysis results)
 - "top 20 features by correlation with target" or "correlation with target column" = QUERY (needs code execution)
+- "top 20 correlation pairs" or "show correlation pairs" = QUERY (needs code execution - displays info only)
+- "correlation matrix" or "feature correlation pairs" = QUERY (needs code execution - displays info only)
 - "which features correlate most with target" or "correlation scores with target" = QUERY (needs code execution)  
 - "train decision tree and show importance" or "feature importance from model" = QUERY (computational analysis)
 - "keep only top 10 SHAP features" or "filter with SHAP > 0.01" = CUSTOM_ANALYSIS (custom filtering)
+- "what are top 10 features by RFE" or "show me RFE ranking" = QUERY (display results, don't modify data)
+- "keep top 10 RFE features" or "filter with RFE" = CUSTOM_ANALYSIS (modify/filter data)
 - "how many features remain" or "current state" = QUERY (general info)
-- "what analysis should I run next" or "suggest next steps" = SUGGESTION (asks for recommendations, doesn't execute)
-- "what do you recommend" or "what's the best next analysis" = SUGGESTION (asks for guidance, doesn't execute)
 
 CORRELATION ANALYSIS TYPES:
 - "correlation analysis" = finds correlated FEATURE PAIRS for removal (STANDARD_ANALYSIS)
 - "correlation with target" = ranks features by TARGET relationship (QUERY - needs code)
+- "correlation pairs" or "correlation matrix" = shows correlation information (QUERY - needs code)
+- "top X correlation pairs" = displays highest correlations (QUERY - needs code)
 
 CLASSIFICATION EXAMPLES:
 
-**STATUS_SUMMARY** examples:
-- "current summary" → STATUS_SUMMARY
-- "show me pipeline summary" → STATUS_SUMMARY  
-- "what analyses have I done" → STATUS_SUMMARY
-- "current state" → STATUS_SUMMARY
-- "pipeline status" → STATUS_SUMMARY
+
 
 **STANDARD_ANALYSIS_QUERY** examples:
 - "show me top 10 SHAP features" → STANDARD_ANALYSIS_QUERY
@@ -217,39 +212,56 @@ CLASSIFICATION EXAMPLES:
 - "how many features have SHAP > 0.01" → STANDARD_ANALYSIS_QUERY
 - "what are the highest CSI values" → STANDARD_ANALYSIS_QUERY
 - "show me VIF scores" → STANDARD_ANALYSIS_QUERY
+- "top 10 features by IV analysis" → STANDARD_ANALYSIS_QUERY
+- "best features by correlation analysis" → STANDARD_ANALYSIS_QUERY
 
 **QUERY** examples:
 - "top 20 features by correlation with target" → QUERY
 - "correlation with target column" → QUERY
 - "which features correlate most with target" → QUERY
 - "show me correlation scores with target" → QUERY
+- "top 20 correlation pairs" → QUERY
+- "show correlation pairs" → QUERY
+- "highest correlation pairs" → QUERY
+- "correlation matrix" → QUERY
+- "feature correlation pairs" → QUERY
+- "most correlated features" → QUERY
 - "train a decision tree and tell me feature importance" → QUERY
 - "give me top 10 important features after training decision tree" → QUERY
 - "show me feature importance from random forest" → QUERY
 - "train XGBoost and show feature rankings" → QUERY
+- "what are top 10 features by RFE method" → QUERY
+- "top features by RFE" → QUERY
+- "what are top 10 features by LASSO" → QUERY
+- "top features by LASSO" → QUERY
+- "what are top 10 features by PCA" → QUERY
+- "what are top 10 features based on PCA analysis" → QUERY
+- "top features by PCA" → QUERY
+- "features by PCA" → QUERY
+- "show me RFE ranking" → QUERY
+- "display LASSO coefficients" → QUERY
+- "show PCA results" → QUERY
+- "display PCA analysis" → QUERY
+- "what are RFE results" → QUERY
+- "show LASSO feature importance" → QUERY
+- "PCA feature importance" → QUERY
 - "how many features remain" → QUERY
 - "what analyses have been done" → QUERY
 - "current dataset info" → QUERY
 
-**PROCEED** examples:
-- "proceed with final summary" → PROCEED
-- "finish analysis" → PROCEED
-- "complete the analysis" → PROCEED
-- "I'm done, finalize" → PROCEED
-- "okay looks good" → PROCEED
-- "looks good" → PROCEED  
-- "looks great" → PROCEED
-- "that's perfect" → PROCEED
-- "this is fine" → PROCEED
-- "go ahead" → PROCEED
-- "all set" → PROCEED
-- "perfect" → PROCEED
-- "good to go" → PROCEED
+
 
 **STANDARD_ANALYSIS** examples:
 - "run IV analysis" → STANDARD_ANALYSIS
 - "apply correlation filter" → STANDARD_ANALYSIS
 - "do CSI analysis" → STANDARD_ANALYSIS
+- "IV 0.02" → STANDARD_ANALYSIS
+- "IV 0.2" → STANDARD_ANALYSIS
+- "CSI 0.05" → STANDARD_ANALYSIS
+- "CSI 0.5" → STANDARD_ANALYSIS
+- "correlation 0.8" → STANDARD_ANALYSIS
+- "SHAP 0.01" → STANDARD_ANALYSIS
+- "VIF 5" → STANDARD_ANALYSIS
 
 **CUSTOM_ANALYSIS** examples:
 - "filter features with VIF > 5" → CUSTOM_ANALYSIS
@@ -257,6 +269,17 @@ CLASSIFICATION EXAMPLES:
 - "keep only top 10 SHAP features" → CUSTOM_ANALYSIS
 - "filter features with SHAP > 0.01" → CUSTOM_ANALYSIS
 - "apply SHAP filtering with threshold 0.05" → CUSTOM_ANALYSIS
+- "run RFE with 10 features" → CUSTOM_ANALYSIS
+- "keep top 10 RFE features" → CUSTOM_ANALYSIS
+- "filter with RFE" → CUSTOM_ANALYSIS
+- "apply RFE selection" → CUSTOM_ANALYSIS
+- "run LASSO regularization" → CUSTOM_ANALYSIS
+- "keep top 20 LASSO features" → CUSTOM_ANALYSIS
+- "filter with LASSO" → CUSTOM_ANALYSIS
+- "apply LASSO selection" → CUSTOM_ANALYSIS
+- "PCA analysis" → CUSTOM_ANALYSIS
+- "principal component analysis" → CUSTOM_ANALYSIS
+- "run PCA with 95% variance" → CUSTOM_ANALYSIS
 
 **GENERAL_QUERY** examples:
 - "what can you do" → GENERAL_QUERY
@@ -281,23 +304,14 @@ CLASSIFICATION EXAMPLES:
 - "back to square one" → REVERT
 - "return to initial" → REVERT
 
-**SUGGESTION** examples:
-- "what analysis should I run next" → SUGGESTION
-- "suggest next steps" → SUGGESTION
-- "what do you recommend" → SUGGESTION
-- "what's the best next analysis" → SUGGESTION
-- "what should I do next" → SUGGESTION
-- "guide me to next step" → SUGGESTION
-- "recommendations for analysis" → SUGGESTION
-- "advise me on next analysis" → SUGGESTION
+
 
 CRITICAL DISTINCTIONS:
-- "summary" requests = STATUS_SUMMARY (to check progress), NOT PROCEED (to finish)
-- Positive acknowledgments like "looks good", "perfect", "okay" = PROCEED (user is satisfied and wants to finish)
-- Explicit finish requests like "proceed", "done", "finalize" = PROCEED (user wants to end)
+- Analysis requests should specify the exact analysis type and any thresholds
+- Query requests should be classified based on whether they need code execution or not
 
 For analysis requests, carefully extract:
-- The analysis type (iv, correlation, csi, vif, pca, lasso)
+- The analysis type (iv, correlation, csi, vif, pca, lasso, rfe, shap)
 - Any threshold values mentioned (look for numbers like 0.04, 0.05, 0.8, 0.1, 0.2, etc.)
 - Any comparison operators (>, <, greater than, less than, above, below)
 
@@ -343,6 +357,10 @@ IMPORTANT: Respond with ONLY the JSON object. No explanations, no additional tex
                 # Set reasonable defaults
                 defaults = {"iv": 0.05, "correlation": 0.8, "csi": 0.2}
                 result["threshold"] = defaults.get(result["analysis_type"], 0.05)
+            elif "threshold" in result and result["threshold"] == 0 and result.get("analysis_type") == "correlation":
+                # Safety check: Never use 0 threshold for correlation (would remove all features)
+                print("⚠️ WARNING: Correlation threshold was 0, setting to safe default 0.8")
+                result["threshold"] = 0.8
                 
             return result
             
@@ -360,7 +378,7 @@ class DataProcessor:
     
     @staticmethod
     def load_and_clean_data(session: UserSession) -> bool:
-        """Load data and perform initial cleaning"""
+        """Load data and perform intelligent cleaning with numeric conversion"""
         try:
             # Load data
             df = pd.read_csv(session.file_path)
@@ -368,20 +386,56 @@ class DataProcessor:
             
             print(f"📊 Original dataset: {df.shape[0]} rows, {df.shape[1]} columns")
             
-            # Remove single value columns
+            # Step 1: Remove single value columns
             single_value_cols = []
             for col in df.columns:
                 if df[col].nunique() <= 1:
                     single_value_cols.append(col)
             
-            # Remove object columns (non-numeric)
-            non_numeric_cols = []
-            for col in df.columns:
-                if col not in single_value_cols and df[col].dtype == 'object':
-                    non_numeric_cols.append(col)
+            print(f"🔍 Found {len(single_value_cols)} single-value columns to remove")
             
-            # Create clean dataset
-            cols_to_remove = single_value_cols + non_numeric_cols
+            # Step 2: Smart object column handling - try to convert to numeric first
+            object_cols = [col for col in df.columns if col not in single_value_cols and df[col].dtype == 'object']
+            converted_cols = []
+            failed_conversion_cols = []
+            
+            print(f"🔍 Found {len(object_cols)} object columns, attempting numeric conversion...")
+            
+            for col in object_cols:
+                try:
+                    # Try to convert to numeric, handling common string number formats
+                    # This handles cases like: "123", "45.67", "1,234", etc.
+                    original_series = df[col].copy()
+                    
+                    # First, try direct conversion
+                    converted = pd.to_numeric(original_series, errors='coerce')
+                    
+                    # If that fails for many values, try cleaning common string formats
+                    if converted.isna().sum() > len(original_series) * 0.5:  # More than 50% NaN
+                        # Try removing commas, spaces, and other common formatting
+                        cleaned_series = original_series.astype(str).str.replace(',', '').str.replace(' ', '').str.strip()
+                        converted = pd.to_numeric(cleaned_series, errors='coerce')
+                    
+                    # If conversion is successful for most values (less than 20% NaN)
+                    non_null_before = original_series.notna().sum()
+                    non_null_after = converted.notna().sum()
+                    
+                    if non_null_after >= non_null_before * 0.8:  # At least 80% successfully converted
+                        df[col] = converted
+                        converted_cols.append(col)
+                        print(f"   ✅ Converted '{col}' to numeric ({non_null_after}/{non_null_before} values)")
+                    else:
+                        failed_conversion_cols.append(col)
+                        print(f"   ❌ Failed to convert '{col}' (only {non_null_after}/{non_null_before} values convertible)")
+                        
+                except Exception as e:
+                    failed_conversion_cols.append(col)
+                    print(f"   ❌ Error converting '{col}': {str(e)[:50]}")
+            
+            print(f"📈 Conversion summary: {len(converted_cols)} converted, {len(failed_conversion_cols)} remained as objects")
+            
+            # Step 3: Remove remaining non-numeric columns
+            cols_to_remove = single_value_cols + failed_conversion_cols
             clean_df = df.drop(columns=cols_to_remove)
             
             session.current_df = clean_df.copy()
@@ -389,27 +443,33 @@ class DataProcessor:
             
             # Add cleaning step to pipeline
             cleaning_step = AnalysisStep(
-                type="data_cleaning",
+                type="intelligent_data_cleaning",
                 parameters={"removed_cols": cols_to_remove},
                 features_before=df.shape[1],
                 features_after=clean_df.shape[1],
                 timestamp=datetime.now().isoformat(),
                 metadata={
                     "single_value_cols": single_value_cols,
-                    "non_numeric_cols": non_numeric_cols
+                    "converted_to_numeric": converted_cols,
+                    "failed_conversion_cols": failed_conversion_cols,
+                    "conversion_strategy": "smart_numeric_conversion"
                 }
             )
             session.analysis_chain.append(cleaning_step)
             
-            # Create initial snapshot
+            # Create initial snapshot - this is the clean starting state for revert
             session.snapshots["after_cleaning"] = {
                 "df": clean_df.copy(),
                 "features": list(clean_df.columns),
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(f"✅ Cleaned dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
-            print(f"   Removed: {len(single_value_cols)} single-value + {len(non_numeric_cols)} object columns")
+            print(f"✅ Intelligently cleaned dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
+            print(f"   📊 Summary:")
+            print(f"   • Removed: {len(single_value_cols)} single-value columns")
+            print(f"   • Converted: {len(converted_cols)} object → numeric columns")
+            print(f"   • Removed: {len(failed_conversion_cols)} non-convertible object columns")
+            print(f"   • Final: {clean_df.shape[1]} numeric columns ready for analysis")
             
             return True
             
@@ -563,6 +623,11 @@ class AnalysisEngine:
     def run_correlation_analysis(session: UserSession, threshold: float = 0.8) -> Dict[str, Any]:
         """Run correlation analysis"""
         try:
+            # Safety check: Ensure threshold is reasonable
+            if threshold <= 0 or threshold >= 1:
+                print(f"⚠️ WARNING: Invalid correlation threshold {threshold}, using default 0.8")
+                threshold = 0.8
+            
             df = session.current_df
             feature_cols = [col for col in df.columns if col != session.target_column]
             
@@ -753,24 +818,32 @@ class AnalysisEngine:
     def run_vif_analysis(session: UserSession, threshold: float = 5.0):
         """Run Variance Inflation Factor (VIF) analysis"""
         try:
+            print(f"🔧 DEBUG VIF ENGINE: Starting VIF analysis with threshold {threshold}")
             from statsmodels.stats.outliers_influence import variance_inflation_factor
             from sklearn.preprocessing import StandardScaler
             
             # Get numeric features only (exclude target)
             numeric_features = [f for f in session.current_features if f != session.target_column]
+            print(f"🔧 DEBUG VIF ENGINE: Found {len(numeric_features)} numeric features")
             
             if len(numeric_features) < 2:
-                return {"error": "Need at least 2 features for VIF analysis"}
+                error_msg = "Need at least 2 features for VIF analysis"
+                print(f"🔧 DEBUG VIF ENGINE: ERROR - {error_msg}")
+                return {"error": error_msg}
             
             # Prepare data
             df = session.current_df[numeric_features].copy()
+            print(f"🔧 DEBUG VIF ENGINE: Data shape: {df.shape}")
             
             # Handle missing values
+            missing_before = df.isnull().sum().sum()
             df = df.fillna(df.mean())
+            print(f"🔧 DEBUG VIF ENGINE: Filled {missing_before} missing values")
             
             # Scale features for stability
             scaler = StandardScaler()
             df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
+            print(f"🔧 DEBUG VIF ENGINE: Scaled data shape: {df_scaled.shape}")
             
             # Calculate VIF for each feature
             vif_scores = {}
@@ -780,16 +853,21 @@ class AnalysisEngine:
                 try:
                     vif_value = variance_inflation_factor(df_scaled.values, i)
                     vif_scores[feature] = vif_value
+                    print(f"🔧 DEBUG VIF ENGINE: {feature} VIF = {vif_value:.4f}")
                     
                     if vif_value > threshold:
                         features_to_remove.append(feature)
-                except:
+                        print(f"🔧 DEBUG VIF ENGINE: {feature} marked for removal (VIF {vif_value:.4f} > {threshold})")
+                except Exception as e:
+                    print(f"🔧 DEBUG VIF ENGINE: Error calculating VIF for {feature}: {e}")
                     vif_scores[feature] = float('inf')
                     features_to_remove.append(feature)
             
             # Update session
             features_before = len(session.current_features)
             remaining_cols = [col for col in session.current_features if col not in features_to_remove]
+            print(f"🔧 DEBUG VIF ENGINE: Features before: {features_before}, removing: {len(features_to_remove)}, remaining: {len(remaining_cols)}")
+            
             session.current_df = session.current_df[remaining_cols]
             session.current_features = remaining_cols
             
@@ -803,6 +881,7 @@ class AnalysisEngine:
                 metadata={"vif_scores": vif_scores, "removed_features": features_to_remove}
             )
             session.analysis_chain.append(analysis_step)
+            print(f"🔧 DEBUG VIF ENGINE: Added analysis step to pipeline")
             
             # Create snapshot
             session.snapshots[f"after_vif"] = {
@@ -810,16 +889,23 @@ class AnalysisEngine:
                 "df": session.current_df.copy(),
                 "step": len(session.analysis_chain) - 1
             }
+            print(f"🔧 DEBUG VIF ENGINE: Created snapshot")
             
-            return {
+            result = {
                 "success": True,
                 "features_removed": len(features_to_remove),
                 "remaining_features": len(remaining_cols),
                 "vif_scores": vif_scores
             }
+            print(f"🔧 DEBUG VIF ENGINE: Returning success result: {result}")
+            return result
             
         except Exception as e:
-            return {"error": str(e)}
+            error_msg = f"VIF analysis failed: {str(e)}"
+            print(f"🔧 DEBUG VIF ENGINE: EXCEPTION - {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return {"error": error_msg}
 
     @staticmethod
     def run_shap_analysis(session: UserSession, threshold: float = 0.01, model_type: str = "randomforest", top_n: int = None):
@@ -1254,21 +1340,9 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
         elif intent == "GENERAL_QUERY":
             logger.info(f"💬 ROUTING TO GENERAL QUERY | User: {session.user_id} | Query: {intent_data.get('query_details', 'unknown')}")
             self.handle_general_query(session, intent_data, say)
-        elif intent == "SUGGESTION":
-            logger.info(f"💡 ROUTING TO SUGGESTION | User: {session.user_id} | Query: {intent_data.get('query_details', 'unknown')}")
-            self.handle_suggestion_request(session, intent_data, say)
-        elif intent == "STATUS_SUMMARY":
-            logger.info(f"📊 ROUTING TO STATUS SUMMARY | User: {session.user_id}")
-            MenuGenerator.show_crisp_summary(session, say)
         elif intent == "REVERT":
             logger.info(f"↩️ ROUTING TO REVERT | User: {session.user_id}")
             self.handle_revert(session, say)
-        elif intent == "PROCEED":
-            logger.info(f"✅ ROUTING TO FINAL SUMMARY | User: {session.user_id}")
-            self.generate_final_summary(session, say)
-        elif intent == "SET_DATETIME":
-            logger.info(f"📅 ROUTING TO DATETIME SETUP | User: {session.user_id}")
-            self.handle_datetime_setup(session, text, say)
         else:
             logger.warning(f"⚠️ UNKNOWN INTENT | User: {session.user_id} | Intent: {intent}")
             # Fallback
@@ -1418,7 +1492,10 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
             except:
                 pass
             
+            print(f"🔧 DEBUG VIF: About to run VIF analysis with threshold {threshold}")
             result = AnalysisEngine.run_vif_analysis(session, threshold)
+            print(f"🔧 DEBUG VIF: Analysis result: {result}")
+            
             if result.get("success"):
                 vif_scores = result.get("vif_scores", {})
                 top_features = sorted(vif_scores.items(), key=lambda x: x[1], reverse=True)[:5]
@@ -1437,9 +1514,16 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                         response += f"{chr(10)}• {feature}: {score:.4f}"
                 
                 response += f"\n\n🎯 **Analysis added to pipeline!**"
+                print(f"🔧 DEBUG VIF: Sending success response to Slack")
                 say(response)
+            elif result.get("error"):
+                error_msg = f"❌ VIF Analysis failed: {result.get('error', 'Unknown error')}"
+                print(f"🔧 DEBUG VIF: Sending error response to Slack: {error_msg}")
+                say(error_msg)
             else:
-                say(f"❌ VIF Analysis failed: {result.get('error', 'Unknown error')}")
+                error_msg = f"❌ VIF Analysis failed: Unexpected result format: {result}"
+                print(f"🔧 DEBUG VIF: Sending unexpected result error to Slack: {error_msg}")
+                say(error_msg)
                 
         elif analysis_type == "shap":
             # Handle SHAP analysis as a direct tool
@@ -2397,7 +2481,21 @@ RESPONSE FORMAT:
             analysis_results = {"success": True, "vif_scores": vif_scores}
         else:
             logger.warning(f"⚠️ UNKNOWN ANALYSIS TYPE | User: {session.user_id} | Type: {analysis_type}")
-            say(f"❌ **Unknown analysis type:** {analysis_type}")
+            logger.info(f"🔄 FALLBACK TO CUSTOM ANALYSIS | User: {session.user_id} | Type: {analysis_type}")
+            say(f"🔄 **{analysis_type.upper()} not available in standard analyses, routing to custom code execution...**")
+            
+            # Fallback: Route to CUSTOM_ANALYSIS for code execution
+            fallback_intent_data = {
+                "intent": "CUSTOM_ANALYSIS",
+                "analysis_type": analysis_type,
+                "threshold": intent_data.get("threshold"),
+                "comparison": intent_data.get("comparison"),
+                "query_details": intent_data.get("query_details", f"Custom {analysis_type} analysis"),
+                "extracted_info": intent_data.get("extracted_info", "")
+            }
+            
+            # Route to custom analysis handler
+            self.run_custom_analysis(session, fallback_intent_data, say)
             return
         
         if not analysis_results or not analysis_results.get("success"):

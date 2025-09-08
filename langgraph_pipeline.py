@@ -168,6 +168,64 @@ class MultiAgentMLPipeline:
         
         # Don't send routing details to Slack - user doesn't need to see internal routing
         
+        # Send agent-specific next-steps message via Slack
+        try:
+            slack_manager = self.slack_manager
+            if slack_manager and state.chat_session:
+                if selected_agent == 'preprocessing':
+                    # Send comprehensive preprocessing menu when first routed
+                    preprocessing_menu = f"""🧹 **Sequential Preprocessing Agent**
+
+📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target Column:** {state.target_column if state.target_column else '❌ Not detected'}
+
+**🔄 Preprocessing Phases Overview:**
+
+**Phase 1: 📊 Overview** - Dataset analysis and summary
+• Analyze data types, distributions, and patterns
+• Identify preprocessing needs across all columns
+
+**Phase 2: 🚨 Outliers** - Detect and handle outliers  
+• Use IQR and Z-score methods for detection
+• Recommend winsorize/clip/keep strategies
+
+**Phase 3: 🗑️ Missing Values** - Handle missing data
+• Identify missing data patterns
+• Apply mean/median/mode imputation strategies
+
+**Phase 4: 🏷️ Encoding** - Categorical variable encoding
+• Convert categorical to numeric (one-hot, label, target)
+• Handle high-cardinality categories
+
+**Phase 5: 🔄 Transformations** - Feature transformations
+• Apply log/sqrt/standardization for skewed data
+• Improve model convergence and performance
+
+**💬 Your Options:**
+• `proceed` - Start preprocessing workflow (begins with Overview)
+• `skip overview` - Skip directly to outlier detection
+• `explain [phase]` - Learn about specific phase (e.g., `explain outliers`)
+• `summary` - Show current preprocessing status
+• `help` - Get detailed guidance
+
+💡 **Smart Approach:** Each phase shows exactly what will be applied to which columns, then waits for your approval.
+
+💬 **What would you like to do?**"""
+                    
+                    slack_manager.send_message(state.chat_session, preprocessing_menu)
+                    print("✅ Sent comprehensive preprocessing menu to Slack")
+                else:
+                    # Send simple hint for other agents
+                    next_hint = {
+                        'feature_selection': "Feature selection menu and options are displayed above. Choose an analysis to begin.",
+                        'model_building': "Type `proceed` to begin model building, or `help` for options.",
+                        'general_response': "You can ask a question or say `help` for options.",
+                        'code_execution': "Type your code question or `help` for options.",
+                    }.get(selected_agent, "Type `help` for options.")
+                    slack_manager.send_message(state.chat_session, f"{explanation}\n\n{next_hint}")
+        except Exception as e:
+            print(f"⚠️ Failed to send orchestrator message: {e}")
+        
         return state
     
     def _preprocessing_node(self, state: PipelineState) -> PipelineState:
@@ -178,6 +236,20 @@ class MultiAgentMLPipeline:
     def _feature_selection_node(self, state: PipelineState) -> PipelineState:
         """Feature selection node"""
         print(f"\n🎯 [Feature Selection] Starting feature selection")
+        
+        # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
+        slack_manager = self.slack_manager
+        
+        print(f"🔧 [FS Node] Using slack_manager id: {id(slack_manager)}")
+        print(f"🔧 [FS Node] Slack manager has {len(slack_manager.session_channels)} channels")
+        
+        state.slack_session_info = {
+            'channels': dict(slack_manager.session_channels),
+            'threads': dict(slack_manager.session_threads)
+        }
+        state._slack_manager = slack_manager
+        print(f"💾 [FS Node] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+        
         return feature_selection_agent.run(state)
     
     def _model_building_node(self, state: PipelineState) -> PipelineState:
@@ -219,7 +291,7 @@ class MultiAgentMLPipeline:
             
             # Use LLM for conversational response
             response = ollama.chat(
-                model="qwen2.5-coder:32b-instruct-q4_K_M",  # Same model as ModelBuildingAgent
+                model=os.getenv("DEFAULT_MODEL", "gpt-4o"),  # Use environment variable
                 messages=[
                     {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."},
                     {"role": "user", "content": context_prompt}
@@ -392,6 +464,22 @@ Generate Python code to fulfill this request:"""
             
             # Convert state to dict for JSON serialization
             state_dict = state.dict()
+
+            # Recursively convert numpy types to native Python
+            import numpy as np
+            def to_native(obj):
+                if isinstance(obj, dict):
+                    return {k: to_native(v) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [to_native(v) for v in obj]
+                if isinstance(obj, (np.integer,)):
+                    return int(obj)
+                if isinstance(obj, (np.floating,)):
+                    return float(obj)
+                if isinstance(obj, (np.bool_,)):
+                    return bool(obj)
+                return obj
+            state_dict = to_native(state_dict)
             
             # Save DataFrames as CSV files and store references
             if 'raw_data' in state_dict and state.raw_data is not None:
@@ -413,6 +501,8 @@ Generate Python code to fulfill this request:"""
                 state.cleaned_data.to_csv(cleaned_data_file, index=False)
                 state_dict['cleaned_data'] = {"type": "dataframe", "file": "cleaned_data.csv", "shape": list(state.cleaned_data.shape)}
                 print(f"💾 Saved cleaned_data to session: {state.cleaned_data.shape}")
+                print(f"📁 Data saved to: {cleaned_data_file}")
+                print(f"🔧 DEBUG: Data columns: {list(state.cleaned_data.columns)}")
             else:
                 state_dict['cleaned_data'] = None
             
@@ -614,6 +704,18 @@ Generate Python code to fulfill this request:"""
         if agent_type == AgentType.PREPROCESSING.value:
             return preprocessing_agent.run(state)
         elif agent_type == AgentType.FEATURE_SELECTION.value:
+            # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
+            slack_manager = self.slack_manager
+            
+            print(f"🔧 [Execute Agent] Using slack_manager id: {id(slack_manager)}")
+            print(f"🔧 [Execute Agent] Slack manager has {len(slack_manager.session_channels)} channels")
+            
+            state.slack_session_info = {
+                'channels': dict(slack_manager.session_channels),
+                'threads': dict(slack_manager.session_threads)
+            }
+            state._slack_manager = slack_manager
+            print(f"💾 [Execute Agent] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
             return feature_selection_agent.run(state)
         elif agent_type == AgentType.MODEL_BUILDING.value:
             return model_building_agent.run(state)
@@ -656,13 +758,19 @@ Generate Python code to fulfill this request:"""
                 chat_session=session_id,
                 user_query=query
             )
-            # Load previous session state if available
+        
+        # Always load session state if available (for interactive sessions)
             previous_state = self._load_session_state(session_id)
             if previous_state:
                 print(f"📂 Loaded previous session state for {session_id}")
+                print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
                 # Restore relevant state information INCLUDING DataFrames
                 if 'preprocessing_state' in previous_state:
                     state.preprocessing_state = previous_state['preprocessing_state']
+                print(f"🔧 DEBUG: Restored preprocessing_state: {state.preprocessing_state}")
+                if state.preprocessing_state:
+                    print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
+                    print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
                 if 'feature_selection_state' in previous_state:
                     state.feature_selection_state = previous_state['feature_selection_state']
                 if 'model_building_state' in previous_state:
@@ -670,6 +778,7 @@ Generate Python code to fulfill this request:"""
                 # Restore interactive session if available
                 if 'interactive_session' in previous_state:
                     state.interactive_session = previous_state['interactive_session']
+                print(f"🔧 DEBUG: Restored interactive_session: {state.interactive_session}")
                 # Restore DataFrames
                 if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
                     state.raw_data = previous_state['raw_data']
@@ -687,16 +796,28 @@ Generate Python code to fulfill this request:"""
                 if 'target_column' in previous_state and previous_state['target_column'] is not None:
                     state.target_column = previous_state['target_column']
         else:
+            print(f"🔧 DEBUG: No previous state found for {session_id}")
+        
+        # Update user query
             state.user_query = query
         
         # Check if we have an active interactive session that needs to continue
         # BUT only if the query is a continuation command, not a new request
+        print(f"🔍 DEBUG: Checking interactive session:")
+        print(f"  Has interactive_session attr: {hasattr(state, 'interactive_session')}")
+        print(f"  Interactive session is None: {state.interactive_session is None}")
+        print(f"  Session active: {state.interactive_session.get('session_active', False) if state.interactive_session else 'N/A'}")
+        print(f"  Interactive session details: {state.interactive_session}")
+        
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session is not None and 
             state.interactive_session.get('session_active', False)):
             
+            print(f"🔄 Interactive session active: {state.interactive_session['agent_type']}")
+            
             # Check if this is a continuation command vs a new request
             query_lower = query.lower().strip()
+            print(f"🔍 DEBUG: Query to check: '{query_lower}'")
             
             # Pure continuation commands (context-independent)
             pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help']
@@ -708,7 +829,7 @@ Generate Python code to fulfill this request:"""
             if is_clear_command:
                 print(f"🔄 Explicit session clear requested")
                 state.interactive_session = None
-                from toolbox import slack_manager
+                slack_manager = self.slack_manager
                 slack_manager.send_message(state.chat_session, "✅ Session cleared. You can now start a new workflow.")
                 return self._prepare_response(state, "Session cleared successfully.")
             
@@ -729,7 +850,7 @@ Generate Python code to fulfill this request:"""
                     # Define what constitutes a "new request" vs "session continuation"
                     new_request_definitions = {
                         "new_ml_request": "Start new machine learning task, begin different ML workflow, switch to new agent, train new model, build new classifier, create new predictor, analyze different dataset, perform new analysis, start fresh preprocessing, begin new feature selection, initiate model building, commence new ML pipeline",
-                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis"
+                        "session_continuation": "Continue current workflow, proceed with current task, advance current session, move to next step in current process, skip current phase, bypass current step, proceed in current agent, continue current analysis, yes, yeah, ok, fine, good, sure, cool, alright, agreed, approve, proceed, continue, next, go ahead, yes please continue, yeah let's proceed, ok sounds good, fine go ahead, sure continue, cool proceed, alright next step, agreed move forward, approve this step, yeah continue, ok proceed, fine next, sure go ahead, cool let's continue, alright proceed, yes next phase, yeah move forward, ok advance, yep sounds good, right let's continue, correct proceed, absolutely continue, definitely proceed, of course continue, naturally proceed, certainly go ahead, obviously continue, clearly proceed, exactly continue, precisely proceed, indeed continue, absolutely go ahead, definitely next step, certainly continue now, obviously proceed ahead, clearly move forward, exactly next phase, naturally advance, certainly go forward, obviously next step, clearly continue process, exactly proceed ahead, precisely move forward, indeed advance now, naturally continue task, certainly proceed phase, obviously go ahead now, clearly next stage, exactly continue flow, precisely proceed step, indeed move ahead, naturally continue now, skip this step, skip current phase, bypass this, move to next, skip this analysis, pass on this, ignore this step, no thanks, change this strategy, modify approach, use different method, apply different strategy, override this, alter this, what does this mean, explain this step, help me understand, why this recommendation, how does this work, show me options, skip outliers detection, skip missing values, skip encoding, change imputation strategy, use median for age, modify outlier treatment, what is mean imputation, explain encoding methods, show current strategies, skip correlation analysis, skip SHAP step, skip VIF analysis, do analysis with IV values 0.02, run SHAP with 100 samples, change correlation threshold, modify selection criteria, what is information value, explain SHAP, show selected features, execute CSI analysis, perform VIF calculation, run IV analysis"
                     }
                     
                     from orchestrator import Orchestrator
@@ -784,20 +905,19 @@ Generate Python code to fulfill this request:"""
                 # Phase 3: Semantic continuation classification
                 try:
                     continuation_definitions = {
-                        'preprocessing': {
-                            'continue_preprocessing': "Skip current step, proceed to next phase, continue preprocessing workflow, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation",
-                            'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent"
-                        },
-                        'feature_selection': {
-                            'continue_feature_selection': "Skip current analysis, run information value, execute SHAP analysis, continue feature selection, proceed with variable selection, advance feature engineering, move to next selection step, bypass current feature analysis, select important features, rank features, analyze correlations",
-                            'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing"
-                        }
+                    'preprocessing': {
+                        'continue_preprocessing': "Continue preprocessing workflow, advance preprocessing stage, data cleaning continuation, preprocessing workflow advancement, outlier detection phase, missing values handling, encoding step, transformation phase, target column specification, data preparation, proceed with preprocessing, continue data cleaning, advance preprocessing, next preprocessing step, move forward in preprocessing, skip current step, proceed to next phase, move forward in data cleaning, advance to next preprocessing stage, bypass current analysis, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, target column specification, column selection, data cleaning continuation, datetime column specification, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification, out of time month specification, date format specification, timestamp format specification, datetime format specification, date column format, time column format, date specification, time specification, datetime info, date info, time info, column datetime, column date, column time, date column name, time column name, datetime column name, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, target column specification, target is, target column is, column target, target column name, target variable, target variable is, dependent variable, dependent variable is, outcome variable, outcome variable is, response variable, response variable is, label column, label column is, label variable, label variable is",
+                        'new_request': "Start feature selection, begin model building, train new model, create model, build classifier, analyze features, select variables, stop preprocessing, end cleaning, switch to modeling, move to next agent, go to feature selection, move to model training, exit preprocessing"
+                    },
+                    'feature_selection': {
+                        'continue_feature_selection': "Continue feature selection workflow, advance feature analysis, feature selection continuation, variable selection advancement, correlation analysis phase, SHAP analysis step, information value calculation, VIF analysis phase, CSI analysis step, feature ranking process, proceed with feature selection, continue feature analysis, advance selection, next feature step, move forward in feature selection, do analysis with IV values 0.02, run SHAP with 100 samples, execute correlation analysis, perform VIF calculation, run CSI analysis, calculate information value 0.1, analyze with IV threshold 0.05, run SHAP analysis now, perform correlation with threshold 0.8, execute VIF analysis, do feature importance analysis, IV with 0.02, IV with 0.01, IV with 0.03, IV with 0.04, IV with 0.05, what are top 10 important features according to decision tree feature importance, top 10 important features according to decision tree, decision tree feature importance, train decision tree and show importance, decision tree classifier importance, most important features according to tree, top important features decision tree, feature importance from decision tree, tree importance ranking, decision tree based importance, what are top 10 features by rfe, what are top 10 features by lasso, top features by rfe, top features by lasso, features by rfe, features by lasso, rfe selection, lasso selection, recursive feature elimination, rfe ranking, lasso ranking, rfe importance, lasso importance, skip correlation analysis, skip SHAP step, skip current analysis, bypass feature ranking, datetime column specification for CSI, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification, out of time month specification for CSI analysis, date format specification for CSI, timestamp format for CSI, datetime format for CSI, date column format for CSI, time column format for CSI, date specification for CSI, time specification for CSI, datetime info for CSI, date info for CSI, time info for CSI, column datetime for CSI, column date for CSI, column time for CSI, date column name for CSI, time column name for CSI, datetime column name for CSI, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, revert to cleaned dataset, restore original features, reset feature selection, undo feature analysis, go back to cleaned data, revert feature changes, restore initial features, reset to clean state, undo feature filtering, back to cleaned dataset, restore feature set, reset analysis chain, undo analysis steps, revert all analysis, restore previous features, reset feature pipeline, undo feature removal, go back to start, revert selection, restore backup features, reset everything, undo modifications, revert to original, restore clean state, cool, proceed, continue, next, go ahead, yes, yeah, ok, fine, good, sure, alright, agreed, approve, sounds good, let's proceed, move forward",
+                        'new_request': "Start model building, train model, build classifier, create predictor, stop feature selection, end variable selection, switch to modeling, begin training, start preprocessing, go to preprocessing, move to model training, exit feature selection"
                     }
-                    
+                }
+                
                     if agent_type in continuation_definitions:
                         # Use semantic similarity to classify continuation vs new request
                         from orchestrator import Orchestrator
-                        temp_orchestrator = Orchestrator()
                         
                         # Create temporary intent definitions for this context
                         context_intents = continuation_definitions[agent_type]
@@ -823,15 +943,84 @@ Generate Python code to fulfill this request:"""
                 if agent_type == 'preprocessing':
                     preprocessing_continuations = [
                         'skip outliers', 'skip missing', 'skip encoding', 'skip transformations',
-                        'skip this phase', 'skip current', 'target ', 'column '
+                        'skip this phase', 'skip current', 'target ', 'column ',
+                        'go ahead', 'go ahead with', 'proceed with', 'continue with',
+                        'start outliers', 'start missing', 'start encoding', 'start transformations',
+                        'begin outliers', 'begin missing', 'begin encoding', 'begin transformations',
+                        'run outliers', 'run missing', 'run encoding', 'run transformations',
+                        'do outliers', 'do missing', 'do encoding', 'do transformations',
+                        'handle outliers', 'handle missing', 'handle encoding', 'handle transformations'
                     ]
                     return any(cmd in query_lower for cmd in preprocessing_continuations)
                 
                 elif agent_type == 'feature_selection':
                     fs_continuations = [
-                        'skip analysis', 'run iv', 'run shap', 'select features'
+                        'proceed', 'continue', 'finish', 'complete', 'done', 'finalize',
+                        # IV Analysis patterns
+                        'run iv', 'do iv', 'iv analysis', 'implement iv', 'apply iv', 'iv filtering', 'iv value', 'iv cutoff',
+                        'information value', 'iv threshold', 'iv greater than', 'iv less than', 'filter by iv',
+                        'with iv', 'iv >', 'iv <', 'iv >=', 'iv <=', 'filter all values', 'filter values',
+                        'iv with', '0.01', '0.02', '0.03', '0.04', '0.05', '0.06', '0.07', '0.08', '0.09',
+                        # CSI Analysis patterns  
+                        'run csi', 'do csi', 'csi analysis', 'implement csi', 'apply csi', 'csi filtering',
+                        'characteristic stability', 'stability index', 'csi threshold', 'csi cutoff',
+                        # Correlation Analysis patterns
+                        'run correlation', 'correlation analysis', 'implement correlation', 'apply correlation', 'correlation filtering',
+                        'correlation with target', 'target correlation', 'correlate with target', 'correlation cutoff',
+                        'highly correlated', 'remove correlated', 'correlation threshold', 'corr analysis',
+                        'show correlation', 'correlation between', 'correlation matrix', 'correlation scores',
+                        'feature correlation', 'correlation values', 'correlation results',
+                        # SHAP Analysis patterns
+                        'run shap', 'do shap', 'shap analysis', 'implement shap', 'apply shap', 'shap filtering',
+                        'shap values', 'shap value', 'shap importance', 'feature importance', 'shap cutoff', 'shap threshold',
+                        'top shap features', 'top shap', 'shap ranking', 'importance ranking', 'feature ranking',
+                        # VIF Analysis patterns
+                        'run vif', 'do vif', 'vif analysis', 'implement vif', 'apply vif', 'vif filtering',
+                        'variance inflation', 'multicollinearity', 'vif threshold', 'vif cutoff', 'vif greater than',
+                        # Other ML techniques
+                        'run lasso', 'lasso selection', 'implement lasso', 'apply lasso', 'lasso regularization',
+                        'run pca', 'pca analysis', 'principal component', 'dimensionality reduction',
+                        'random forest importance', 'tree importance', 'model importance',
+                        'decision tree', 'decision tree importance', 'decision tree feature importance',
+                        'train decision tree', 'decision tree classifier', 'tree classifier',
+                        'important features according to', 'top important features', 'feature importance',
+                        'important features', 'most important features', 'top 10 important', 'top 5 important',
+                        'top 20 important', 'according to decision tree', 'according to tree',
+                        'rfe', 'recursive feature elimination', 'features by rfe', 'top features by rfe',
+                        'what are top features by rfe', 'rfe selection', 'rfe ranking', 'rfe importance',
+                        'features by lasso', 'top features by lasso', 'what are top features by lasso',
+                        'lasso features', 'lasso ranking', 'lasso importance', 'lasso coefficients',
+                        # General feature selection patterns
+                        'filter features', 'select features', 'analyze features', 'filtering with', 'cutoff', 'threshold',
+                        'remove features', 'keep features', 'feature subset', 'top features', 'best features',
+                        'rank features', 'score features', 'evaluate features', 'assess features',
+                        'filter all', 'filter with', 'values with', 'greater than', 'less than', 'equal to',
+                        '>', '<', '>=', '<=', '==', '!=', '0.01', '0.05', '0.1', '0.2', '0.3', '0.5',
+                        # Action words
+                        'implement', 'apply', 'execute', 'perform', 'calculate', 'compute', 'run analysis',
+                        'do analysis', 'start analysis', 'begin analysis', 'conduct analysis',
+                        # Query patterns
+                        'what is', 'explain', 'how does', 'show me', 'tell me about', 'describe',
+                        'what are', 'what are the', 'which are', 'which are the', 'give me', 'list',
+                        'top 5', 'top 10', 'top 20', 'top 30', 'top 50', 'best 5', 'best 10', 'best 20',
+                        'highest', 'lowest', 'most important', 'least important', 'value features',
+                        'how many features', 'current state', 'summary', 'show progress', 
+                        'revert', 'reset', 'restore', 'undo', 'go back', 'back to original', 'back to cleaned',
+                        'revert to cleaned', 'restore original', 'reset features', 'undo analysis', 'restore features',
+                        'reset analysis', 'undo changes', 'go back to start', 'restore backup', 'reset everything',
+                        'undo modifications', 'revert changes', 'restore clean state', 'reset to clean',
+                        'datetime', 'date column', 'time column', 'timestamp', 'oot month', 'out of time',
+                        'date format', 'time format', 'datetime format', 'datetime column', 'date_column',
+                        'transaction_date', 'order_date', 'created_at', 'timestamp_column', 'date_time',
+                        'datetime specification', 'date specification', 'time specification', 'column datetime',
+                        'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is'
                     ]
-                    return any(cmd in query_lower for cmd in fs_continuations)
+                    is_fs_continuation = any(cmd in query_lower for cmd in fs_continuations)
+                    print(f"🔧 DEBUG FS CONTINUATION: Query='{query_lower}', Is continuation={is_fs_continuation}")
+                    if is_fs_continuation:
+                        matched_keywords = [cmd for cmd in fs_continuations if cmd in query_lower]
+                        print(f"🔧 DEBUG FS CONTINUATION: Matched keywords={matched_keywords}")
+                    return is_fs_continuation
                 
                 return False
             
@@ -851,31 +1040,72 @@ Generate Python code to fulfill this request:"""
             print(f"  Semantic continuation: {semantic_continuation}")
             print(f"  Keyword new request: {keyword_new_request}")
             print(f"  Final decision - New request: {is_new_request}, Continuation: {is_continuation}")
+            print(f"🔧 DEBUG SESSION: Has interactive_session: {state.interactive_session is not None}")
+            if state.interactive_session:
+                print(f"🔧 DEBUG SESSION: Interactive session: {state.interactive_session}")
+            print(f"🔧 DEBUG SESSION: Query: '{query}'")
             
             # Handle conflicts: if both detected, prioritize based on context
             if is_new_request and is_continuation:
+                # Special handling for feature selection queries that should be continuations
+                fs_query_patterns = [
+                    'what are top', 'top features by', 'features by', 'show me features',
+                    'top 10 features', 'top 20 features', 'best features', 'important features',
+                    'what are the top', 'which features', 'list features', 'display features'
+                ]
+                
+                # If this is a feature selection query asking about results, treat as continuation
+                if (state.interactive_session and 
+                    state.interactive_session.get('agent_type') == 'feature_selection' and
+                    any(pattern in query_lower for pattern in fs_query_patterns)):
+                    print(f"🔄 Feature selection query detected - treating as continuation despite new request words")
+                    is_new_request = False
                 # If query starts with new request pattern, treat as new request
-                query_start = query_lower[:20]  # First 20 characters
-                if any(pattern in query_start for pattern in new_request_patterns):
+                elif any(pattern in query_lower[:20] for pattern in new_request_patterns):
                     print(f"🆕 New ML request detected (despite continuation words) - clearing session")
                     state.interactive_session = None
                 else:
                     print(f"🔄 Treating as continuation command despite new request words")
                     is_new_request = False
-            elif is_new_request:
+            
+            # Now handle the routing based on the final decision
+            if is_new_request:
                 print(f"🆕 New ML request detected - clearing interactive session and routing through orchestrator")
                 state.interactive_session = None
             elif is_continuation or is_target_specification:
                 print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
+                print(f"🔧 DEBUG CONTINUATION: Query='{query}', Agent={state.interactive_session['agent_type']}")
+                print(f"🔧 DEBUG CONTINUATION: Session ID={state.chat_session}")
+                print(f"🔧 DEBUG CONTINUATION: Interactive session details={state.interactive_session}")
                 
                 # Route to the appropriate agent to continue the interactive session
                 agent_type = state.interactive_session['agent_type']
                 if agent_type == "preprocessing":
+                    print("🔧 DEBUG: Routing to preprocessing interactive handler")
                     # Handle preprocessing commands directly
                     return self._handle_preprocessing_interaction(state, query)
                 elif agent_type == "feature_selection":
+                    print("🔧 DEBUG: Routing to feature selection interactive handler")
+                    
+                    # ✅ CRITICAL FIX: Ensure slack_manager is passed to state before calling handler
+                    slack_manager = self.slack_manager
+                    print(f"🔧 [Interactive FS] Using slack_manager id: {id(slack_manager)}")
+                    print(f"🔧 [Interactive FS] Slack manager has {len(slack_manager.session_channels)} channels")
+                    
+                    state._slack_manager = slack_manager
+                    state.slack_session_info = {
+                        'channels': dict(slack_manager.session_channels),
+                        'threads': dict(slack_manager.session_threads)
+                    }
+                    print(f"💾 [Interactive FS] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+                    
                     from agents_wrapper import feature_selection_agent
-                    return self._prepare_response(feature_selection_agent.run(state))
+                    # Use interactive command handler for feature selection
+                    result = feature_selection_agent.handle_interactive_command(state, query)
+                    print(f"🔧 DEBUG: Feature selection handler returned: {type(result)}")
+                    return self._prepare_response(result)
+                else:
+                    print(f"❌ DEBUG: Unknown agent type for continuation: {agent_type}")
                 # Add other interactive agents as needed
         
         # Add raw data if provided
@@ -964,11 +1194,30 @@ Generate Python code to fulfill this request:"""
     def _handle_preprocessing_interaction(self, state: PipelineState, query: str):
         """Handle interactive preprocessing commands"""
         try:
-            from toolbox import slack_manager
+            # Load previous session state to ensure we have the latest state
+            previous_state = self._load_session_state(state.chat_session)
+            if previous_state:
+                print(f"📂 Loaded previous session state in preprocessing handler")
+                print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
+                # Restore preprocessing state if available
+                if 'preprocessing_state' in previous_state:
+                    state.preprocessing_state = previous_state['preprocessing_state']
+                    print(f"🔧 DEBUG: Restored preprocessing_state in handler: {state.preprocessing_state}")
+                    print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
+                    print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
+                # Restore interactive session if available
+                if 'interactive_session' in previous_state:
+                    state.interactive_session = previous_state['interactive_session']
+                    print(f"🔧 DEBUG: Restored interactive_session in handler: {state.interactive_session}")
+            else:
+                print(f"🔧 DEBUG: No previous state found in preprocessing handler")
+            
+            # Use the pipeline's slack_manager instead of the global one
+            slack_manager = self.slack_manager
             query_lower = query.lower().strip()
             
             # Handle target column specification
-            if state.interactive_session.get('phase') == 'need_target':
+            if state.interactive_session and state.interactive_session.get('phase') == 'need_target':
                 if query_lower.startswith('target '):
                     target_col = query[7:].strip()
                 else:
@@ -1017,46 +1266,103 @@ Please specify a valid column name."""
             
             # Handle preprocessing commands
             elif 'proceed' in query_lower:
-                # Run basic preprocessing and show results
+                # Start the actual preprocessing phases
                 from agents_wrapper import preprocessing_agent
-                processed_state = preprocessing_agent._run_basic_preprocessing_fallback(state)
                 
-                result_msg = f"""✅ **Preprocessing Completed!**
-
-📊 **Results:**
-• Original: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-• Processed: {processed_state.cleaned_data.shape[0]:,} rows × {processed_state.cleaned_data.shape[1]} columns
-• Target column: {processed_state.target_column}
-
-**✅ Your data is now ready for feature selection and model building!**
-
-**Next steps:**
-• `select features` - Choose important features
-• `build model` - Train a machine learning model
-• `analyze data` - Get data insights"""
-                
-                slack_manager.send_message(state.chat_session, result_msg)
-                
-                # Clear interactive session
-                state.interactive_session = None
-                
-                return self._prepare_response(processed_state, "Preprocessing completed successfully!")
+                # Check if we need to start the interactive workflow
+                active_phase = (state.preprocessing_state or {}).get('current_phase')
+                phase_active = active_phase in ['outliers', 'missing_values', 'encoding', 'transformations']
+                if not phase_active:
+                    # Start the interactive preprocessing workflow
+                    print("🚀 Starting interactive preprocessing workflow")
+                    # Pass the pipeline's slack_manager to the state
+                    state._slack_manager = self.slack_manager
+                    processed_state = preprocessing_agent.handle_interactive_command(state, 'proceed')
+                    
+                    # Debug: Check if preprocessing state was set
+                    print(f"🔧 DEBUG: After proceed - preprocessing_state: {processed_state.preprocessing_state}")
+                    print(f"🔧 DEBUG: After proceed - has outlier_results: {processed_state.preprocessing_state.get('outlier_results') is not None if processed_state.preprocessing_state else False}")
+                    
+                    # Save the updated state to session state file
+                    self._save_session_state(processed_state.session_id, processed_state)
+                    
+                    # The preprocessing agent should handle the interactive flow
+                    # and return the state with the interactive session set up
+                    return self._prepare_response(processed_state, "Interactive preprocessing started.")
+                else:
+                    # Phase-aware: treat 'proceed' as 'continue' when already inside a phase
+                    print("🔄 Proceed received in-phase → treating as 'continue'")
+                    state._slack_manager = self.slack_manager
+                    processed_state = preprocessing_agent.handle_interactive_command(state, 'continue')
+                    self._save_session_state(processed_state.session_id, processed_state)
+                    return self._prepare_response(processed_state, "Proceed mapped to continue in current phase.")
             
-            elif 'summary' in query_lower:
-                summary_msg = f"""📋 **Preprocessing Status**
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target:** {state.target_column or 'Not set'}
-🔄 **Phase:** {state.interactive_session.get('current_phase', 'Overview')}
-
-**Available Commands:**
-• `proceed` - Start preprocessing
-• `explain [phase]` - Learn about phases
-• `summary` - This status"""
-                
-                slack_manager.send_message(state.chat_session, summary_msg)
-                return self._prepare_response(state, "Status summary sent.")
+            # Check if we're in an active preprocessing phase and route to preprocessing agent
+            current_phase = None
+            if state.preprocessing_state and 'current_phase' in state.preprocessing_state:
+                current_phase = state.preprocessing_state.get('current_phase')
+            elif state.interactive_session and 'current_phase' in state.interactive_session:
+                current_phase = state.interactive_session.get('current_phase')
+            print(f"🔧 DEBUG: Checking 4-Level BGE routing - current_phase: '{current_phase}'")
+            print(f"🔧 DEBUG: preprocessing_state current_phase: {state.preprocessing_state.get('current_phase') if state.preprocessing_state else 'N/A'}")
+            print(f"🔧 DEBUG: interactive_session current_phase: {state.interactive_session.get('current_phase') if state.interactive_session else 'N/A'}")
             
+            if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
+                # Route to preprocessing agent for phase-specific handling
+                from agents_wrapper import preprocessing_agent
+                
+                print(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
+                
+                # 4-Level Classification Flow:
+                print(f"🎯 [4-Level Flow] Starting classification cascade for: '{query}'")
+                print(f"   📍 Level 1: SKIP (already in preprocessing session)")
+                print(f"   📍 Level 2: session_continuation (already determined - we're in preprocessing phase)")
+                print(f"   📍 Level 3: continue_preprocessing (already determined - we're staying in preprocessing)")
+                print(f"   📍 Level 4: Classifying specific preprocessing action...")
+                
+                action_intent = self._classify_preprocessing_action(query)
+                print(f"🎯 [4-Level Flow] Final Level 4 Action Intent: '{action_intent}'")
+                
+                # Map Level 4 action to underlying commands handled by wrapper
+                mapped = query
+                if action_intent == 'proceed':
+                    mapped = 'PROCEED: continue'  # Clear intent signal
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'PROCEED: continue' command (BGE intent)")
+                elif action_intent == 'summary':
+                    mapped = 'SUMMARY: summary'  # Clear intent signal
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SUMMARY: summary' command (BGE intent)")
+                elif action_intent == 'override':
+                    mapped = f'OVERRIDE: {query}'  # Clear intent signal + original query
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'OVERRIDE: {query}' command (BGE intent)")
+                elif action_intent == 'skip':
+                    # Check if it's a specific phase skip (skip outliers, skip encoding, etc.)
+                    specific_skips = ['skip outliers', 'skip missing', 'skip encoding', 'skip transformations']
+                    if any(skip_cmd in query.lower() for skip_cmd in specific_skips):
+                        mapped = f'SKIP: {query}'  # preserve specific skip commands with intent signal
+                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: {query}' command (specific phase skip with BGE intent)")
+                    else:
+                        mapped = 'SKIP: skip'  # generic skip with intent signal
+                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: skip' command (generic skip with BGE intent)")
+                elif action_intent == 'query':
+                    mapped = f"QUERY: {query}"  # Clear intent signal + original query
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'QUERY: {query}' command (query with intent)")
+                else:
+                    mapped = query  # fallback
+                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (fallback)")
+                
+                print(f"✅ [4-Level Flow] Final mapped command: '{mapped}' → Sending to preprocessing agent")
+                
+                # Pass the pipeline's slack_manager to the state
+                state._slack_manager = self.slack_manager
+                processed_state = preprocessing_agent.handle_interactive_command(state, mapped)
+                
+                # Save the updated state to session state file
+                self._save_session_state(processed_state.session_id, processed_state)
+                
+                return self._prepare_response(processed_state, f"Processed in {current_phase} phase.")
+            
+
             else:
                 # Default help message
                 help_msg = """💬 **Available Commands:**
@@ -1109,9 +1415,83 @@ What would you like to do?"""
             state = PipelineState(session_id=session_id, chat_session=session_id)
         
         state.raw_data = data
+        
+        # Auto-detect target column if not set
+        target_was_auto_detected = False
+        if state.target_column is None and hasattr(data, 'columns'):
+            print(f"🔧 DEBUG: Auto-detecting target column from columns: {list(data.columns)}")
+            
+            # Common target column names
+            common_target_names = ['target', 'label', 'class', 'y', 'outcome', 'result', 'prediction', 'is_fraud', 'default_risk', 'churn', 'conversion']
+            
+            for col in data.columns:
+                if col.lower() in common_target_names:
+                    state.target_column = col
+                    print(f"🎯 Auto-detected target column: {col}")
+                    target_was_auto_detected = True
+                    break
+            
+            # If no common name found, use the last column as target
+            if state.target_column is None:
+                state.target_column = data.columns[-1]
+                print(f"🎯 Using last column as target: {state.target_column}")
+                target_was_auto_detected = True
+        
         state_manager.save_state(state)
         
         print(f"📊 Data loaded for session {session_id}: {data.shape if hasattr(data, 'shape') else 'Unknown shape'}")
+        if state.target_column:
+            print(f"🎯 Target column: {state.target_column}")
+        
+        # If target was auto-detected, automatically show preprocessing menu
+        if target_was_auto_detected and state.target_column:
+            # Only auto-show when the current intent is preprocessing/full_pipeline
+            current_intent = getattr(state, 'current_intent', None) or getattr(state, 'user_intent', None)
+            if not current_intent:
+                # Try to infer from last routing decision if stored
+                current_intent = getattr(state, 'last_route', None)
+            if current_intent not in ['preprocessing', 'full_pipeline']:
+                print("🎯 Target auto-detected but intent is not preprocessing/full_pipeline; skipping auto menu")
+                return
+            print("🎯 Target auto-detected - automatically showing preprocessing menu")
+            # Set up interactive session
+            state.interactive_session = {
+                "agent_type": "preprocessing",
+                "session_active": True,
+                "session_id": state.chat_session,
+                "phase": "waiting_input",
+                "target_column": state.target_column,
+                "current_phase": "overview"
+            }
+            
+            # Send preprocessing menu via Slack
+            # Use the pipeline's slack_manager instead of the global one
+            slack_manager = self.slack_manager
+            if slack_manager and state.chat_session:
+                menu_msg = f"""🧹 **Sequential Preprocessing Agent**
+
+📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target Column:** {state.target_column} (auto-detected)
+
+**🔄 Preprocessing Phases:**
+• `Overview` - Dataset analysis and summary
+• `Outliers` - Detect and handle outliers  
+• `Missing Values` - Handle missing data
+• `Encoding` - Categorical variable encoding
+• `Transformations` - Feature transformations
+
+**💬 Your Options:**
+• `proceed` - Start preprocessing workflow
+• `skip overview` - Skip to outlier detection
+• `explain outliers` - Learn about outlier handling
+• `summary` - Show current status
+
+💬 **What would you like to do?**"""
+                
+                slack_manager.send_message(state.chat_session, menu_msg)
+                print("✅ Auto-sent preprocessing menu to Slack")
+            
+            state_manager.save_state(state)
     
     def get_session_status(self, session_id: str) -> Dict[str, Any]:
         """Get status of a session"""
@@ -1137,6 +1517,377 @@ What would you like to do?"""
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up old sessions"""
         state_manager.cleanup_old_sessions(max_age_hours)
+
+    def _classify_preprocessing_action(self, query: str) -> str:
+        """
+        Level 4: Classify specific preprocessing actions using BGE with keyword fallbacks.
+        
+        Args:
+            query: User's input query
+            
+        Returns:
+            Classified action: 'proceed', 'skip', 'override', 'query', 'summary'
+        """
+        print(f"🔍 [Level 4] Processing query: '{query}'")
+        
+        try:
+            # BGE-based classification using orchestrator's embeddings (same as Levels 1-3)
+            from orchestrator import orchestrator
+            if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
+                print(f"🧠 [Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
+                
+                action_definitions = {
+                    "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this, go ahead, go ahead with this, go ahead in preprocessing, go ahead with current, go ahead and proceed, go ahead with analysis, move ahead, carry on, keep going, continue ahead, go forward, advance ahead, proceed ahead, go on, go through, go with this, go with current, let's proceed, let's continue, let's go ahead, let's move forward, start processing, begin processing, start analysis, begin analysis",
+                    "skip_action": "skip current phase, skip this step, bypass current analysis, move to next phase, skip outliers detection, skip missing values handling, skip encoding step, skip transformations, pass on this, ignore this step, skip to next, move on, bypass this, no thanks to this step",
+                    "override_action": "change strategy, modify approach, use different method, apply different strategy, override current, alter this approach, use median for age, apply mean imputation, change to winsorize, modify outlier treatment, use different encoding, apply one-hot, change transformation, use standard scaling, apply robust scaling",
+                    "datetime_action": "datetime column specification, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification, out of time month specification, date format specification, timestamp format specification, datetime format specification, date column format, time column format, date specification, time specification, datetime info, date info, time info, column datetime, column date, column time, date column name, time column name, datetime column name, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, target column specification, target is, target column is, column target, target column name, target variable, target variable is, dependent variable, dependent variable is, outcome variable, outcome variable is, response variable, response variable is, label column, label column is, label variable, label variable is",
+                    "query_action": "what is this strategy, explain current approach, how does this work, why this recommendation, what happens to columns, how does imputation work, explain outlier detection, what is encoding, how does transformation work, what does this mean, help me understand, why median imputation, why are you applying, why applying, why use this, why this strategy, why this treatment, why this method, why winsorization, why winsorize, why are you using, why do you recommend, why is this recommended, explain why, tell me why, why this choice, why this approach, what's the reason, what's the reasoning, why specifically, why particularly, why for this column, why this column, explain the reason, explain reasoning, why did you choose, why was this chosen, how come this strategy, how come you chose, justify this choice, justify this strategy, reasoning behind this, reason for this, rationale behind, rationale for this",
+                    "summary_action": "show current strategies, display current plan, what's planned, show me current approach, current strategy summary, what are we doing, show strategies for all columns, current preprocessing plan"
+                }
+                
+                # Use orchestrator's embedding system (same as main pipeline)
+                query_embedding = orchestrator._get_embedding(query)
+                if query_embedding is not None:
+                    print(f"✅ [Level 4] Query embedding generated successfully via orchestrator")
+                    similarities = {}
+                    for intent_name, definition in action_definitions.items():
+                        intent_embedding = orchestrator._get_embedding(definition)
+                        if intent_embedding is not None:
+                            # Use cosine similarity directly (same as orchestrator does)
+                            from sklearn.metrics.pairwise import cosine_similarity
+                            similarity = cosine_similarity(
+                                query_embedding.reshape(1, -1),
+                                intent_embedding.reshape(1, -1)
+                            )[0][0]
+                            similarities[intent_name] = float(similarity)
+                    
+                    if similarities:
+                        # Show all similarity scores for debugging
+                        print(f"🔍 [Level 4] BGE similarity scores:")
+                        for intent, score in sorted(similarities.items(), key=lambda x: x[1], reverse=True):
+                            action_name = intent.replace('_action', '')
+                            print(f"   {action_name}: {score:.3f}")
+                        
+                        best_intent = max(similarities.items(), key=lambda x: x[1])
+                        action_intent = best_intent[0].replace('_action', '')  # Remove _action suffix
+                        print(f"🎯 [Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
+                        
+                        if best_intent[1] > 0.3:  # Confidence threshold
+                            print(f"✅ [Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
+                            return action_intent
+                        else:
+                            print(f"⚠️ [Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
+                else:
+                    print(f"❌ [Level 4] Failed to generate query embedding via orchestrator")
+            else:
+                print(f"⚠️ [Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
+        
+        except Exception as e:
+            print(f"❌ [Level 4] BGE classification error: {e}")
+            print(f"🔄 [Level 4] Falling back to keyword classification")
+        
+        # Keyword fallback classification
+        print(f"🔑 [Level 4] Starting keyword fallback classification...")
+        query_lower = query.lower().strip()
+        print(f"🔍 [Level 4] Normalized query: '{query_lower}'")
+        
+        # Query keywords - check FIRST for highest priority (questions should override other keywords)
+        # Use more precise matching to avoid "how" matching in "show"
+        question_keywords = ['what', 'when', 'where', 'which', 'who', 'explain', 'help', '?', 'why are you', 'why applying', 'why use', 'why this', 'reasoning', 'rationale']
+        
+        # Check for "how" more precisely (avoid matching in "show")
+        if ' how ' in f' {query_lower} ' or query_lower.startswith('how ') or query_lower.endswith(' how'):
+            print(f"✅ [Level 4] Matched precise 'how' query pattern")
+            return 'query'
+        
+        # Check for "why" more precisely 
+        if ' why ' in f' {query_lower} ' or query_lower.startswith('why ') or query_lower.endswith(' why'):
+            print(f"✅ [Level 4] Matched precise 'why' query pattern")
+            return 'query'
+            
+        matched_query = [kw for kw in question_keywords if kw in query_lower]
+        if matched_query:
+            print(f"✅ [Level 4] Matched query keywords: {matched_query}")
+            return 'query'
+        
+        # Skip keywords (check second - higher priority for commands like "skip next phase")
+        skip_keywords = ['skip', 'pass', 'ignore', 'no thanks', 'bypass', 'move on']
+        matched_skip = [kw for kw in skip_keywords if kw in query_lower]
+        if matched_skip:
+            print(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
+            return 'skip'
+        
+        # Proceed keywords (enhanced with "go ahead" variations)
+        proceed_keywords = ['proceed', 'continue', 'next', 'go ahead', 'go', 'yes', 'ok', 'cool', 'sure', 'good',
+                           'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve', 'carry on', 'keep going', 'move ahead', 'go forward', 'go through', 'go with', 'let\'s go', 'let\'s proceed', 'start', 'begin']
+        matched_proceed = [kw for kw in proceed_keywords if kw in query_lower]
+        if matched_proceed:
+            print(f"✅ [Level 4] Matched proceed keywords: {matched_proceed}")
+            return 'proceed'
+        
+        # Override keywords
+        override_keywords = ['use', 'set', 'change', 'override', 'apply', 'modify', 'alter']
+        matched_override = [kw for kw in override_keywords if kw in query_lower]
+        if matched_override:
+            print(f"✅ [Level 4] Matched override keywords: {matched_override}")
+            return 'override'
+        
+        # Summary keywords
+        summary_keywords = ['summary', 'show', 'strategies', 'current', 'plan', 'display']
+        matched_summary = [kw for kw in summary_keywords if kw in query_lower]
+        if matched_summary:
+            print(f"✅ [Level 4] Matched summary keywords: {matched_summary}")
+            return 'summary'
+        
+        # Datetime/Target keywords
+        datetime_keywords = [
+            'datetime', 'date column', 'time column', 'timestamp', 'oot month', 'out of time',
+            'date format', 'time format', 'datetime format', 'datetime column', 'date_column',
+            'transaction_date', 'order_date', 'created_at', 'timestamp_column', 'date_time',
+            'datetime specification', 'date specification', 'time specification', 'column datetime',
+            'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is',
+            'target', 'target column', 'target is', 'column target', 'target variable', 'dependent variable',
+            'outcome variable', 'response variable', 'label column', 'label variable',
+            '2023m08', '2024m01', '2023m12', '2022m', '2021m', '2020m', 'month 2023', 'month 2024'
+        ]
+        matched_datetime = [kw for kw in datetime_keywords if kw in query_lower]
+        if matched_datetime:
+            print(f"✅ [Level 4] Matched datetime/target keywords: {matched_datetime}")
+            return 'datetime'
+        
+        # Default to proceed for short unrecognized patterns (likely affirmative)
+        if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
+            print(f"🔄 [Level 4] Short response (≤5 chars), defaulting to 'proceed'")
+            return 'proceed'
+        
+        print(f"🔄 [Level 4] No keywords matched, defaulting to 'query'")
+        return 'query'
+
+    def _classify_feature_selection_action(self, query: str) -> str:
+        """
+        Level 4: Classify specific feature selection actions using BGE with keyword fallbacks.
+        
+        Args:
+            query: User's input query
+            
+        Returns:
+            Classified action: 'proceed', 'analysis', 'query', 'summary', 'revert'
+        """
+        print(f"🔍 [FS Level 4] Processing query: '{query}'")
+        
+        try:
+            # BGE-based classification using orchestrator's embeddings (same as Levels 1-3)
+            from orchestrator import orchestrator
+            if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
+                print(f"🧠 [FS Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
+                
+                action_definitions = {
+                    "proceed_action": "proceed with final summary, finish analysis, complete the analysis, I'm done, finalize, okay looks good, looks good, looks great, that's perfect, this is fine, go ahead, all set, perfect, good to go, proceed with final, finish feature selection, complete feature selection, done with analysis, ready to finish, wrap up analysis, finalize selection, end analysis, conclude analysis, complete this, finish this, done here, all done, looks perfect, this looks good, satisfied with results, happy with selection, ready to proceed, ready to continue, ready to move on",
+                    "analysis_action": "run IV analysis, do CSI analysis, apply correlation filter, run SHAP analysis, do VIF filtering, run LASSO selection, apply PCA, run feature importance, do correlation analysis, filter features, select features, analyze features, run analysis, do analysis, apply analysis, execute analysis, perform analysis, start analysis, begin analysis, conduct analysis, carry out analysis, run standard analysis, do standard analysis, apply standard analysis, run custom analysis, do custom analysis, filter with threshold, analyze with cutoff, run with parameters, do with settings, apply with criteria, execute with threshold, perform with cutoff, IV analysis with threshold, CSI analysis with cutoff, correlation analysis with threshold, SHAP analysis with cutoff, VIF filtering with threshold, LASSO with parameters, PCA with components, implement iv, apply iv, iv filtering, iv value, iv cutoff, information value, iv threshold, iv greater than, iv less than, filter by iv, with iv, iv >, iv <, iv >=, iv <=, filter all values, filter values, IV with 0.01, IV with 0.02, IV with 0.03, IV with 0.04, IV with 0.05, IV 0.01, IV 0.02, IV 0.03, IV 0.04, IV 0.05, IV 0.1, IV 0.2, IV 0.3, IV 0.4, IV 0.5, CSI 0.01, CSI 0.02, CSI 0.03, CSI 0.04, CSI 0.05, CSI 0.1, CSI 0.2, CSI 0.3, CSI 0.4, CSI 0.5, correlation 0.7, correlation 0.8, correlation 0.9, SHAP 0.01, SHAP 0.02, SHAP 0.05, VIF 5, VIF 10, decision tree feature importance, train decision tree, decision tree classifier, decision tree importance, top important features according to decision tree, what are top 10 important features according to decision tree, run rfe, recursive feature elimination, rfe selection, rfe analysis, features by rfe, top features by rfe, what are top features by rfe, implement csi, apply csi, csi filtering, characteristic stability, stability index, csi threshold, csi cutoff, implement correlation, apply correlation, correlation filtering, highly correlated, remove correlated, correlation threshold, corr analysis, implement shap, apply shap, shap filtering, shap cutoff, shap threshold, variance inflation, multicollinearity, vif threshold, vif cutoff, vif greater than, implement lasso, apply lasso, lasso regularization, features by lasso, top features by lasso, what are top features by lasso, lasso coefficients, principal component, dimensionality reduction, random forest importance, tree importance, model importance, remove features, keep features, feature subset, filter all, filter with, values with, greater than, less than, equal to, >, <, >=, <=, ==, !=, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2, 0.3, 0.5, implement, apply, execute, perform, calculate, compute, run analysis, do analysis, start analysis, begin analysis, conduct analysis",
+                    "datetime_action": "datetime column specification for CSI analysis, datetime transaction_date, datetime order_date, datetime created_at, datetime timestamp, datetime date_column, oot month 2023M08, oot month 2024M01, oot month 2023M12, oot month specification for CSI, out of time month specification, date format specification, timestamp format specification, datetime format specification, date column format, time column format, date specification, time specification, datetime info, date info, time info, column datetime, column date, column time, date column name, time column name, datetime column name, set datetime column, specify datetime column, provide datetime column, datetime column is, date column is, time column is, CSI datetime column, CSI date column, CSI time column, CSI oot month, CSI out of time month, datetime for CSI, date for CSI, time for CSI",
+                    "query_action": "what can you do, what are your capabilities, explain IV analysis, what is CSI, how does correlation work, what is SHAP, explain VIF, what is LASSO, how does PCA work, what is feature selection, how many features remain, current state, what analyses have been done, current dataset info, show me results, give me scores, display values, show analysis results, what are the scores, how many features, which features, what happened, show me features, display features, tell me about features, explain results, help me understand, what does this mean, why these features, how does this work, what's the process, explain the analysis, describe the method, tell me more, show me more, give me details, provide information, current status, analysis status, feature status, selection status, progress status, what is, explain, how does, show me, tell me about, describe, what are, what are the, which are, which are the, give me, list, top 5, top 10, top 20, top 30, top 50, best 5, best 10, best 20, highest, lowest, most important, least important, value features, shap values, shap value, top shap features, top shap, importance ranking, feature ranking, what are top 10 important features according to decision tree feature importance, top important features according to decision tree, decision tree feature importance, most important features according to tree, what are top 10 features by rfe, what are top 10 features by lasso, top features by rfe, top features by lasso, features by rfe, features by lasso, rfe ranking, lasso ranking, what are top 10 features by pca, what are top 10 features based on pca, top features by pca, features by pca, pca ranking, pca components, show pca results, display pca analysis, pca feature importance, show correlation, correlation between, correlation matrix, correlation scores, feature correlation, correlation values, correlation results, top 20 correlation pairs, show correlation pairs, highest correlation pairs, correlation matrix, feature correlation pairs, most correlated features",
+                    "summary_action": "current summary, show me pipeline summary, what analyses have I done, current state, pipeline status, show current progress, display analysis chain, show me what's done, current pipeline, analysis summary, feature selection summary, what have we accomplished, show progress, display status, current analysis state, show analysis history, display pipeline, show completed analyses, what's been done, analysis progress, selection progress, current results summary, show results summary, pipeline progress, analysis chain summary, completed steps, finished analyses, done analyses",
+                    "revert_action": "revert to original, go back to initial state, start from start, reset to beginning, go back to clean data, restart from cleaned dataset, undo all changes, back to square one, return to initial, reset everything, start over, go back to beginning, undo changes, reverse changes, reset analysis, clear analysis, restart analysis, back to original data, return to original, reset to start, go to initial state, restore original, reset pipeline, clear pipeline, undo pipeline, reverse pipeline, start fresh, begin again, reset selection, clear selection, undo selection",
+                    "suggestion_action": "what should I do next, suggest next steps, recommend analysis, what analysis should I run next, guide me to next step, recommendations for analysis, advise me on next analysis, what analysis to do, help me choose, recommend analysis, suggest analysis, what's next, next step recommendation, analysis recommendation, guidance, advice, recommend me, guide me, help me decide, what would you suggest, any suggestions, any recommendations, what do you think I should do, what's the next best step, what analysis would be good, what should I focus on, what would help most, best next analysis, optimal next step, strategic recommendation, data science advice"
+                }
+                
+                # Use orchestrator's embedding system (same as main pipeline)
+                query_embedding = orchestrator._get_embedding(query)
+                if query_embedding is not None:
+                    print(f"✅ [FS Level 4] Query embedding generated successfully via orchestrator")
+                    similarities = {}
+                    for intent_name, definition in action_definitions.items():
+                        intent_embedding = orchestrator._get_embedding(definition)
+                        if intent_embedding is not None:
+                            # Use cosine similarity directly (same as orchestrator does)
+                            from sklearn.metrics.pairwise import cosine_similarity
+                            similarity = cosine_similarity(
+                                query_embedding.reshape(1, -1),
+                                intent_embedding.reshape(1, -1)
+                            )[0][0]
+                            similarities[intent_name] = float(similarity)
+                    
+                    if similarities:
+                        # Show all similarity scores for debugging
+                        print(f"🔍 [FS Level 4] BGE similarity scores:")
+                        for intent, score in sorted(similarities.items(), key=lambda x: x[1], reverse=True):
+                            action_name = intent.replace('_action', '')
+                            print(f"   {action_name}: {score:.3f}")
+                        
+                        best_intent = max(similarities.items(), key=lambda x: x[1])
+                        action_intent = best_intent[0].replace('_action', '')  # Remove _action suffix
+                        print(f"🎯 [FS Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
+                        
+                        if best_intent[1] > 0.3:  # Confidence threshold
+                            print(f"✅ [FS Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
+                            return action_intent
+                        else:
+                            print(f"⚠️ [FS Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
+                else:
+                    print(f"❌ [FS Level 4] Failed to generate query embedding via orchestrator")
+            else:
+                print(f"⚠️ [FS Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
+        
+        except Exception as e:
+            print(f"❌ [FS Level 4] BGE classification error: {e}")
+            print(f"🔄 [FS Level 4] Falling back to keyword classification")
+        
+        # Keyword fallback classification
+        print(f"🔑 [FS Level 4] Starting keyword fallback classification...")
+        query_lower = query.lower().strip()
+        print(f"🔍 [FS Level 4] Normalized query: '{query_lower}'")
+        
+        # Suggestion keywords - check EARLY for recommendation requests
+        suggestion_keywords = [
+            'suggest', 'recommend', 'advice', 'guidance', 'what should i do', 'what next',
+            'next step', 'what analysis', 'best analysis', 'help me choose', 'guide me',
+            'recommend analysis', 'suggest analysis', 'what would you suggest', 'any suggestions',
+            'any recommendations', 'what do you think', 'what would be good', 'what should i focus',
+            'optimal next', 'strategic recommendation', 'data science advice', 'help me decide',
+            'what should i', 'what would be', 'which analysis', 'best next', 'next best'
+        ]
+        
+        if any(keyword in query_lower for keyword in suggestion_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for SUGGESTION intent")
+            return "suggestion"
+        
+        # Summary keywords - check FIRST for specific progress/status queries
+        summary_keywords = [
+            'summary', 'current state', 'pipeline status', 'show progress', 'analysis chain',
+            'what have i done', 'what analyses', 'current progress', 'pipeline summary',
+            'show current', 'display status', 'analysis summary', 'show current progress',
+            'display progress', 'current analysis state', 'show analysis history'
+        ]
+        
+        if any(keyword in query_lower for keyword in summary_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for SUMMARY intent")
+            return "summary"
+        
+        # Query keywords - check after summary for general questions
+        query_keywords = [
+            'what', 'how', 'why', 'explain', 'tell me', 'show me', 'help', '?', 'describe',
+            'what is', 'how does', 'what are', 'can you explain', 'help me understand',
+            'what does', 'how do', 'why do', 'why does', 'what happens', 'how come',
+            'tell me about', 'show me about', 'explain to me', 'describe to me'
+        ]
+        
+        if any(keyword in query_lower for keyword in query_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for QUERY intent")
+            return "query"
+        
+        # Analysis keywords (run/do/apply analysis)
+        analysis_keywords = [
+            'run iv', 'do iv', 'apply iv', 'iv analysis', 'run csi', 'do csi', 'apply csi', 'csi analysis',
+            'run correlation', 'do correlation', 'correlation analysis', 'run shap', 'do shap', 'shap analysis',
+            'run vif', 'do vif', 'vif analysis', 'run lasso', 'do lasso', 'lasso selection',
+            'run pca', 'do pca', 'pca analysis', 'filter features', 'select features', 'analyze features',
+            'run analysis', 'do analysis', 'apply analysis', 'execute analysis', 'perform analysis',
+            'start analysis', 'begin analysis', 'with threshold', 'with cutoff', 'with parameters',
+            # Simple analysis + threshold patterns
+            'iv 0.01', 'iv 0.02', 'iv 0.03', 'iv 0.04', 'iv 0.05', 'iv 0.1', 'iv 0.2', 'iv 0.3', 'iv 0.4', 'iv 0.5',
+            'csi 0.01', 'csi 0.02', 'csi 0.03', 'csi 0.04', 'csi 0.05', 'csi 0.1', 'csi 0.2', 'csi 0.3', 'csi 0.4', 'csi 0.5',
+            'correlation 0.7', 'correlation 0.8', 'correlation 0.9', 'shap 0.01', 'shap 0.02', 'shap 0.05', 'vif 5', 'vif 10'
+        ]
+        
+        if any(keyword in query_lower for keyword in analysis_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for ANALYSIS intent")
+            return "analysis"
+        
+        # Proceed keywords (finish/complete)
+        proceed_keywords = [
+            'proceed', 'finish', 'complete', 'done', 'finalize', 'looks good', 'looks great',
+            'perfect', 'good to go', 'all set', 'ready to proceed', 'wrap up', 'conclude'
+        ]
+        
+        if any(keyword in query_lower for keyword in proceed_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for PROCEED intent")
+            return "proceed"
+        
+        # Revert keywords
+        revert_keywords = [
+            'revert', 'reset', 'undo', 'go back', 'start over', 'begin again', 'clear',
+            'restore', 'return to original', 'back to beginning', 'start fresh'
+        ]
+        
+        if any(keyword in query_lower for keyword in revert_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for REVERT intent")
+            return "revert"
+        
+        # Datetime keywords for CSI analysis
+        datetime_keywords = [
+            'datetime', 'date column', 'time column', 'timestamp', 'oot month', 'out of time',
+            'date format', 'time format', 'datetime format', 'datetime column', 'date_column',
+            'transaction_date', 'order_date', 'created_at', 'timestamp_column', 'date_time',
+            'datetime specification', 'date specification', 'time specification', 'column datetime',
+            'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is',
+            '2023m08', '2024m01', '2023m12', '2022m', '2021m', '2020m', 'month 2023', 'month 2024'
+        ]
+        
+        if any(keyword in query_lower for keyword in datetime_keywords):
+            print(f"🎯 [FS Level 4] Keyword match found for DATETIME intent")
+            return "datetime"
+        
+        # Default fallback
+        print(f"🤷 [FS Level 4] No specific keyword matches found, defaulting to ANALYSIS")
+        return "analysis"
+
+    def _classify_in_phase_intent(self, query: str) -> str:
+        """
+        Classify user intent within an active preprocessing phase using embeddings with keyword fallbacks.
+        
+        Args:
+            query: User's input query
+            
+        Returns:
+            Classified intent: 'proceed', 'skip', 'query', 'override', 'summary', or original query
+        """
+        try:
+            # Try semantic classification first (if embeddings available)
+            from orchestrator import orchestrator
+            if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
+                intent, scores = orchestrator._classify_with_semantic_similarity(query)
+                if scores.get('max_score', 0) > 0.6:  # High confidence threshold for in-phase
+                    print(f"🧠 Semantic classification: '{query}' → '{intent}' (confidence: {scores.get('max_score', 0):.2f})")
+                    return intent
+            
+            # Fallback to keyword matching
+            query_lower = query.lower().strip()
+            
+            # Continuation keywords - expanded to include all affirmative responses
+            continue_keywords = ['proceed', 'continue', 'next', 'go', 'yes', 'ok', 'cool', 'sure', 'good', 
+                               'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve']
+            if any(kw in query_lower for kw in continue_keywords):
+                return 'proceed'
+            
+            # Skip keywords  
+            skip_keywords = ['skip', 'pass', 'ignore', 'no thanks']
+            if any(kw in query_lower for kw in skip_keywords):
+                return 'skip'
+            
+            # Override keywords
+            override_keywords = ['use', 'set', 'change', 'override', 'apply', 'modify']
+            if any(kw in query_lower for kw in override_keywords):
+                return 'override'
+            
+            # Summary/status keywords
+            summary_keywords = ['summary', 'status', 'show', 'current', 'progress']
+            if any(kw in query_lower for kw in summary_keywords):
+                return 'summary'
+            
+            # Query keywords - explicit questions only
+            question_keywords = ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'explain', 'help', '?']
+            if any(kw in query_lower for kw in question_keywords):
+                return 'query'
+            
+            # Default to proceed for short unrecognized patterns (likely affirmative)
+            if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
+                return 'proceed'
+            
+            return 'query'
+            
+        except Exception as e:
+            print(f"⚠️ Error in in-phase intent classification: {e}")
+            return 'query'  # Safe fallback
 
 
 # Global pipeline instance

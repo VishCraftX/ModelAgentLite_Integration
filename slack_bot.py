@@ -83,14 +83,35 @@ class SlackMLBot:
             user_id = event['user']
             channel = event['channel']
             thread_ts = event.get('thread_ts', event['ts'])
-            session_id = self._get_session_id(user_id, thread_ts)
+            
+            # For consistent session tracking, use the THREAD ID (not timestamp)
+            # All messages in the same thread should use the same session ID
+            # If this is a thread reply, use the thread_ts as the session identifier
+            # If this is a new message, use the message ts as the session identifier
+            if event.get('thread_ts'):
+                # This is a reply in an existing thread - use the thread ID
+                session_id = self._get_session_id(user_id, event['thread_ts'])
+                print(f"🔍 DEBUG: Thread reply detected - using thread ID: {event['thread_ts']}")
+            else:
+                # This is a new message - use the message timestamp as session ID
+                session_id = self._get_session_id(user_id, event['ts'])
+                print(f"🔍 DEBUG: New message detected - using message timestamp: {event['ts']}")
             
             # Debugging for session registration
             print(f"🔍 DEBUG: Registering session with ID: {session_id}")
             print(f"🔍 DEBUG: Channel: {channel}")
             print(f"🔍 DEBUG: Thread TS: {thread_ts}")
-            self.ml_pipeline.slack_manager.register_session(session_id, channel, thread_ts)
+            print(f"🔍 DEBUG: Event type: {event.get('type', 'unknown')}")
+            print(f"🔍 DEBUG: Event subtype: {event.get('subtype', 'none')}")
+            print(f"🔍 DEBUG: Is thread reply: {bool(event.get('thread_ts'))}")
+            print(f"🔍 DEBUG: Parent thread: {event.get('thread_ts', 'none')}")
+            print(f"🔍 DEBUG: Message timestamp: {event.get('ts', 'none')}")
+            
+            # Use the thread ID for session registration (consistent with session ID)
+            session_thread_ts = event.get('thread_ts') if event.get('thread_ts') else event.get('ts')
+            self.ml_pipeline.slack_manager.register_session(session_id, channel, session_thread_ts)
             print(f"🔍 DEBUG: Session registered. Current sessions: {self.ml_pipeline.slack_manager.session_channels}")
+            print(f"🔍 DEBUG: Session threads: {self.ml_pipeline.slack_manager.session_threads}")
             
             # Clean the message text (remove bot mention)
             if f"<@{bot_user_id}>" in text:
@@ -209,8 +230,13 @@ Just upload your data and start asking questions in natural language! 🎉"""
     
     def _get_session_id(self, user_id: str, thread_ts: Optional[str] = None) -> str:
         """Generate a unique session ID for tracking user conversations"""
+        # Use thread_ts if provided, otherwise use user_id
+        # For consistent session tracking, use the thread_ts as the session identifier
         if thread_ts:
-            return f"{user_id}_{thread_ts}"
+            # Extract the base thread timestamp (without milliseconds) for consistency
+            # This ensures the same session ID for all messages in the same thread
+            base_thread = thread_ts.split('.')[0] if '.' in thread_ts else thread_ts
+            return f"{user_id}_{base_thread}"
         return user_id
     
     def _handle_file_attachments(self, files: List[Dict], session_id: str, say, thread_ts: str):
@@ -288,7 +314,10 @@ Just upload your data and start asking questions in natural language! 🎉"""
             # Pipeline summary moved to logs only - user doesn't need technical details
             if result.get("data_summary"):
                 summary = result["data_summary"]
-                if any(summary.values()):  # Log data summary for debugging
+                # ✅ SKIP PIPELINE SUMMARY FOR FEATURE SELECTION (user has built-in waterfall summary)
+                is_feature_selection = summary.get("current_agent") == "feature_selection" or summary.get("feature_selection_active", False)
+                
+                if any(summary.values()) and not is_feature_selection:  # Skip for feature selection
                     summary_text = self._format_pipeline_summary(summary)
                     print(f"📋 [DEBUG] Pipeline Summary: {summary_text}")
                     # Note: Not sending to Slack - user doesn't need technical pipeline details
@@ -392,17 +421,49 @@ Just upload your data and start asking questions in natural language! 🎉"""
         """Format pipeline summary for Slack"""
         parts = ["📋 *Pipeline Summary:*"]
         
-        if summary.get("has_raw_data"):
-            shape = summary.get("raw_data_shape", (0, 0))
-            parts.append(f"• Raw data: ✅ {shape[0]:,} rows × {shape[1]} columns")
+        # Check if we're in feature selection mode
+        is_feature_selection = summary.get("current_agent") == "feature_selection" or summary.get("feature_selection_active", False)
         
-        if summary.get("has_cleaned_data"):
-            shape = summary.get("cleaned_data_shape", (0, 0))
-            parts.append(f"• Cleaned data: ✅ {shape[0]:,} rows × {shape[1]} columns")
-        
-        if summary.get("has_selected_features"):
-            count = summary.get("selected_features_count", 0)
-            parts.append(f"• Selected features: ✅ {count} features")
+        if is_feature_selection:
+            # Feature selection specific summary
+            if summary.get("has_cleaned_data"):
+                total_features = summary.get("cleaned_data_shape", (0, 0))[1]
+                
+                # ✅ Show cleaning information if available
+                if summary.get("actual_feature_count") and summary.get("original_feature_count"):
+                    actual_count = summary["actual_feature_count"]
+                    original_count = summary["original_feature_count"]
+                    if actual_count != original_count:
+                        removed_count = original_count - actual_count
+                        parts.append(f"• Clean features: 📊 {actual_count} (removed {removed_count} object/single-value)")
+                    else:
+                        parts.append(f"• Total features: 📊 {total_features}")
+                else:
+                    parts.append(f"• Total features: 📊 {total_features}")
+            
+            if summary.get("has_selected_features"):
+                selected_count = summary.get("selected_features_count", 0)
+                total_features = summary.get("cleaned_data_shape", (0, 0))[1]
+                if total_features > 0:
+                    reduction_pct = ((total_features - selected_count) / total_features * 100)
+                    parts.append(f"• Selected features: ✅ {selected_count} (-{total_features - selected_count}, {reduction_pct:.1f}% reduction)")
+                else:
+                    parts.append(f"• Selected features: ✅ {selected_count}")
+            else:
+                parts.append("• Selected features: ⏳ Analysis in progress")
+        else:
+            # Regular pipeline summary
+            if summary.get("has_raw_data"):
+                shape = summary.get("raw_data_shape", (0, 0))
+                parts.append(f"• Raw data: ✅ {shape[0]:,} rows × {shape[1]} columns")
+            
+            if summary.get("has_cleaned_data"):
+                shape = summary.get("cleaned_data_shape", (0, 0))
+                parts.append(f"• Cleaned data: ✅ {shape[0]:,} rows × {shape[1]} columns")
+            
+            if summary.get("has_selected_features"):
+                count = summary.get("selected_features_count", 0)
+                parts.append(f"• Selected features: ✅ {count} features")
         
         if summary.get("has_trained_model"):
             parts.append("• Trained model: ✅ Available")
