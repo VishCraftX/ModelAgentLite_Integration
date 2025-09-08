@@ -212,39 +212,90 @@ class PreprocessingAgentWrapper:
                 if command.startswith('PROCEED: ') or command.lower() in ['yes', 'proceed', 'continue', 'feature_selection', 'next']:
                     print("🚀 Moving to feature selection phase...")
                     
-                    # Initialize feature selection with cleaned data
+                    # ✅ ENHANCED: Directly initialize feature selection agent with cleaned data
                     try:
-                        # Set interactive session to feature selection
-                        state.interactive_session = {
-                            "agent_type": "feature_selection",
-                            "session_active": True,
-                            "phase": "ready",
-                            "current_phase": "overview"
-                        }
+                        # Get the data to use (prefer cleaned_data, fallback to raw_data)
+                        data_to_use = state.cleaned_data if state.cleaned_data is not None else state.raw_data
+                        if data_to_use is None:
+                            raise ValueError("No data available for feature selection")
                         
-                        # Send confirmation message
+                        print(f"🔧 DEBUG: Using data shape: {data_to_use.shape}")
+                        print(f"🔧 DEBUG: Target column: {state.target_column}")
+                        
+                        # Save data to temporary CSV for feature selection agent
+                        import tempfile
+                        import os
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
+                            data_to_use.to_csv(tmp_file.name, index=False)
+                            temp_csv_path = tmp_file.name
+                        
+                        print(f"🔧 DEBUG: Saved data to temp file: {temp_csv_path}")
+                        
+                        # Create UserSession for feature selection agent
+                        from feature_selection_agent_impl import UserSession, DataProcessor
+                        
+                        session = UserSession(
+                            user_id=state.chat_session,
+                            file_path=temp_csv_path,
+                            target_column=state.target_column,
+                            current_features=list(data_to_use.columns),
+                            analysis_chain=[],
+                            snapshots={},
+                            model_name="qwen2.5-coder:32b-instruct-q4_K_M"
+                        )
+                        
+                        # Apply intelligent data cleaning (this is what FS agent does on startup)
+                        clean_df = DataProcessor.load_and_clean_data(session)
+                        print(f"✅ Applied intelligent cleaning: {data_to_use.shape} → {clean_df.shape}")
+                        
+                        # Create the "after_cleaning" snapshot for revert functionality
+                        session.snapshots["after_cleaning"] = {
+                            "df": clean_df.copy(),
+                            "features": list(clean_df.columns),
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        print(f"✅ Created 'after_cleaning' snapshot with {clean_df.shape[1]} clean features for revert functionality")
+                        
+                        # Store session in feature selection agent
+                        from agents_wrapper import feature_selection_agent
+                        feature_selection_agent.bot.users[state.chat_session] = session
+                        print(f"✅ Stored session in feature selection agent")
+                        
+                        # Generate and send feature selection menu
+                        from feature_selection_agent_impl import MenuGenerator
+                        menu_text = MenuGenerator.generate_main_menu(session)
+                        
+                        # Get slack manager
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
                             from toolbox import slack_manager as global_slack_manager
                             slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
-                            data_shape = state.cleaned_data.shape if state.cleaned_data is not None else state.raw_data.shape
-                            message = f"""🚀 **Feature Selection Started!**
-
-**✅ Using cleaned data from preprocessing**
-• Dataset: {data_shape[0]:,} rows × {data_shape[1]} columns
-• Target: {state.target_column}
-
-**🔍 Starting feature analysis...**
-Please wait while we analyze your features for selection."""
-                            
-                            slack_manager.send_message(state.chat_session, message)
+                            slack_manager.send_message(state.chat_session, menu_text)
+                            print("✅ Sent feature selection menu to Slack")
+                        
+                        # Update state to feature selection
+                        state.interactive_session = {
+                            "agent_type": "feature_selection",
+                            "session_active": True,
+                            "phase": "waiting_input",
+                            "current_phase": "menu"
+                        }
+                        print(f"🔧 DEBUG: Updated state.interactive_session: {state.interactive_session}")
+                        
+                        # Clean up temp file
+                        try:
+                            os.unlink(temp_csv_path)
+                        except:
+                            pass
                         
                         return state
                         
                     except Exception as e:
                         print(f"❌ Error initializing feature selection: {e}")
+                        import traceback
+                        traceback.print_exc()
                         return state
                 
                 elif command.lower() in ['no', 'skip', 'stay', 'summary']:
@@ -474,6 +525,9 @@ Please wait while we analyze your features for selection."""
                     # Start preprocessing workflow - begin with outliers phase
                     print("🚀 Starting preprocessing workflow with outliers phase")
                     print("🔧 Running preprocessing agent for outlier analysis...")
+                    print(f"🔧 DEBUG INPUT TO OUTLIERS: Command='{command}', State data shape: {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                    print(f"🔧 DEBUG INPUT TO OUTLIERS: Target column: {state.target_column}")
+                    print(f"🔧 DEBUG INPUT TO OUTLIERS: Interactive session: {state.interactive_session}")
                     
                     # Initialize dataset analysis
                     try:
@@ -806,6 +860,9 @@ Please wait while we analyze your features for selection."""
                     else:
                         # Start missing values analysis
                         print("🔍 Starting missing values analysis...")
+                        print(f"🔧 DEBUG INPUT TO MISSING_VALUES: Command='{command}', State data shape: {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                        print(f"🔧 DEBUG INPUT TO MISSING_VALUES: Target column: {state.target_column}")
+                        print(f"🔧 DEBUG INPUT TO MISSING_VALUES: Interactive session: {state.interactive_session}")
                         
                         # Import missing values functions
                         from preprocessing_agent_impl import (
@@ -1082,6 +1139,9 @@ Please wait while we analyze your features for selection."""
                     else:
                         # Start encoding analysis
                         print("🔍 Starting encoding analysis...")
+                        print(f"🔧 DEBUG INPUT TO ENCODING: Command='{command}', State data shape: {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                        print(f"🔧 DEBUG INPUT TO ENCODING: Target column: {state.target_column}")
+                        print(f"🔧 DEBUG INPUT TO ENCODING: Interactive session: {state.interactive_session}")
                         
                         # Import encoding functions
                         from preprocessing_agent_impl import (
@@ -1374,6 +1434,9 @@ Please wait while we analyze your features for selection."""
                     else:
                         # Start transformations analysis
                         print("🔍 Starting transformations analysis...")
+                        print(f"🔧 DEBUG INPUT TO TRANSFORMATIONS: Command='{command}', State data shape: {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                        print(f"🔧 DEBUG INPUT TO TRANSFORMATIONS: Target column: {state.target_column}")
+                        print(f"🔧 DEBUG INPUT TO TRANSFORMATIONS: Interactive session: {state.interactive_session}")
                         
                         # Import transformations functions
                         from preprocessing_agent_impl import (

@@ -541,9 +541,12 @@ Generate Python code to fulfill this request:"""
     
     def _load_session_state(self, session_id: str) -> Optional[Dict]:
         """Load session state from user directory including DataFrames"""
+        print(f"🔧 DEBUG LOAD_SESSION: Called for session {session_id}")
         try:
             user_dir = self._get_user_session_dir(session_id)
             state_file = os.path.join(user_dir, "session_state.json")
+            print(f"🔧 DEBUG LOAD_SESSION: Looking for state file: {state_file}")
+            print(f"🔧 DEBUG LOAD_SESSION: State file exists: {os.path.exists(state_file)}")
             
             if os.path.exists(state_file):
                 import json
@@ -567,10 +570,19 @@ Generate Python code to fulfill this request:"""
                 
                 if state_dict.get('cleaned_data') and isinstance(state_dict['cleaned_data'], dict):
                     cleaned_data_file = os.path.join(user_dir, state_dict['cleaned_data']['file'])
+                    print(f"🔧 DEBUG LOAD_SESSION: cleaned_data file path: {cleaned_data_file}")
+                    print(f"🔧 DEBUG LOAD_SESSION: cleaned_data file exists: {os.path.exists(cleaned_data_file)}")
                     if os.path.exists(cleaned_data_file):
                         state_dict['cleaned_data'] = pd.read_csv(cleaned_data_file)
                         print(f"📂 Restored cleaned_data: {state_dict['cleaned_data'].shape}")
+                    else:
+                        print(f"⚠️ DEBUG LOAD_SESSION: cleaned_data file not found, setting to None")
+                        state_dict['cleaned_data'] = None
+                else:
+                    print(f"🔧 DEBUG LOAD_SESSION: No cleaned_data in state_dict or not dict format")
                 
+                print(f"🔧 DEBUG LOAD_SESSION: Final state_dict keys: {list(state_dict.keys())}")
+                print(f"🔧 DEBUG LOAD_SESSION: cleaned_data is None: {state_dict.get('cleaned_data') is None}")
                 return state_dict
             return None
             
@@ -755,8 +767,10 @@ Generate Python code to fulfill this request:"""
             )
         
         # Always load session state if available (for interactive sessions)
-            previous_state = self._load_session_state(session_id)
-            if previous_state:
+        print(f"🔧 DEBUG MAIN PIPELINE: About to load session state for {session_id}")
+        previous_state = self._load_session_state(session_id)
+        print(f"🔧 DEBUG MAIN PIPELINE: _load_session_state returned: {previous_state is not None}")
+        if previous_state:
                 print(f"📂 Loaded previous session state for {session_id}")
                 print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
                 # Restore relevant state information INCLUDING DataFrames
@@ -815,7 +829,7 @@ Generate Python code to fulfill this request:"""
             print(f"🔍 DEBUG: Query to check: '{query_lower}'")
             
             # Pure continuation commands (context-independent)
-            pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help']
+            pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help', 'yes', 'okay', 'cool', 'nice', 'go ahead', 'yeah', 'fine', 'good', 'sure', 'alright', 'agreed', 'approve', 'sounds good', 'move forward']
             
             # Check for explicit session management commands
             clear_session_commands = ['clear session', 'reset', 'start over', 'new session', 'exit session']
@@ -889,7 +903,7 @@ Generate Python code to fulfill this request:"""
                 current_phase = session.get('phase')
                 
                 # Phase 1: Pure continuation commands (always valid)
-                pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help']
+                pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help', 'yes', 'okay', 'cool', 'nice', 'go ahead', 'yeah', 'fine', 'good', 'sure', 'alright', 'agreed', 'approve', 'sounds good', 'move forward']
                 if any(cmd in query_lower for cmd in pure_continuation_commands):
                     return True
                 
@@ -913,6 +927,9 @@ Generate Python code to fulfill this request:"""
                     if agent_type in continuation_definitions:
                         # Use semantic similarity to classify continuation vs new request
                         from orchestrator import Orchestrator
+                        
+                        # Create temporary orchestrator for context-aware semantic classification
+                        temp_orchestrator = Orchestrator()
                         
                         # Create temporary intent definitions for this context
                         context_intents = continuation_definitions[agent_type]
@@ -1204,6 +1221,14 @@ Generate Python code to fulfill this request:"""
                 if 'interactive_session' in previous_state:
                     state.interactive_session = previous_state['interactive_session']
                     print(f"🔧 DEBUG: Restored interactive_session in handler: {state.interactive_session}")
+                
+                # ✅ CRITICAL FIX: Restore DataFrame data to prevent session loading/saving problems
+                if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
+                    state.cleaned_data = previous_state['cleaned_data']
+                    print(f"🔧 DEBUG: Restored cleaned_data in handler: {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+                if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
+                    state.raw_data = previous_state['raw_data']
+                    print(f"🔧 DEBUG: Restored raw_data in handler: {state.raw_data.shape if state.raw_data is not None else 'None'}")
             else:
                 print(f"🔧 DEBUG: No previous state found in preprocessing handler")
             
@@ -1303,7 +1328,7 @@ Please specify a valid column name."""
             print(f"🔧 DEBUG: preprocessing_state current_phase: {state.preprocessing_state.get('current_phase') if state.preprocessing_state else 'N/A'}")
             print(f"🔧 DEBUG: interactive_session current_phase: {state.interactive_session.get('current_phase') if state.interactive_session else 'N/A'}")
             
-            if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations']:
+            if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations', 'completion']:
                 # Route to preprocessing agent for phase-specific handling
                 from agents_wrapper import preprocessing_agent
                 
@@ -1439,7 +1464,16 @@ What would you like to do?"""
             print(f"🎯 Target column: {state.target_column}")
         
         # If target was auto-detected, automatically show preprocessing menu
+        # BUT only if there's no existing interactive session already loaded
         if target_was_auto_detected and state.target_column:
+            # Check if we already have an active interactive session (from loaded state)
+            if (hasattr(state, 'interactive_session') and 
+                state.interactive_session is not None and 
+                state.interactive_session.get('session_active', False)):
+                print("🎯 Target auto-detected but interactive session already active - skipping auto menu")
+                print(f"🎯 Existing session: {state.interactive_session}")
+                return
+                
             # Only auto-show when the current intent is preprocessing/full_pipeline
             current_intent = getattr(state, 'current_intent', None) or getattr(state, 'user_intent', None)
             if not current_intent:
