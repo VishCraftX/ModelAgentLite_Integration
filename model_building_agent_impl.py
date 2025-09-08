@@ -119,7 +119,12 @@ FAILING CODE:
 ERROR MESSAGE: {error_msg}
 ERROR TYPE: {error_type}
 
-CRITICAL: Fix the error but maintain ALL the original system requirements and code structure specified in the system prompt.
+CRITICAL REQUIREMENTS:
+1. Fix the error but maintain ALL the original system requirements and code structure
+2. Keep the EXACT same result dictionary structure and keys as the original code
+3. If the original code had 'models', 'user_config', or other specific keys, maintain them
+4. Preserve all variable names and result format exactly as specified in the system prompt
+5. Only fix the specific error, don't change the overall logic or result structure
 
 REWRITTEN CODE:"""
 
