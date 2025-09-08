@@ -795,7 +795,7 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         skip_intent_definitions = {
             "skip_to_modeling": "Skip to modeling, go straight to modeling, bypass preprocessing and feature selection, direct to modeling, skip all preprocessing, skip everything and build new model, immediate new model training, direct new model building, bypass data preparation entirely",
             "skip_preprocessing_to_features": "Skip preprocessing but do feature selection, bypass data cleaning but select features, skip preprocessing and select features, feature selection without preprocessing, feature engineering without cleaning, skip data preparation but analyze features",
-            "skip_preprocessing_to_modeling": "Skip preprocessing and go to new modeling, bypass preprocessing for new model building, skip data cleaning and train new model, new model building without preprocessing, train new model with raw data, build new classifier without cleaning, direct new model training",
+            "skip_preprocessing_to_modeling": "Skip preprocessing and go to new modeling, bypass preprocessing for new model building, skip data cleaning and train new model, new model building without preprocessing, train new model with raw data, build new classifier without cleaning, direct new model training, skip preprocessing and feature selection steps, skip preprocessing / feature selection, bypass preprocessing and feature selection, skip both preprocessing and features",
             "no_skip": "Normal pipeline, full pipeline, complete workflow, do preprocessing, clean data first, prepare data, standard pipeline, regular workflow, full data preparation, use existing model, apply existing model, use this model, use trained model, existing model analysis, current model application, model usage, model application, existing model operations, use current model, apply current model, utilize existing model"
         }
         
@@ -908,6 +908,22 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         
         # Check for "skip preprocessing" - need to decide next step intelligently
         if any(pattern in query_lower for pattern in skip_preprocessing_patterns):
+            # CRITICAL FIX: Check if user explicitly wants to skip BOTH preprocessing AND feature selection
+            explicit_skip_both = any(skip_both in query_lower for skip_both in [
+                "skip preprocessing / feature selection", 
+                "skip preprocessing and feature selection",
+                "skip preprocessing / feature",
+                "skip preprocessing and feature", 
+                "bypass preprocessing / feature",
+                "bypass preprocessing and feature",
+                "skip both preprocessing",
+                "skip preprocessing & feature"
+            ])
+            
+            if explicit_skip_both:
+                print(f"[Orchestrator] Explicit skip BOTH preprocessing AND feature selection detected")
+                return "skip_preprocessing_to_modeling"
+            
             # Analyze what the user wants to do after skipping preprocessing
             feature_keywords = ["feature", "select", "selection", "engineering", "importance", "correlation"]
             model_keywords = ["model", "train", "build", "classifier", "regressor", "predict", "algorithm", 
