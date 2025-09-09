@@ -54,10 +54,11 @@ class MultiAgentMLPipeline:
         initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
         
         # Get references to global toolbox components after initialization
-        from toolbox import slack_manager, progress_tracker, user_directory_manager
+        from toolbox import slack_manager, progress_tracker, user_directory_manager, execution_agent
         self.slack_manager = slack_manager
         self.progress_tracker = progress_tracker
         self.user_directory_manager = user_directory_manager
+        self.execution_agent = execution_agent
         
         if not LANGGRAPH_AVAILABLE:
             print_to_log("❌ LangGraph not available, using simplified pipeline")
@@ -242,7 +243,7 @@ class MultiAgentMLPipeline:
 
 💬 **What would you like to do?**"""
                     
-                    slack_manager.send_message(state.chat_session, preprocessing_menu)
+                    self.slack_manager.send_message(state.chat_session, preprocessing_menu)
                     print_to_log("✅ Sent comprehensive preprocessing menu to Slack")
                 
                 # For all other agents (model_building, feature_selection, code_execution, etc.):
@@ -265,14 +266,14 @@ class MultiAgentMLPipeline:
         # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
         slack_manager = self.slack_manager
         
-        print_to_log(f"🔧 [FS Node] Using slack_manager id: {id(slack_manager)}")
-        print_to_log(f"🔧 [FS Node] Slack manager has {len(slack_manager.session_channels)} channels")
+        print_to_log(f"🔧 [FS Node] Using slack_manager id: {id(self.slack_manager)}")
+        print_to_log(f"🔧 [FS Node] Slack manager has {len(self.slack_manager.session_channels)} channels")
         
         state.slack_session_info = {
-            'channels': dict(slack_manager.session_channels),
-            'threads': dict(slack_manager.session_threads)
+            'channels': dict(self.slack_manager.session_channels),
+            'threads': dict(self.slack_manager.session_threads)
         }
-        state._slack_manager = slack_manager
+        state._slack_manager = self.slack_manager
         print_to_log(f"💾 [FS Node] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
         
         return feature_selection_agent.run(state)
@@ -342,7 +343,6 @@ class MultiAgentMLPipeline:
         try:
             # Import the LLM-based code generation from ModelBuildingAgent
             from model_building_agent_impl import generate_model_code
-            from toolbox import execution_agent
             
             user_query = state.user_query
             user_id = state.chat_session
@@ -397,7 +397,7 @@ Generate Python code to fulfill this request:"""
             }
             
             print_to_log(f"⚙️ Executing generated code...")
-            result_state = execution_agent.run_code(state, generated_code, context)
+            result_state = self.execution_agent.run_code(state, generated_code, context)
             
             # Update response based on execution result
             if result_state.last_error:
@@ -417,7 +417,7 @@ Generate Python code to fulfill this request:"""
     
     def _get_user_session_dir(self, session_id: str) -> str:
         """Get user session directory for conversation history"""
-        return user_directory_manager.ensure_user_directory(session_id)
+        return self.user_directory_manager.ensure_user_directory(session_id)
     
     def _save_conversation_history(self, session_id: str, user_query: str, response: str):
         """Save conversation history to user directory"""
@@ -744,14 +744,14 @@ Generate Python code to fulfill this request:"""
             # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
             slack_manager = self.slack_manager
             
-            print_to_log(f"🔧 [Execute Agent] Using slack_manager id: {id(slack_manager)}")
-            print_to_log(f"🔧 [Execute Agent] Slack manager has {len(slack_manager.session_channels)} channels")
+            print_to_log(f"🔧 [Execute Agent] Using slack_manager id: {id(self.slack_manager)}")
+            print_to_log(f"🔧 [Execute Agent] Slack manager has {len(self.slack_manager.session_channels)} channels")
             
             state.slack_session_info = {
-                'channels': dict(slack_manager.session_channels),
-                'threads': dict(slack_manager.session_threads)
+                'channels': dict(self.slack_manager.session_channels),
+                'threads': dict(self.slack_manager.session_threads)
             }
-            state._slack_manager = slack_manager
+            state._slack_manager = self.slack_manager
             print_to_log(f"💾 [Execute Agent] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
             return feature_selection_agent.run(state)
         elif agent_type == AgentType.MODEL_BUILDING.value:
@@ -892,8 +892,7 @@ Generate Python code to fulfill this request:"""
             if is_clear_command:
                 print_to_log(f"🔄 Explicit session clear requested")
                 state.interactive_session = None
-                slack_manager = self.slack_manager
-                slack_manager.send_message(state.chat_session, "✅ Session cleared. You can now start a new workflow.")
+                self.slack_manager.send_message(state.chat_session, "✅ Session cleared. You can now start a new workflow.")
                 return self._prepare_response(state, "Session cleared successfully.")
             
             # Also check for target column specification patterns
@@ -1157,14 +1156,13 @@ Generate Python code to fulfill this request:"""
                     print_to_log("🔧 DEBUG: Routing to feature selection interactive handler")
                     
                     # ✅ CRITICAL FIX: Ensure slack_manager is passed to state before calling handler
-                    slack_manager = self.slack_manager
-                    print_to_log(f"🔧 [Interactive FS] Using slack_manager id: {id(slack_manager)}")
-                    print_to_log(f"🔧 [Interactive FS] Slack manager has {len(slack_manager.session_channels)} channels")
+                    print_to_log(f"🔧 [Interactive FS] Using slack_manager id: {id(self.slack_manager)}")
+                    print_to_log(f"🔧 [Interactive FS] Slack manager has {len(self.slack_manager.session_channels)} channels")
                     
-                    state._slack_manager = slack_manager
+                    state._slack_manager = self.slack_manager
                     state.slack_session_info = {
-                        'channels': dict(slack_manager.session_channels),
-                        'threads': dict(slack_manager.session_threads)
+                        'channels': dict(self.slack_manager.session_channels),
+                        'threads': dict(self.slack_manager.session_threads)
                     }
                     print_to_log(f"💾 [Interactive FS] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
                     
@@ -1352,7 +1350,7 @@ Generate Python code to fulfill this request:"""
 
 💬 **What would you like to do?**"""
                     
-                    slack_manager.send_message(state.chat_session, response_msg)
+                    self.slack_manager.send_message(state.chat_session, response_msg)
                     return self._prepare_response(state, f"Target column set to '{target_col}'. Ready for preprocessing!")
                 else:
                     available_cols = list(state.raw_data.columns)
@@ -1362,7 +1360,7 @@ Generate Python code to fulfill this request:"""
 
 Please specify a valid column name."""
                     
-                    slack_manager.send_message(state.chat_session, error_msg)
+                    self.slack_manager.send_message(state.chat_session, error_msg)
                     return self._prepare_response(state, f"Column '{target_col}' not found. Please try again.")
             
             # Handle preprocessing commands
@@ -1474,7 +1472,7 @@ Please specify a valid column name."""
 
 What would you like to do?"""
                 
-                slack_manager.send_message(state.chat_session, help_msg)
+                self.slack_manager.send_message(state.chat_session, help_msg)
                 return self._prepare_response(state, "Help message sent.")
                 
         except Exception as e:
@@ -1598,7 +1596,7 @@ What would you like to do?"""
 
 💬 **What would you like to do?**"""
                 
-                slack_manager.send_message(state.chat_session, menu_msg)
+                self.slack_manager.send_message(state.chat_session, menu_msg)
                 print_to_log("✅ Auto-sent preprocessing menu to Slack")
             
             state_manager.save_state(state)
