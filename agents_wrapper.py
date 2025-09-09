@@ -205,6 +205,15 @@ class PreprocessingAgentWrapper:
     
     def handle_interactive_command(self, state: PipelineState, command: str) -> PipelineState:
         """Handle interactive commands for preprocessing"""
+        # Set session context for proper logging
+        try:
+            from session_context import set_session_context, extract_session_from_session_id
+            if state.session_id:
+                user_id, thread_id = extract_session_from_session_id(state.session_id)
+                set_session_context(user_id, thread_id)
+        except ImportError:
+            pass
+            
         if not self.available:
             print_to_log("❌ Preprocessing agent not available")
             return state
@@ -2710,6 +2719,17 @@ class FeatureSelectionAgentWrapper:
 
     def handle_interactive_command(self, state: PipelineState, command: str) -> PipelineState:
         """Handle interactive commands for feature selection with 4-level BGE classification"""
+# Set session context for proper logging
+        try:
+            from session_context import set_session_context, extract_session_from_session_id
+            if hasattr(state, 'session_id') and state.session_id:
+                user_id, thread_id = extract_session_from_session_id(state.session_id)
+                set_session_context(user_id, thread_id)
+            elif hasattr(state, 'chat_session') and state.chat_session:
+                user_id, thread_id = extract_session_from_session_id(state.chat_session)
+                set_session_context(user_id, thread_id)
+        except ImportError:
+            pass
         print_to_log(f"🔧 DEBUG FS HANDLER: Called with command='{command}'")
         print_to_log(f"🔧 DEBUG FS HANDLER: Available={self.available}, Bot={self.bot is not None}")
         print_to_log(f"🔧 DEBUG FS HANDLER: State chat_session={state.chat_session}")

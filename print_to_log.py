@@ -23,16 +23,37 @@ def print_to_log(*args, **kwargs):
         # Convert args to string (same as print does)
         message = ' '.join(str(arg) for arg in args)
         
-        # Try to get session context from globals/locals
-        import inspect
-        frame = inspect.currentframe()
-        
-        # Look for session_id, user_id, thread_id in calling context
+        # Try to get session context - first from global, then from call stack
         user_id = "system"
         thread_id = "general"
         
+        # Try global session context first
+        try:
+            from session_context import get_session_context, has_session_context
+            if has_session_context():
+                user_id, thread_id = get_session_context()
+                # If we got valid session context, skip stack inspection
+                if user_id != "system" or thread_id != "general":
+                    # Create thread directory and log
+                    thread_dir = os.path.join("user_data", str(user_id), str(thread_id))
+                    os.makedirs(thread_dir, exist_ok=True)
+                    
+                    log_file = os.path.join(thread_dir, "master.log")
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    log_entry = f"[{timestamp}] {message}\n"
+                    
+                    with open(log_file, 'a', encoding='utf-8') as f:
+                        f.write(log_entry)
+                    return  # Exit early, we're done
+        except ImportError:
+            pass
+        
+        # Fall back to stack inspection if global context not available or is default
+        import inspect
+        frame = inspect.currentframe()
+        
         # Check multiple frames up the call stack for session info
-        for i in range(5):  # Check up to 5 frames up
+        for i in range(15):  # Check up to 15 frames up (deeper stack)
             try:
                 if frame:
                     frame = frame.f_back

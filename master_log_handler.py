@@ -24,9 +24,30 @@ class MasterLogHandler(logging.Handler):
             # Format the log message
             message = self.format(record)
             
-            # Try to get session context from call stack
+            # Try to get session context from global context first, then call stack
             user_id = "system"
             thread_id = "general"
+            
+            # Try global session context first
+            try:
+                from session_context import get_session_context, has_session_context
+                if has_session_context():
+                    user_id, thread_id = get_session_context()
+                    # If we got valid context, skip stack inspection
+                    if user_id != "system" or thread_id != "general":
+                        # Create thread directory and write log
+                        thread_dir = os.path.join("user_data", str(user_id), str(thread_id))
+                        os.makedirs(thread_dir, exist_ok=True)
+                        
+                        log_file = os.path.join(thread_dir, "master.log")
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        log_entry = f"[{timestamp}] LOGGER-{record.levelname}: {message}\n"
+                        
+                        with open(log_file, 'a', encoding='utf-8') as f:
+                            f.write(log_entry)
+                        return  # Exit early, we're done
+            except ImportError:
+                pass
             
             # Look through the call stack for session information
             frame = inspect.currentframe()

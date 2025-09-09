@@ -772,6 +772,14 @@ Generate Python code to fulfill this request:"""
         """
         print_to_log(f"\n🚀 Processing query: '{query}'")
         
+        # Set global session context for logging
+        try:
+            from session_context import set_session_context, extract_session_from_session_id
+            user_id, thread_id = extract_session_from_session_id(session_id)
+            set_session_context(user_id, thread_id)
+        except ImportError:
+            pass
+        
         # Generate session ID if not provided
         if not session_id:
             session_id = f"session_{int(time.time())}"
