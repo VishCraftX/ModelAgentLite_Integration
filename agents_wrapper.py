@@ -2976,6 +2976,12 @@ class FeatureSelectionAgentWrapper:
                 # Proceed is a completion command - generate final summary
                 print_to_log(f"🔧 DEBUG FS PROCEED: Generating final summary (completion command)")
                 session.phase = "completed"
+                
+                # 💾 Save selected features with target before generating summary
+                print_to_log(f"�� FS PROCEED: Saving selected features before summary generation")
+                print_to_log(f"📋 FS PROCEED: Current features = {session.current_features}")
+                print_to_log(f"🎯 FS PROCEED: Target column = {state.target_column}")
+                
                 self.bot.generate_final_summary(session, mock_say)
                 
             elif mapped_command.startswith('ANALYSIS: '):
@@ -3093,7 +3099,7 @@ Keep it concise and actionable."""
             state.feature_selection_state.update({
                 "current_features": session.current_features,
                 "dropped_features": getattr(session, 'dropped_features', []),
-                "analysis_chain": [{"type": step.type, "parameters": step.parameters} for step in session.analysis_chain],
+                "analysis_chain": [{"type": step.type, "parameters": step.parameters} for step in getattr(session, 'analysis_chain', [])],
                 "phase": session.phase,
                 "session_active": True,
                 "current_feature_count": len(session.current_features)  # ✅ Add current feature count
@@ -3101,7 +3107,16 @@ Keep it concise and actionable."""
             
             # Update selected features if analysis is complete
             if session.phase == "completed":
-                state.selected_features = session.current_features.copy()
+                # Ensure target column is included with selected features for modeling
+                selected_features = session.current_features.copy()
+                
+                # Add target column if it's not already in selected features
+                if state.target_column and state.target_column not in selected_features:
+                    selected_features.append(state.target_column)
+                    print_to_log(f"🎯 Added target column '{state.target_column}' to selected features for modeling")
+                
+                state.selected_features = selected_features
+                print_to_log(f"✅ Final selected features for modeling: {len(state.selected_features)} (including target)")
             
             print_to_log(f"🔄 Synced session state: {len(session.current_features)} features, phase={session.phase}")
             
