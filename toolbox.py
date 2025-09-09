@@ -1048,13 +1048,13 @@ FIXED CODE:"""
         return response.strip()
 
 
-# Global toolbox instances
-slack_manager = SlackManager()
-artifact_manager = ArtifactManager(slack_manager=slack_manager)
-progress_tracker = ProgressTracker(slack_manager)
-execution_agent = ExecutionAgent()
-user_directory_manager = UserDirectoryManager(slack_manager=slack_manager)
-pattern_classifier = UniversalPatternClassifier()
+# Global toolbox instances - initialized lazily
+slack_manager = None
+artifact_manager = None
+progress_tracker = None
+execution_agent = None
+user_directory_manager = None
+pattern_classifier = None
 
 
 def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_data_dir: str = None):
@@ -1073,7 +1073,7 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
         print(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
         print(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
     
-    if slack_token and not hasattr(slack_manager, 'client'):
+    if slack_token and (not slack_manager or not hasattr(slack_manager, 'client')):
         # Only create new SlackManager if one doesn't exist yet
         slack_manager = SlackManager(slack_token)
         progress_tracker = ProgressTracker(slack_manager)
@@ -1096,26 +1096,40 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
             print(f"🔍 DEBUG: New slack_manager id: {id(slack_manager)}")
         progress_tracker = ProgressTracker(slack_manager)
         print("🔧 Created fallback SlackManager instance")
+    elif not slack_token and not slack_manager:
+        # Initialize without token for fallback
+        slack_manager = SlackManager()
+        progress_tracker = ProgressTracker(slack_manager)
+        print("🔧 Created fallback SlackManager instance (no token)")
+    
+    # Initialize ExecutionAgent if not already done
+    if not execution_agent:
+        execution_agent = ExecutionAgent()
     
     if artifacts_dir:
         artifact_manager = ArtifactManager(artifacts_dir, slack_manager)
     else:
-        # Update existing artifact_manager with slack_manager reference
-        if 'artifact_manager' in globals() and artifact_manager:
+        # Update existing artifact_manager with slack_manager reference or create new one
+        if artifact_manager:
             artifact_manager.slack_manager = slack_manager
+        else:
+            artifact_manager = ArtifactManager(slack_manager=slack_manager)
     
     if user_data_dir:
         user_directory_manager = UserDirectoryManager(user_data_dir, slack_manager)
     else:
-        # Update existing user_directory_manager with slack_manager reference
-        if 'user_directory_manager' in globals() and user_directory_manager:
+        # Update existing user_directory_manager with slack_manager reference or create new one
+        if user_directory_manager:
             user_directory_manager.slack_manager = slack_manager
+        else:
+            user_directory_manager = UserDirectoryManager(slack_manager=slack_manager)
     
     # Initialize universal pattern classifier
-    pattern_classifier = UniversalPatternClassifier()
+    if not pattern_classifier:
+        pattern_classifier = UniversalPatternClassifier()
     
     print("🧰 Global toolbox initialized with Universal Pattern Classifier")
-    print(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
+    print(f"   Slack: {'✅ Enabled' if slack_manager and slack_manager.client else '❌ Disabled'}")
     print(f"   Artifacts: {artifact_manager.base_dir}")
     print(f"   User Data: {user_directory_manager.base_data_dir}")
     print(f"   Execution: ✅ Ready with fallback support")
