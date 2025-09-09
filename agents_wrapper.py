@@ -103,32 +103,8 @@ class PreprocessingAgentWrapper:
             # Use the pipeline's slack_manager instead of the global one
             slack_manager = getattr(state, '_slack_manager', None)
             if not slack_manager:
-                try:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
+                from toolbox import slack_manager as global_slack_manager
                 slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
             
             if slack_manager and state.chat_session:
                 print_to_log(f"🔍 Debug: Sending Slack message to session: {state.chat_session}")
@@ -337,28 +313,8 @@ class PreprocessingAgentWrapper:
                         # Get slack manager
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             slack_manager.send_message(state.chat_session, menu_text)
@@ -477,28 +433,8 @@ class PreprocessingAgentWrapper:
                     # Send results to Slack
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
                         # Build concise outlier summary for new confidence-based format
@@ -826,28 +762,8 @@ class PreprocessingAgentWrapper:
                     # Send confirmation message
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
                         treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
@@ -956,28 +872,8 @@ class PreprocessingAgentWrapper:
                         # Send confirmation message
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
@@ -1073,28 +969,8 @@ class PreprocessingAgentWrapper:
                             # Send results to Slack
                             slack_manager = getattr(state, '_slack_manager', None)
                             if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                                from toolbox import slack_manager as global_slack_manager
+                                slack_manager = global_slack_manager
                             
                             if slack_manager and state.chat_session:
                                 # Build missing values details and LLM recommendations
@@ -1296,28 +1172,8 @@ class PreprocessingAgentWrapper:
                         # Send confirmation message
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
@@ -1403,28 +1259,8 @@ class PreprocessingAgentWrapper:
                             # Send results to Slack
                             slack_manager = getattr(state, '_slack_manager', None)
                             if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                                from toolbox import slack_manager as global_slack_manager
+                                slack_manager = global_slack_manager
                             
                             if slack_manager and state.chat_session:
                                 # Handle new confidence-based format
@@ -1620,28 +1456,8 @@ class PreprocessingAgentWrapper:
                         # Send confirmation message
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
@@ -1738,28 +1554,8 @@ class PreprocessingAgentWrapper:
                             # Send results to Slack
                             slack_manager = getattr(state, '_slack_manager', None)
                             if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                                from toolbox import slack_manager as global_slack_manager
+                                slack_manager = global_slack_manager
                             
                             if slack_manager and state.chat_session:
                                 # Handle new confidence-based format
@@ -2025,28 +1821,8 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
                             print_to_log("📤 DEBUG: No slack_manager in state, using global")
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             print_to_log(f"📤 DEBUG: Sending message to Slack session: {state.chat_session}")
@@ -2078,28 +1854,8 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                         # Fallback to basic response
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             fallback_message = f"""🤖 **Query Response:**
@@ -2289,28 +2045,8 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
                         print_to_log("📤 DEBUG: No slack_manager in state, using global")
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
                         print_to_log(f"📤 DEBUG: Sending message to Slack session: {state.chat_session}")
@@ -2344,28 +2080,8 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                         slack_manager = getattr(state, '_slack_manager', None)
                         if not slack_manager:
                             print_to_log("🔄 DEBUG: Using global slack manager for fallback")
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
                             print_to_log("🔄 DEBUG: Sending fallback message to Slack")
@@ -2521,28 +2237,8 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                     # Send response to Slack
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
                         message = f"""🔧 **Override Request:**
@@ -2627,28 +2323,8 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 # Send confirmation message
                 slack_manager = getattr(state, '_slack_manager', None)
                 if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                    from toolbox import slack_manager as global_slack_manager
+                    slack_manager = global_slack_manager
                 
                 if slack_manager and state.chat_session:
                     if next_phase == 'completion':
@@ -2733,28 +2409,8 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 # Send summary to Slack
                 slack_manager = getattr(state, '_slack_manager', None)
                 if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                    from toolbox import slack_manager as global_slack_manager
+                    slack_manager = global_slack_manager
                 
                 if slack_manager and state.chat_session:
                     slack_manager.send_message(state.chat_session, summary_message)
@@ -3097,28 +2753,8 @@ class FeatureSelectionAgentWrapper:
         # Get slack_manager from state or fallback
         slack_manager = getattr(state, '_slack_manager', None)
         if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+            from toolbox import slack_manager as global_slack_manager
+            slack_manager = global_slack_manager
         print_to_log(f"🔧 DEBUG FS HANDLER: Using slack_manager id: {id(slack_manager)}")
         print_to_log(f"🔧 DEBUG FS HANDLER: Slack manager has {len(slack_manager.session_channels)} channels")
         
@@ -3506,28 +3142,8 @@ Keep it concise and actionable."""
                     # Send helpful message to user
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                     
                     # Set proper error response and clear any cached responses
                     error_message = """❌ **No Data Available for Feature Selection**
@@ -3675,28 +3291,8 @@ Keep it concise and actionable."""
                     # Send menu via slack - FIX SESSION CHANNEL ISSUE
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                     
                     # ✅ CRITICAL FIX: Store slack_manager in state for consistency
                     state._slack_manager = slack_manager
@@ -3817,28 +3413,8 @@ Keep it concise and actionable."""
                     # Need target column, send target selection prompt
                     slack_manager = getattr(state, '_slack_manager', None)
                     if not slack_manager:
-                try:
-                            try:
-                        try:
-            try:
-                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None as global_slack_manager
-                slack_manager = global_slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                        except ImportError:
-                            print_to_log("⚠️ Could not import slack_manager from toolbox")
-                            slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
-                except ImportError:
-                    print_to_log("⚠️ Could not import slack_manager from toolbox")
-                    slack_manager = None
+                        from toolbox import slack_manager as global_slack_manager
+                        slack_manager = global_slack_manager
                         
                     if slack_manager and state.chat_session:
                         print_to_log(f"🔧 DEBUG: Sending target prompt to session {state.chat_session}")
@@ -4052,15 +3628,7 @@ class ModelBuildingAgentWrapper:
                     print_to_log(f"🔍 UPLOAD DEBUG: Found plot_path: {plot_path}")
                     if os.path.exists(plot_path):
                         try:
-                            try:
-                                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
+                            from toolbox import slack_manager
                             print_to_log(f"📤 Uploading decision tree plot: {plot_path}")
                             slack_manager.upload_file(
                                 session_id=state.chat_session,
@@ -4085,15 +3653,7 @@ class ModelBuildingAgentWrapper:
                             if os.path.exists(value):
                                 print_to_log(f"🔍 UPLOAD DEBUG: Found file via key '{key}': {value}")
                                 try:
-                                    try:
-                                try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
-                            except ImportError:
-                                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                                slack_manager = None
+                                    from toolbox import slack_manager
                                     title = self._get_title_from_path(value)
                                     print_to_log(f"📤 Uploading {title}: {value}")
                                     slack_manager.upload_file(
@@ -4124,11 +3684,7 @@ class ModelBuildingAgentWrapper:
     def _upload_files_to_slack(self, files_list, session_id):
         """Upload a list of files to Slack"""
         try:
-            try:
-                from toolbox import slack_manager
-            except ImportError:
-                print_to_log("⚠️ Could not import slack_manager from toolbox")
-                slack_manager = None
+            from toolbox import slack_manager
             for file_info in files_list:
                 print_to_log(f"🔍 UPLOAD DEBUG: Processing file_info: {file_info}")
                 if isinstance(file_info, dict) and 'path' in file_info:
