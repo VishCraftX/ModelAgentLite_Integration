@@ -1182,7 +1182,16 @@ def semantic_classify_model_intent(query: str) -> str:
         import sys
         import os
         sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from toolbox import pattern_classifier
+        
+        # Import pattern classifier dynamically to avoid initialization issues
+        try:
+            from toolbox import pattern_classifier
+            if not pattern_classifier:
+                print_to_log("⚠️ Pattern classifier not initialized, using fallback classification")
+                return "new_model", "fallback"
+        except ImportError:
+            print_to_log("⚠️ Could not import pattern classifier, using fallback classification")
+            return "new_model", "fallback"
         
         # Define model-specific intent definitions
         model_intent_definitions = {
@@ -1302,8 +1311,15 @@ def semantic_detect_plot_request(query: str) -> bool:
     """Semantic detection of plot/visualization requests"""
     
     try:
-        # Import pattern classifier from toolbox
-        from toolbox import pattern_classifier
+        # Import pattern classifier dynamically to avoid initialization issues
+        try:
+            from toolbox import pattern_classifier
+            if not pattern_classifier:
+                print_to_log("⚠️ Pattern classifier not initialized, using fallback classification")
+                return False, "fallback"
+        except ImportError:
+            print_to_log("⚠️ Could not import pattern classifier, using fallback classification")
+            return False, "fallback"
         
         # Define plot detection intent definitions
         plot_intent_definitions = {
@@ -1332,8 +1348,15 @@ def semantic_detect_financial_analysis(query: str) -> bool:
     """Semantic detection of financial analysis/rank ordering requests"""
     
     try:
-        # Import pattern classifier from toolbox
-        from toolbox import pattern_classifier
+        # Import pattern classifier dynamically to avoid initialization issues
+        try:
+            from toolbox import pattern_classifier
+            if not pattern_classifier:
+                print_to_log("⚠️ Pattern classifier not initialized, using fallback classification")
+                return False, "fallback"
+        except ImportError:
+            print_to_log("⚠️ Could not import pattern classifier, using fallback classification")
+            return False, "fallback"
         
         # Define financial analysis intent definitions
         financial_intent_definitions = {
