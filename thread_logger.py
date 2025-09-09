@@ -18,7 +18,7 @@ from agent_utils import get_username_for_user_id
 class ThreadLogger:
     """Thread-specific logger that saves to user's thread folder using usernames"""
     
-    def __init__(self, user_id: str, thread_id: str, base_dir: str = "user_data", slack_manager: Optional[SlackManager] = None):
+    def __init__(self, user_id: str, thread_id: str, base_dir: str = "user_data", slack_manager: Optional["SlackManager"] = None):
         self.user_id = user_id
         self.thread_id = thread_id
         self.base_dir = base_dir
@@ -255,14 +255,14 @@ class ThreadLoggerManager:
     
     _instance = None
     _loggers: Dict[str, ThreadLogger] = {}
-    _slack_manager: Optional[SlackManager] = None
+    _slack_manager: Optional["SlackManager"] = None
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ThreadLoggerManager, cls).__new__(cls)
         return cls._instance
     
-    def set_slack_manager(self, slack_manager: SlackManager):
+    def set_slack_manager(self, slack_manager: "SlackManager"):
         """Set the slack manager for username resolution"""
         self._slack_manager = slack_manager
     

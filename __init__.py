@@ -6,10 +6,9 @@ A comprehensive ML pipeline using LangGraph with specialized agents
 
 from .pipeline_state import PipelineState, StateManager, state_manager
 from .orchestrator import Orchestrator, orchestrator, AgentType
-from .agents_integrated import preprocessing_agent, feature_selection_agent, model_building_agent
+from .agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
 from .toolbox import (
     SlackManager, ArtifactManager, ProgressTracker, ExecutionAgent,
-    slack_manager, artifact_manager, progress_tracker, execution_agent,
     initialize_toolbox
 )
 from .langgraph_pipeline import MultiAgentMLPipeline, get_pipeline, initialize_pipeline
@@ -26,6 +25,10 @@ __all__ = [
     "Orchestrator",
     "MultiAgentMLPipeline",
     "SlackMLBot",
+    "SlackManager",
+    "ArtifactManager",
+    "ProgressTracker",
+    "ExecutionAgent",
     
     # Agent types
     "AgentType",
@@ -36,10 +39,6 @@ __all__ = [
     "preprocessing_agent",
     "feature_selection_agent", 
     "model_building_agent",
-    "slack_manager",
-    "artifact_manager",
-    "progress_tracker",
-    "execution_agent",
     
     # Factory functions
     "get_pipeline",

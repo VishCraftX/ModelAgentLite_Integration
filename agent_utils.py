@@ -8,12 +8,8 @@ import tempfile
 import time
 from typing import Dict, List, Optional, Tuple, Any
 
-# Import for username resolution
-try:
-    from toolbox import SlackManager
-    SLACK_MANAGER_AVAILABLE = True
-except ImportError:
-    SLACK_MANAGER_AVAILABLE = False
+# Import for username resolution - avoid circular import
+SLACK_MANAGER_AVAILABLE = False
 
 def extract_first_code_block(text: str) -> str:
     """
@@ -397,11 +393,10 @@ def get_username_for_user_id(user_id: str) -> str:
         str: Username suitable for folder naming
     """
     try:
-        if SLACK_MANAGER_AVAILABLE:
-            # Try to get the global slack_manager instance
-            from toolbox import slack_manager
-            if slack_manager:
-                return slack_manager.get_username_from_user_id(user_id)
+        # Try to get the global slack_manager instance
+        from toolbox import slack_manager
+        if slack_manager and hasattr(slack_manager, 'get_username_from_user_id'):
+            return slack_manager.get_username_from_user_id(user_id)
     except:
         pass
     
