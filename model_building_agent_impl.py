@@ -25,6 +25,7 @@ from langchain_core.tools import tool
 
 # Import utilities
 from model_agent_utils import extract_first_code_block, safe_joblib_dump, safe_plt_savefig, diagnose_io_error
+from toolbox import ExecutionAgent
 
 # Global model states registry
 global_model_states = {}
@@ -3150,10 +3151,10 @@ def _staged_multi_model_workflow(state, query, data, user_id, progress_callback)
         results["stage_status"]["training"] = "completed" 
         print(f"✅ Models trained: {len(models_result)} models")
         
-        # ==== STAGE 3: VISUALIZATION ====
-        print("\n📊 STAGE 3: Visualization")
+        # ==== STAGE 3: VISUALIZATION (Python) ====
+        print("\n📊 STAGE 3: Visualization (Python Utilities)")
         try:
-            plots_result = _stage_3_generate_plots(results, user_id)
+            plots_result = _stage_3_generate_plots_python(results, user_id)
             results["comparison_plots"] = plots_result
             results["stage_status"]["visualization"] = "completed"
             print(f"✅ Plots generated: {list(plots_result.keys())}")
@@ -3162,10 +3163,11 @@ def _staged_multi_model_workflow(state, query, data, user_id, progress_callback)
             results["errors"].append(f"Visualization stage: {str(e)}")
             results["stage_status"]["visualization"] = "failed"
         
-        # ==== STAGE 4: BEST MODEL SELECTION ====
-        print("\n🏆 STAGE 4: Best Model Selection")
+        # ==== STAGE 4: BEST MODEL SELECTION (Python) ====
+        print("\n🏆 STAGE 4: Best Model Selection (Python Logic)")
         try:
-            selection_result = _stage_4_select_best_model(results, user_id)
+            selection_result = _stage_4_select_best_model_python(results, user_id)
+            results["selection_result"] = selection_result
             results.update(selection_result)  # Add best_model, ranking, summary
             results["stage_status"]["selection"] = "completed"
             print(f"✅ Best model selected: {selection_result.get('best_model', {}).get('name', 'Unknown')}")
@@ -3174,9 +3176,9 @@ def _staged_multi_model_workflow(state, query, data, user_id, progress_callback)
             results["errors"].append(f"Selection stage: {str(e)}")
             results["stage_status"]["selection"] = "failed"
         
-        # ==== STAGE 5: FORMAT RESPONSE ====
-        print("\n📝 STAGE 5: Format Response")
-        response = _stage_5_format_response(results)
+        # ==== STAGE 5: FORMAT RESPONSE (Python) ====
+        print("\n📝 STAGE 5: Format Response (Python Utilities)")
+        response = _stage_5_format_response_python(results)
         
         # SUCCESS: Add results to state
         state["multi_model_results"] = results
@@ -3215,6 +3217,8 @@ def _staged_multi_model_workflow(state, query, data, user_id, progress_callback)
 
 def _stage_1_parse_config(query: str, user_id: str):
     """Stage 1: Parse user query to extract models, test_size, selection_metric using LLM + ExecutionAgent"""
+    
+    execution_agent = ExecutionAgent()
     
     config_prompt = f"""You are a CONFIG PARSING agent for a multi-model ML system.
 
@@ -3279,6 +3283,8 @@ config = {{
 
 def _stage_2_train_models(config: dict, sample_data, user_id: str):
     """Stage 2: Train multiple models using LLM + ExecutionAgent"""
+    
+    execution_agent = ExecutionAgent()
     
     import json
     config_json = json.dumps(config, indent=2)
@@ -3350,6 +3356,7 @@ models_result = {{
         "metrics": {{"accuracy": 0.85, "precision": 0.84, "recall": 0.86, "f1_score": 0.85, "roc_auc": 0.89}},
         "predictions": y_pred.tolist(),
         "probabilities": y_proba.tolist() if y_proba is not None else None,
+        "y_test": y_test.tolist(),  # CRITICAL: Include test labels for ROC curves
         "training_time": 2.3,
         "model_path": "saved_model_path.joblib",
         "model_type": "classification"
@@ -3376,6 +3383,8 @@ models_result = {{
 
 def _stage_3_generate_plots(results: dict, user_id: str):
     """Stage 3: Generate comparison plots using LLM + ExecutionAgent"""
+    
+    execution_agent = ExecutionAgent()
     
     import json
     results_json = json.dumps({
@@ -3445,6 +3454,8 @@ plots_result = {{
 
 def _stage_4_select_best_model(results: dict, user_id: str):
     """Stage 4: Select best model using LLM + ExecutionAgent"""
+    
+    execution_agent = ExecutionAgent()
     
     import json
     results_json = json.dumps({
@@ -3603,6 +3614,365 @@ def _format_partial_results(results: dict, error_msg: str):
 
 
 # ==== TEST CODE ====
+
+# ====== HYBRID APPROACH: PYTHON UTILITY FUNCTIONS ======
+
+def _stage_3_generate_plots_python(results: dict, user_id: str):
+    """Stage 3: Generate visualization plots using direct Python utilities"""
+    
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from sklearn.metrics import roc_curve, auc
+    import seaborn as sns
+    import pandas as pd
+    import os
+    
+    plots_result = {}
+    
+    try:
+        # Check if we have model results
+        if "models" not in results:
+            print("⚠️ No model results found for plotting")
+            return plots_result
+            
+        models = results["models"]
+        config = results.get("config", {})
+        problem_type = config.get("problem_type", "classification")
+        
+        # Create artifacts directory
+        artifacts_dir = f"user_data/{user_id.split('_')[0]}/{user_id.split('_')[1]}/artifacts"
+        os.makedirs(artifacts_dir, exist_ok=True)
+        
+        # 1. Generate ROC curves (for classification with probabilities)
+        if problem_type == "classification":
+            roc_path = _generate_roc_curves(models, artifacts_dir, user_id)
+            if roc_path:
+                plots_result["roc_curves"] = roc_path
+        
+        # 2. Generate metrics comparison chart
+        metrics_path = _generate_metrics_comparison(models, artifacts_dir, user_id, problem_type)
+        if metrics_path:
+            plots_result["metrics_table"] = metrics_path
+            
+        print(f"✅ Generated {len(plots_result)} plots successfully")
+        return plots_result
+        
+    except Exception as e:
+        print(f"⚠️ Plot generation failed: {str(e)}")
+        return plots_result
+
+
+def _stage_4_select_best_model_python(results: dict, user_id: str):
+    """Stage 4: Select best model using direct Python logic"""
+    
+    try:
+        # Check if we have model results
+        if "models" not in results:
+            print("⚠️ No model results found for selection")
+            return {}
+            
+        models = results["models"]
+        config = results.get("config", {})
+        selection_metric = config.get("selection_metric", "accuracy")
+        problem_type = config.get("problem_type", "classification")
+        
+        # Get metric values for ranking
+        model_scores = []
+        for model_name, model_data in models.items():
+            metrics = model_data.get("metrics", {})
+            score = metrics.get(selection_metric, 0.0)
+            model_scores.append({
+                "model_name": model_name,
+                "score": float(score),
+                "metrics": metrics,
+                "model_path": model_data.get("model_path", ""),
+                "training_time": model_data.get("training_time", 0.0)
+            })
+        
+        # Sort by score (descending - higher is better for most metrics)
+        model_scores.sort(key=lambda x: x["score"], reverse=True)
+        
+        # Add ranking
+        model_ranking = []
+        for i, model in enumerate(model_scores):
+            model_ranking.append({
+                "rank": i + 1,
+                "model_name": model["model_name"],
+                "score": model["score"],
+                "metric_used": selection_metric
+            })
+        
+        # Best model details
+        best_model = model_scores[0] if model_scores else None
+        worst_model = model_scores[-1] if model_scores else None
+        
+        # Performance spread calculation
+        performance_spread = 0.0
+        if best_model and worst_model and worst_model["score"] > 0:
+            performance_spread = ((best_model["score"] - worst_model["score"]) / worst_model["score"]) * 100
+        
+        # Generate recommendation
+        recommendation = _generate_model_recommendation(best_model, model_ranking, selection_metric, performance_spread)
+        
+        selection_result = {
+            "best_model": {
+                "name": best_model["model_name"] if best_model else "None",
+                "score": best_model["score"] if best_model else 0.0,
+                "metric_used": selection_metric,
+                "model_path": best_model["model_path"] if best_model else "",
+                "reasons": [f"Highest {selection_metric}", "Best performing model"]
+            },
+            "model_ranking": model_ranking,
+            "performance_spread": round(performance_spread, 2),
+            "recommendation": recommendation
+        }
+        
+        print(f"✅ Selected best model: {best_model['model_name'] if best_model else 'None'}")
+        return selection_result
+        
+    except Exception as e:
+        print(f"⚠️ Model selection failed: {str(e)}")
+        return {}
+
+
+def _stage_5_format_response_python(results: dict):
+    """Stage 5: Format response using direct Python utilities"""
+    
+    try:
+        config = results.get("config", {})
+        models = results.get("models", {})
+        selection_result = results.get("selection_result", {})
+        plots = results.get("comparison_plots", {})
+        
+        selection_metric = config.get("selection_metric", "accuracy")
+        model_ranking = selection_result.get("model_ranking", [])
+        best_model = selection_result.get("best_model", {})
+        recommendation = selection_result.get("recommendation", "Multi-model comparison completed.")
+        
+        # Build the response
+        response = "🏆 **Multi-Model Comparison Complete!**\n\n"
+        
+        # Model performance table
+        if model_ranking:
+            response += f"📊 **Model Performance ({selection_metric}):**\n"
+            response += "| Rank | Model | Score | Training Time |\n"
+            response += "|------|-------|-------|---------------|\n"
+            
+            for model_rank in model_ranking:
+                model_name = model_rank["model_name"]
+                score = model_rank["score"]
+                model_data = models.get(model_name, {})
+                training_time = model_data.get("training_time", 0.0)
+                
+                response += f"| {model_rank['rank']} | {model_name} | {score:.3f} | {training_time:.1f}s |\n"
+            
+            response += "\n"
+        
+        # Best model announcement
+        if best_model.get("name"):
+            response += f"🎯 **Best Model:** {best_model['name']} with {best_model['score']:.3f} {selection_metric}\n\n"
+        
+        # Generated files
+        file_paths = []
+        for model_name, model_data in models.items():
+            if model_data.get("model_path"):
+                file_paths.append(f"- Model ({model_name}): ```{model_data['model_path']}```")
+        
+        if plots.get("roc_curves"):
+            file_paths.append(f"- ROC Curves: ```{plots['roc_curves']}```")
+        if plots.get("metrics_table"):
+            file_paths.append(f"- Metrics Chart: ```{plots['metrics_table']}```")
+            
+        if file_paths:
+            response += "📁 **Generated Files:**\n"
+            response += "\n".join(file_paths) + "\n\n"
+        
+        # Recommendation
+        response += f"💡 **Recommendation:** {recommendation}"
+        
+        print("✅ Response formatted successfully")
+        return response
+        
+    except Exception as e:
+        print(f"⚠️ Response formatting failed: {str(e)}")
+        return "✅ Multi-model comparison completed. Check artifacts folder for results."
+
+
+# ====== UTILITY FUNCTIONS FOR PYTHON STAGES ======
+
+def _generate_roc_curves(models: dict, artifacts_dir: str, user_id: str):
+    """Generate ROC curves comparison plot"""
+    
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from sklearn.metrics import roc_curve, auc
+    
+    try:
+        plt.figure(figsize=(10, 8))
+        
+        has_curves = False
+        for model_name, model_data in models.items():
+            probabilities = model_data.get("probabilities")
+            if probabilities is None:
+                continue
+                
+            # Get actual values (assuming they're stored in the model data)
+            y_test = model_data.get("y_test")
+            if y_test is None:
+                continue
+                
+            # Safe array handling
+            y_proba_array = np.array(probabilities)
+            y_test_array = np.array(y_test)
+            
+            if y_proba_array.ndim == 2 and y_proba_array.shape[1] >= 2:
+                # Binary classification probabilities
+                fpr, tpr, _ = roc_curve(y_test_array, y_proba_array[:, 1])
+            else:
+                # Single probability values
+                fpr, tpr, _ = roc_curve(y_test_array, y_proba_array)
+            
+            roc_auc = auc(fpr, tpr)
+            plt.plot(fpr, tpr, linewidth=2, label=f'{model_name} (AUC = {roc_auc:.3f})')
+            has_curves = True
+        
+        if not has_curves:
+            print("⚠️ No probability data found for ROC curves")
+            plt.close()
+            return None
+            
+        # Add diagonal line
+        plt.plot([0, 1], [0, 1], 'k--', linewidth=1, alpha=0.7)
+        
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate', fontsize=12)
+        plt.ylabel('True Positive Rate', fontsize=12)
+        plt.title('ROC Curves Comparison', fontsize=14, fontweight='bold')
+        plt.legend(loc="lower right", fontsize=10)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save plot
+        plot_path = f"{artifacts_dir}/roc_comparison_{user_id.split('_')[1]}.png"
+        from toolbox import safe_plt_savefig
+        safe_plt_savefig(plt, plot_path)
+        plt.close()
+        
+        print(f"✅ ROC curves saved: {plot_path}")
+        return plot_path
+        
+    except Exception as e:
+        print(f"⚠️ ROC curve generation failed: {str(e)}")
+        if 'plt' in locals():
+            plt.close()
+        return None
+
+
+def _generate_metrics_comparison(models: dict, artifacts_dir: str, user_id: str, problem_type: str):
+    """Generate metrics comparison bar chart"""
+    
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import seaborn as sns
+    
+    try:
+        # Collect metrics for all models
+        metrics_data = []
+        
+        for model_name, model_data in models.items():
+            metrics = model_data.get("metrics", {})
+            row = {"Model": model_name}
+            row.update(metrics)
+            metrics_data.append(row)
+        
+        if not metrics_data:
+            print("⚠️ No metrics data found for comparison")
+            return None
+            
+        df = pd.DataFrame(metrics_data)
+        
+        # Select key metrics to display
+        if problem_type == "classification":
+            key_metrics = [col for col in ["accuracy", "precision", "recall", "f1_score", "roc_auc"] if col in df.columns]
+        else:
+            key_metrics = [col for col in ["r2", "mse", "mae", "rmse"] if col in df.columns]
+        
+        if not key_metrics:
+            print("⚠️ No recognizable metrics found")
+            return None
+            
+        # Create subplot for each metric
+        n_metrics = len(key_metrics)
+        fig, axes = plt.subplots(1, n_metrics, figsize=(4*n_metrics, 6))
+        
+        if n_metrics == 1:
+            axes = [axes]
+            
+        for i, metric in enumerate(key_metrics):
+            ax = axes[i]
+            
+            # Create bar chart
+            bars = ax.bar(df["Model"], df[metric], alpha=0.7, color=plt.cm.Set3(i))
+            ax.set_title(f'{metric.title()}', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Score', fontsize=10)
+            ax.tick_params(axis='x', rotation=45)
+            
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:.3f}', ha='center', va='bottom', fontsize=9)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        plot_path = f"{artifacts_dir}/metrics_comparison_{user_id.split('_')[1]}.png"
+        from toolbox import safe_plt_savefig
+        safe_plt_savefig(plt, plot_path)
+        plt.close()
+        
+        print(f"✅ Metrics comparison saved: {plot_path}")
+        return plot_path
+        
+    except Exception as e:
+        print(f"⚠️ Metrics comparison generation failed: {str(e)}")
+        if 'plt' in locals():
+            plt.close()
+        return None
+
+
+def _generate_model_recommendation(best_model: dict, model_ranking: list, selection_metric: str, performance_spread: float):
+    """Generate textual recommendation based on model performance"""
+    
+    if not best_model:
+        return "No models available for recommendation."
+        
+    model_name = best_model["model_name"]
+    score = best_model["score"]
+    
+    recommendation = f"{model_name} is the top performer with {score:.3f} {selection_metric}."
+    
+    # Add performance spread insight
+    if performance_spread > 20:
+        recommendation += f" There's a significant {performance_spread:.1f}% performance gap between the best and worst models."
+    elif performance_spread > 5:
+        recommendation += f" Models show moderate variation ({performance_spread:.1f}% spread)."
+    else:
+        recommendation += f" All models perform similarly (only {performance_spread:.1f}% difference)."
+    
+    # Add model-specific insights
+    if "lightgbm" in model_name.lower():
+        recommendation += " LightGBM typically offers good accuracy with fast training."
+    elif "randomforest" in model_name.lower():
+        recommendation += " Random Forest provides robust performance with good interpretability."
+    elif "xgboost" in model_name.lower():
+        recommendation += " XGBoost often delivers strong performance on structured data."
+    elif "decisiontree" in model_name.lower():
+        recommendation += " Decision Tree offers high interpretability but may overfit."
+    
+    return recommendation
+
 
 if __name__ == "__main__":
     # Create agent
