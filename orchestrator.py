@@ -106,8 +106,18 @@ class Orchestrator:
             self._initialize_intent_embeddings()
         
         # Use global universal pattern classifier from toolbox
-        from toolbox import pattern_classifier
-        self.pattern_classifier = pattern_classifier
+        try:
+            from toolbox import pattern_classifier
+            if pattern_classifier is None:
+                print_to_log("⚠️ Pattern classifier not initialized, creating fallback")
+                from toolbox import UniversalPatternClassifier
+                self.pattern_classifier = UniversalPatternClassifier()
+            else:
+                self.pattern_classifier = pattern_classifier
+        except ImportError:
+            print_to_log("⚠️ Could not import pattern classifier, creating fallback")
+            from toolbox import UniversalPatternClassifier
+            self.pattern_classifier = UniversalPatternClassifier()
         
         # Fallback: Exhaustive keywords for compatibility (used when embeddings unavailable)
         self.preprocessing_keywords = [
@@ -821,11 +831,16 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         }
         
         # Use universal pattern classifier
-        skip_result, method_used = self.pattern_classifier.classify_pattern(
-            query, 
-            skip_intent_definitions,
-            use_case="skip_patterns"
-        )
+        if self.pattern_classifier is None:
+            print_to_log("⚠️ Pattern classifier is None, using fallback skip detection")
+            skip_result = False
+            method_used = "fallback"
+        else:
+            skip_result, method_used = self.pattern_classifier.classify_pattern(
+                query, 
+                skip_intent_definitions,
+                use_case="skip_patterns"
+            )
         
         if skip_result and skip_result != "no_skip":
             print_to_log(f"[Orchestrator] Skip pattern detected: {skip_result} (method: {method_used})")
@@ -1322,11 +1337,16 @@ How can I help you with your ML workflow today?"""
             thread_logger.log_query(state.user_query, agent="orchestrator")
         
         # Use universal pattern classifier for main intent classification
-        intent, method_used = self.pattern_classifier.classify_pattern(
-            state.user_query,
-            self.intent_definitions,
-            use_case="intent_classification"
-        )
+        if self.pattern_classifier is None:
+            print_to_log("⚠️ Pattern classifier is None, using fallback classification")
+            intent = "general_response"
+            method_used = "fallback"
+        else:
+            intent, method_used = self.pattern_classifier.classify_pattern(
+                state.user_query,
+                self.intent_definitions,
+                use_case="intent_classification"
+            )
         
         print_to_log(f"[Orchestrator] Intent classification: {intent} (method: {method_used})")
         
