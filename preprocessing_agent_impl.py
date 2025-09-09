@@ -3397,6 +3397,30 @@ class ConfidenceBasedPreprocessor:
     
     def _process_uncertain_columns_with_llm_safe(self, state: SequentialState, phase: str, uncertain_columns: List[Dict], total_timeout: float) -> Dict[str, Any]:
         """Process uncertain columns with LLM in optimized chunks - TIMEOUT SAFE VERSION"""
+        # Set session context for proper logging in chunk processing
+        try:
+            from session_context import get_session_context, has_session_context, set_session_context
+            # Try to inherit session context from calling thread
+            if not has_session_context():
+                # Look for session info in the call stack
+                import inspect
+                frame = inspect.currentframe()
+                for _ in range(15):
+                    try:
+                        if frame:
+                            frame = frame.f_back
+                            if frame and frame.f_locals:
+                                locals_dict = frame.f_locals
+                                if "session_id" in locals_dict:
+                                    from session_context import extract_session_from_session_id
+                                    user_id, thread_id = extract_session_from_session_id(locals_dict["session_id"])
+                                    set_session_context(user_id, thread_id)
+                                    break
+                    except:
+                        continue
+        except ImportError:
+            pass
+
         if not uncertain_columns:
             return {}
         
