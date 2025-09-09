@@ -3317,8 +3317,24 @@ class ConfidenceBasedPreprocessor:
             self.stats['timeout_fallbacks'] += len(uncertain_columns)
             return fallback_result
         
+        # Capture session context from current thread to pass to worker thread
+        session_context = None
+        try:
+            from session_context import get_session_context, has_session_context
+            if has_session_context():
+                session_context = get_session_context()
+        except ImportError:
+            pass
+        
         def llm_processing_task():
             """The actual LLM processing task with per-chunk timeout checking"""
+            # Set session context in the worker thread
+            if session_context:
+                try:
+                    from session_context import set_session_context
+                    set_session_context(session_context[0], session_context[1])
+                except ImportError:
+                    pass
             return self._process_uncertain_columns_with_llm_safe(state, phase, uncertain_columns, timeout_seconds)
         
         try:
