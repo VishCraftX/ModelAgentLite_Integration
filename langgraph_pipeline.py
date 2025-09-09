@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
+# Import master log handler to capture logger.info calls
+try:
+    import master_log_handler
+except ImportError:
+    pass
+
 """
 LangGraph Multi-Agent ML Pipeline
 Main orchestration system that coordinates preprocessing, feature selection, and model building agents
@@ -16,10 +23,10 @@ from thread_logger import get_thread_logger, close_thread_logger
 try:
     from langgraph.graph import StateGraph, END
     LANGGRAPH_AVAILABLE = True
-    print("✅ LangGraph core components imported successfully")
+    print_to_log("✅ LangGraph core components imported successfully")
     
 except ImportError as e:
-    print(f"❌ LangGraph core import failed: {e}")
+    print_to_log(f"❌ LangGraph core import failed: {e}")
     StateGraph = None
     END = "END"
     LANGGRAPH_AVAILABLE = False
@@ -47,18 +54,18 @@ class MultiAgentMLPipeline:
         initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
         
         if not LANGGRAPH_AVAILABLE:
-            print("❌ LangGraph not available, using simplified pipeline")
+            print_to_log("❌ LangGraph not available, using simplified pipeline")
             self.app = None
             self.graph = None
             self.checkpointer = None
             self.enable_persistence = False
         else:
-            print("✅ LangGraph available, building full pipeline")
+            print_to_log("✅ LangGraph available, building full pipeline")
             
             # LangGraph checkpointing is optional - we use our own persistence
             self.enable_persistence = False  # Disable LangGraph checkpointing
             self.checkpointer = None
-            print("📁 Using user directory persistence (LangGraph checkpointing disabled)")
+            print_to_log("📁 Using user directory persistence (LangGraph checkpointing disabled)")
             
             # Build the graph
             self.graph = self._build_graph()
@@ -72,11 +79,11 @@ class MultiAgentMLPipeline:
         self.progress_tracker = progress_tracker
         self.user_directory_manager = user_directory_manager
         
-        print("🚀 Multi-Agent ML Pipeline initialized")
-        print(f"   LangGraph: {'✅ Full Pipeline' if LANGGRAPH_AVAILABLE else '⚠️ Simplified Pipeline'}")
-        print(f"   Persistence: ✅ User Directory + Session State")
-        print(f"   Agents: Preprocessing, Feature Selection, Model Building")
-        print(f"   Orchestrator: ✅ Ready")
+        print_to_log("🚀 Multi-Agent ML Pipeline initialized")
+        print_to_log(f"   LangGraph: {'✅ Full Pipeline' if LANGGRAPH_AVAILABLE else '⚠️ Simplified Pipeline'}")
+        print_to_log(f"   Persistence: ✅ User Directory + Session State")
+        print_to_log(f"   Agents: Preprocessing, Feature Selection, Model Building")
+        print_to_log(f"   Orchestrator: ✅ Ready")
     
 
     
@@ -151,7 +158,7 @@ class MultiAgentMLPipeline:
     
     def _orchestrator_node(self, state: PipelineState) -> PipelineState:
         """Orchestrator node - routes queries to appropriate agents"""
-        print(f"\n🎯 [Orchestrator] Processing query: '{state.user_query}'")
+        print_to_log(f"\n🎯 [Orchestrator] Processing query: '{state.user_query}'")
         
         # Get thread logger
         if hasattr(state, 'session_id') and state.session_id:
@@ -186,7 +193,7 @@ class MultiAgentMLPipeline:
         state.artifacts["routing_decision"] = selected_agent
         
         # Log routing decision (console only, not Slack)
-        print(f"🔀 [Orchestrator] Routed to {selected_agent}: {explanation}")
+        print_to_log(f"🔀 [Orchestrator] Routed to {selected_agent}: {explanation}")
         
         # Don't send routing details to Slack - user doesn't need to see internal routing
         
@@ -235,52 +242,52 @@ class MultiAgentMLPipeline:
 💬 **What would you like to do?**"""
                     
                     slack_manager.send_message(state.chat_session, preprocessing_menu)
-                    print("✅ Sent comprehensive preprocessing menu to Slack")
+                    print_to_log("✅ Sent comprehensive preprocessing menu to Slack")
                 
                 # For all other agents (model_building, feature_selection, code_execution, etc.):
                 # Don't send ANY additional messages - the agents will handle their own responses
                 
         except Exception as e:
-            print(f"⚠️ Failed to send orchestrator message: {e}")
+            print_to_log(f"⚠️ Failed to send orchestrator message: {e}")
         
         return state
     
     def _preprocessing_node(self, state: PipelineState) -> PipelineState:
         """Preprocessing node"""
-        print(f"\n🧹 [Preprocessing] Starting data preprocessing")
+        print_to_log(f"\n🧹 [Preprocessing] Starting data preprocessing")
         return preprocessing_agent.run(state)
     
     def _feature_selection_node(self, state: PipelineState) -> PipelineState:
         """Feature selection node"""
-        print(f"\n🎯 [Feature Selection] Starting feature selection")
+        print_to_log(f"\n🎯 [Feature Selection] Starting feature selection")
         
         # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
         slack_manager = self.slack_manager
         
-        print(f"🔧 [FS Node] Using slack_manager id: {id(slack_manager)}")
-        print(f"🔧 [FS Node] Slack manager has {len(slack_manager.session_channels)} channels")
+        print_to_log(f"🔧 [FS Node] Using slack_manager id: {id(slack_manager)}")
+        print_to_log(f"🔧 [FS Node] Slack manager has {len(slack_manager.session_channels)} channels")
         
         state.slack_session_info = {
             'channels': dict(slack_manager.session_channels),
             'threads': dict(slack_manager.session_threads)
         }
         state._slack_manager = slack_manager
-        print(f"💾 [FS Node] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+        print_to_log(f"💾 [FS Node] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
         
         return feature_selection_agent.run(state)
     
     def _model_building_node(self, state: PipelineState) -> PipelineState:
         """Model building node"""
-        print(f"\n🤖 [Model Building] Starting model building")
-        print(f"🔍 [Model Building] Query: '{state.user_query}'")
-        print(f"🔍 [Model Building] Raw data: {'✅' if state.raw_data is not None else '❌'}")
-        print(f"🔍 [Model Building] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
-        print(f"🔍 [Model Building] Selected features: {'✅' if state.selected_features is not None else '❌'}")
+        print_to_log(f"\n🤖 [Model Building] Starting model building")
+        print_to_log(f"🔍 [Model Building] Query: '{state.user_query}'")
+        print_to_log(f"🔍 [Model Building] Raw data: {'✅' if state.raw_data is not None else '❌'}")
+        print_to_log(f"🔍 [Model Building] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
+        print_to_log(f"🔍 [Model Building] Selected features: {'✅' if state.selected_features is not None else '❌'}")
         return model_building_agent.run(state)
     
     def _general_response_node(self, state: PipelineState) -> PipelineState:
         """General response node - handles conversational queries using LLM"""
-        print(f"\n💬 [General Response] Generating conversational response")
+        print_to_log(f"\n💬 [General Response] Generating conversational response")
         # Note: No progress update to Slack - user doesn't need routing details
         
         try:
@@ -304,7 +311,7 @@ class MultiAgentMLPipeline:
             else:
                 context_prompt = f"The user said: '{query}'. Respond naturally and conversationally as an AI assistant. Don't list capabilities unless they specifically ask what you can do."
             
-            print(f"🔍 Generating conversational response for: '{query}'")
+            print_to_log(f"🔍 Generating conversational response for: '{query}'")
             
             # Use LLM for conversational response
             response = ollama.chat(
@@ -318,10 +325,10 @@ class MultiAgentMLPipeline:
             generated_response = response["message"]["content"].strip()
             state.last_response = generated_response
             
-            print(f"✅ Generated response: {generated_response[:100]}...")
+            print_to_log(f"✅ Generated response: {generated_response[:100]}...")
             
         except Exception as e:
-            print(f"❌ Error generating conversational response: {e}")
+            print_to_log(f"❌ Error generating conversational response: {e}")
             # Fallback response
             state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, and model building. How can I assist you today?"
         
@@ -329,7 +336,7 @@ class MultiAgentMLPipeline:
     
     def _code_execution_node(self, state: PipelineState) -> PipelineState:
         """Code execution node - handles general code execution requests by generating Python code first"""
-        print(f"\n💻 [Code Execution] Processing code execution request")
+        print_to_log(f"\n💻 [Code Execution] Processing code execution request")
         
         try:
             # Import the LLM-based code generation from ModelBuildingAgent
@@ -339,9 +346,9 @@ class MultiAgentMLPipeline:
             user_query = state.user_query
             user_id = state.chat_session
             
-            print(f"🔍 [Code Execution] Query: '{user_query}'")
-            print(f"🔍 [Code Execution] Raw data: {'✅' if state.raw_data is not None else '❌'}")
-            print(f"🔍 [Code Execution] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
+            print_to_log(f"🔍 [Code Execution] Query: '{user_query}'")
+            print_to_log(f"🔍 [Code Execution] Raw data: {'✅' if state.raw_data is not None else '❌'}")
+            print_to_log(f"🔍 [Code Execution] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
             
             # Generate Python code using LLM (similar to ModelBuildingAgent approach)
             code_generation_prompt = f"""You are a Python expert. Generate executable Python code for the user's request.
@@ -363,7 +370,7 @@ USER REQUEST: {user_query}
 Generate Python code to fulfill this request:"""
 
             # Generate code using the same LLM as ModelBuildingAgent
-            print(f"🤔 Generating Python code for: {user_query}")
+            print_to_log(f"🤔 Generating Python code for: {user_query}")
             
             # Use the same code generation function as ModelBuildingAgent
             reply, generated_code, system_prompt = generate_model_code(code_generation_prompt, user_id, user_query)
@@ -376,8 +383,8 @@ Generate Python code to fulfill this request:"""
                 state.last_response = f"❌ No code was generated. Please provide a more specific request."
                 return state
             
-            print(f"✅ Generated {len(generated_code)} characters of Python code")
-            print(f"📝 Code preview: {generated_code[:100]}...")
+            print_to_log(f"✅ Generated {len(generated_code)} characters of Python code")
+            print_to_log(f"📝 Code preview: {generated_code[:100]}...")
             
             # Execute the generated code using ExecutionAgent
             context = {
@@ -388,7 +395,7 @@ Generate Python code to fulfill this request:"""
                 "sample_data": state.raw_data or state.cleaned_data  # Ensure sample_data is available
             }
             
-            print(f"⚙️ Executing generated code...")
+            print_to_log(f"⚙️ Executing generated code...")
             result_state = execution_agent.run_code(state, generated_code, context)
             
             # Update response based on execution result
@@ -400,9 +407,9 @@ Generate Python code to fulfill this request:"""
             return state
             
         except Exception as e:
-            print(f"❌ Code execution error: {e}")
+            print_to_log(f"❌ Code execution error: {e}")
             import traceback
-            print(f"🔍 Full traceback: {traceback.format_exc()}")
+            print_to_log(f"🔍 Full traceback: {traceback.format_exc()}")
             state.last_error = str(e)
             state.last_response = f"❌ Code execution failed: {str(e)}"
             return state
@@ -417,7 +424,7 @@ Generate Python code to fulfill this request:"""
             user_dir = self._get_user_session_dir(session_id)
             history_file = os.path.join(user_dir, "conversation_history.json")
             
-            print(f"💾 Saving conversation history to: {history_file}")
+            print_to_log(f"💾 Saving conversation history to: {history_file}")
             
             # Load existing history with robust error handling
             history = []
@@ -429,11 +436,11 @@ Generate Python code to fulfill this request:"""
                         if isinstance(loaded_data, list):
                             history = loaded_data
                         else:
-                            print(f"⚠️ Invalid conversation history format (not a list), starting fresh")
+                            print_to_log(f"⚠️ Invalid conversation history format (not a list), starting fresh")
                             history = []
-                    print(f"📚 Loaded {len(history)} existing conversations")
+                    print_to_log(f"📚 Loaded {len(history)} existing conversations")
                 except (json.JSONDecodeError, Exception) as e:
-                    print(f"⚠️ Corrupted conversation history file, starting fresh: {e}")
+                    print_to_log(f"⚠️ Corrupted conversation history file, starting fresh: {e}")
                     history = []
             
             # Add new conversation
@@ -450,10 +457,10 @@ Generate Python code to fulfill this request:"""
             with open(history_file, 'w') as f:
                 json.dump(history, f, indent=2)
             
-            print(f"✅ Conversation history saved ({len(history)} total conversations)")
+            print_to_log(f"✅ Conversation history saved ({len(history)} total conversations)")
                 
         except Exception as e:
-            print(f"⚠️ Failed to save conversation history: {e}")
+            print_to_log(f"⚠️ Failed to save conversation history: {e}")
             import traceback
             traceback.print_exc()
     
@@ -470,7 +477,7 @@ Generate Python code to fulfill this request:"""
             return []
             
         except Exception as e:
-            print(f"⚠️ Failed to load conversation history: {e}")
+            print_to_log(f"⚠️ Failed to load conversation history: {e}")
             return []
     
     def _save_session_state(self, session_id: str, state: PipelineState):
@@ -517,9 +524,9 @@ Generate Python code to fulfill this request:"""
                 cleaned_data_file = os.path.join(user_dir, "cleaned_data.csv")
                 state.cleaned_data.to_csv(cleaned_data_file, index=False)
                 state_dict['cleaned_data'] = {"type": "dataframe", "file": "cleaned_data.csv", "shape": list(state.cleaned_data.shape)}
-                print(f"💾 Saved cleaned_data to session: {state.cleaned_data.shape}")
-                print(f"📁 Data saved to: {cleaned_data_file}")
-                print(f"🔧 DEBUG: Data columns: {list(state.cleaned_data.columns)}")
+                print_to_log(f"💾 Saved cleaned_data to session: {state.cleaned_data.shape}")
+                print_to_log(f"📁 Data saved to: {cleaned_data_file}")
+                print_to_log(f"🔧 DEBUG: Data columns: {list(state.cleaned_data.columns)}")
             else:
                 state_dict['cleaned_data'] = None
             
@@ -559,16 +566,16 @@ Generate Python code to fulfill this request:"""
                 json.dump(state_dict, f, indent=2, cls=DateTimeEncoder)
                 
         except Exception as e:
-            print(f"⚠️ Failed to save session state: {e}")
+            print_to_log(f"⚠️ Failed to save session state: {e}")
     
     def _load_session_state(self, session_id: str) -> Optional[Dict]:
         """Load session state from user directory including DataFrames"""
-        print(f"🔧 DEBUG LOAD_SESSION: Called for session {session_id}")
+        print_to_log(f"🔧 DEBUG LOAD_SESSION: Called for session {session_id}")
         try:
             user_dir = self._get_user_session_dir(session_id)
             state_file = os.path.join(user_dir, "session_state.json")
-            print(f"🔧 DEBUG LOAD_SESSION: Looking for state file: {state_file}")
-            print(f"🔧 DEBUG LOAD_SESSION: State file exists: {os.path.exists(state_file)}")
+            print_to_log(f"🔧 DEBUG LOAD_SESSION: Looking for state file: {state_file}")
+            print_to_log(f"🔧 DEBUG LOAD_SESSION: State file exists: {os.path.exists(state_file)}")
             
             if os.path.exists(state_file):
                 import json
@@ -582,47 +589,47 @@ Generate Python code to fulfill this request:"""
                     raw_data_file = os.path.join(user_dir, state_dict['raw_data']['file'])
                     if os.path.exists(raw_data_file):
                         state_dict['raw_data'] = pd.read_csv(raw_data_file)
-                        print(f"📂 Restored raw_data: {state_dict['raw_data'].shape}")
+                        print_to_log(f"📂 Restored raw_data: {state_dict['raw_data'].shape}")
                 
                 if state_dict.get('processed_data') and isinstance(state_dict['processed_data'], dict):
                     processed_data_file = os.path.join(user_dir, state_dict['processed_data']['file'])
                     if os.path.exists(processed_data_file):
                         state_dict['processed_data'] = pd.read_csv(processed_data_file)
-                        print(f"📂 Restored processed_data: {state_dict['processed_data'].shape}")
+                        print_to_log(f"📂 Restored processed_data: {state_dict['processed_data'].shape}")
                 
                 if state_dict.get('cleaned_data') and isinstance(state_dict['cleaned_data'], dict):
                     cleaned_data_file = os.path.join(user_dir, state_dict['cleaned_data']['file'])
-                    print(f"🔧 DEBUG LOAD_SESSION: cleaned_data file path: {cleaned_data_file}")
-                    print(f"🔧 DEBUG LOAD_SESSION: cleaned_data file exists: {os.path.exists(cleaned_data_file)}")
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: cleaned_data file path: {cleaned_data_file}")
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: cleaned_data file exists: {os.path.exists(cleaned_data_file)}")
                     if os.path.exists(cleaned_data_file):
                         state_dict['cleaned_data'] = pd.read_csv(cleaned_data_file)
-                        print(f"📂 Restored cleaned_data: {state_dict['cleaned_data'].shape}")
+                        print_to_log(f"📂 Restored cleaned_data: {state_dict['cleaned_data'].shape}")
                     else:
-                        print(f"⚠️ DEBUG LOAD_SESSION: cleaned_data file not found, setting to None")
+                        print_to_log(f"⚠️ DEBUG LOAD_SESSION: cleaned_data file not found, setting to None")
                         state_dict['cleaned_data'] = None
                 else:
-                    print(f"🔧 DEBUG LOAD_SESSION: No cleaned_data in state_dict or not dict format")
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: No cleaned_data in state_dict or not dict format")
                 
-                print(f"🔧 DEBUG LOAD_SESSION: Final state_dict keys: {list(state_dict.keys())}")
-                print(f"🔧 DEBUG LOAD_SESSION: cleaned_data is None: {state_dict.get('cleaned_data') is None}")
+                print_to_log(f"🔧 DEBUG LOAD_SESSION: Final state_dict keys: {list(state_dict.keys())}")
+                print_to_log(f"🔧 DEBUG LOAD_SESSION: cleaned_data is None: {state_dict.get('cleaned_data') is None}")
                 return state_dict
             return None
             
         except Exception as e:
-            print(f"⚠️ Failed to load session state: {e}")
+            print_to_log(f"⚠️ Failed to load session state: {e}")
             return None
     
     def _route_to_agent(self, state: PipelineState) -> str:
         """Conditional edge function for routing from orchestrator"""
         routing_decision = state.artifacts.get("routing_decision", AgentType.END.value)
-        print(f"🔀 Routing to: {routing_decision}")
+        print_to_log(f"🔀 Routing to: {routing_decision}")
         return routing_decision
     
     def _determine_next_step(self, state: PipelineState) -> str:
         """Determine next step after agent execution"""
         # Check if there was an error
         if state.last_error:
-            print(f"❌ Error detected: {state.last_error}")
+            print_to_log(f"❌ Error detected: {state.last_error}")
             return END
         
         # Check if this was a single-step request
@@ -643,7 +650,7 @@ Generate Python code to fulfill this request:"""
                 break
         
         if is_single_step:
-            print("✅ Single-step request completed")
+            print_to_log("✅ Single-step request completed")
             return END
         
         # For pipeline requests, continue to next logical step
@@ -653,7 +660,7 @@ Generate Python code to fulfill this request:"""
             if state.cleaned_data is not None:
                 # For model building requests, always continue to feature selection
                 if any(word in query for word in ["train", "model", "build", "pipeline", "complete", "lgbm", "classifier", "regressor"]):
-                    print("🔄 Continuing to feature selection for model building request")
+                    print_to_log("🔄 Continuing to feature selection for model building request")
                     return "feature_selection"
                 else:
                     return END
@@ -662,26 +669,26 @@ Generate Python code to fulfill this request:"""
             if state.selected_features is not None:
                 # For model building requests, always continue to model building
                 if any(word in query for word in ["train", "model", "build", "pipeline", "complete", "lgbm", "classifier", "regressor"]):
-                    print("🔄 Continuing to model building")
+                    print_to_log("🔄 Continuing to model building")
                     return "model_building"
                 else:
                     return END
         
         elif current_agent == "ModelBuildingAgent":
             # Model building is typically the end
-            print("✅ Model building completed - pipeline finished")
+            print_to_log("✅ Model building completed - pipeline finished")
             return END
         
         return END
     
     def _run_simplified_pipeline(self, state: PipelineState) -> PipelineState:
         """Run simplified pipeline without LangGraph"""
-        print("🔄 Running simplified pipeline (LangGraph not available)")
+        print_to_log("🔄 Running simplified pipeline (LangGraph not available)")
         
         # Store the original user intent
         original_query = state.user_query
         original_intent = orchestrator._classify_with_keyword_scoring(original_query)[0]
-        print(f"[SimplifiedPipeline] Original intent: {original_intent}")
+        print_to_log(f"[SimplifiedPipeline] Original intent: {original_intent}")
         
         # Execute pipeline steps sequentially based on original intent
         if original_intent in ["model_building", "full_pipeline"]:
@@ -707,7 +714,7 @@ Generate Python code to fulfill this request:"""
             
             # Route based on current state
             selected_agent = orchestrator.route(state)
-            print(f"[SimplifiedPipeline] Step {step_count}: Routing to {selected_agent}")
+            print_to_log(f"[SimplifiedPipeline] Step {step_count}: Routing to {selected_agent}")
             
             # If we've reached the target or end, stop
             if selected_agent == target_intent or selected_agent == AgentType.END.value:
@@ -736,15 +743,15 @@ Generate Python code to fulfill this request:"""
             # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
             slack_manager = self.slack_manager
             
-            print(f"🔧 [Execute Agent] Using slack_manager id: {id(slack_manager)}")
-            print(f"🔧 [Execute Agent] Slack manager has {len(slack_manager.session_channels)} channels")
+            print_to_log(f"🔧 [Execute Agent] Using slack_manager id: {id(slack_manager)}")
+            print_to_log(f"🔧 [Execute Agent] Slack manager has {len(slack_manager.session_channels)} channels")
             
             state.slack_session_info = {
                 'channels': dict(slack_manager.session_channels),
                 'threads': dict(slack_manager.session_threads)
             }
             state._slack_manager = slack_manager
-            print(f"💾 [Execute Agent] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+            print_to_log(f"💾 [Execute Agent] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
             return feature_selection_agent.run(state)
         elif agent_type == AgentType.MODEL_BUILDING.value:
             return model_building_agent.run(state)
@@ -752,7 +759,7 @@ Generate Python code to fulfill this request:"""
             # Handle general response in simplified pipeline
             return self._general_response_node(state)
         else:
-            print(f"[SimplifiedPipeline] Unknown agent type: {agent_type}")
+            print_to_log(f"[SimplifiedPipeline] Unknown agent type: {agent_type}")
             return state
     
     def process_query(self, 
@@ -763,7 +770,7 @@ Generate Python code to fulfill this request:"""
         """
         Main entry point for processing user queries
         """
-        print(f"\n🚀 Processing query: '{query}'")
+        print_to_log(f"\n🚀 Processing query: '{query}'")
         
         # Generate session ID if not provided
         if not session_id:
@@ -787,13 +794,13 @@ Generate Python code to fulfill this request:"""
         
         # Ensure user directory exists
         user_dir = self._get_user_session_dir(session_id)
-        print(f"📁 User session directory: {user_dir}")
+        print_to_log(f"📁 User session directory: {user_dir}")
         thread_logger.log_data_operation("user_directory_access", {"user_dir": user_dir})
         
         # Load conversation history
         conversation_history = self._load_conversation_history(session_id)
         if conversation_history:
-            print(f"📚 Loaded {len(conversation_history)} previous conversations")
+            print_to_log(f"📚 Loaded {len(conversation_history)} previous conversations")
         
         # Load or create state
         state = state_manager.load_state(session_id)
@@ -805,19 +812,19 @@ Generate Python code to fulfill this request:"""
             )
         
         # Always load session state if available (for interactive sessions)
-        print(f"🔧 DEBUG MAIN PIPELINE: About to load session state for {session_id}")
+        print_to_log(f"🔧 DEBUG MAIN PIPELINE: About to load session state for {session_id}")
         previous_state = self._load_session_state(session_id)
-        print(f"🔧 DEBUG MAIN PIPELINE: _load_session_state returned: {previous_state is not None}")
+        print_to_log(f"🔧 DEBUG MAIN PIPELINE: _load_session_state returned: {previous_state is not None}")
         if previous_state:
-                print(f"📂 Loaded previous session state for {session_id}")
-                print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
+                print_to_log(f"📂 Loaded previous session state for {session_id}")
+                print_to_log(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
                 # Restore relevant state information INCLUDING DataFrames
                 if 'preprocessing_state' in previous_state:
                     state.preprocessing_state = previous_state['preprocessing_state']
-                print(f"🔧 DEBUG: Restored preprocessing_state: {state.preprocessing_state}")
+                print_to_log(f"🔧 DEBUG: Restored preprocessing_state: {state.preprocessing_state}")
                 if state.preprocessing_state:
-                    print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
-                    print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
+                    print_to_log(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
+                    print_to_log(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
                 if 'feature_selection_state' in previous_state:
                     state.feature_selection_state = previous_state['feature_selection_state']
                 if 'model_building_state' in previous_state:
@@ -825,7 +832,7 @@ Generate Python code to fulfill this request:"""
                 # Restore interactive session if available
                 if 'interactive_session' in previous_state:
                     state.interactive_session = previous_state['interactive_session']
-                print(f"🔧 DEBUG: Restored interactive_session: {state.interactive_session}")
+                print_to_log(f"🔧 DEBUG: Restored interactive_session: {state.interactive_session}")
                 # Restore DataFrames
                 if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
                     state.raw_data = previous_state['raw_data']
@@ -843,28 +850,28 @@ Generate Python code to fulfill this request:"""
                 if 'target_column' in previous_state and previous_state['target_column'] is not None:
                     state.target_column = previous_state['target_column']
         else:
-            print(f"🔧 DEBUG: No previous state found for {session_id}")
+            print_to_log(f"🔧 DEBUG: No previous state found for {session_id}")
         
         # Update user query
             state.user_query = query
         
         # Check if we have an active interactive session that needs to continue
         # BUT only if the query is a continuation command, not a new request
-        print(f"🔍 DEBUG: Checking interactive session:")
-        print(f"  Has interactive_session attr: {hasattr(state, 'interactive_session')}")
-        print(f"  Interactive session is None: {state.interactive_session is None}")
-        print(f"  Session active: {state.interactive_session.get('session_active', False) if state.interactive_session else 'N/A'}")
-        print(f"  Interactive session details: {state.interactive_session}")
+        print_to_log(f"🔍 DEBUG: Checking interactive session:")
+        print_to_log(f"  Has interactive_session attr: {hasattr(state, 'interactive_session')}")
+        print_to_log(f"  Interactive session is None: {state.interactive_session is None}")
+        print_to_log(f"  Session active: {state.interactive_session.get('session_active', False) if state.interactive_session else 'N/A'}")
+        print_to_log(f"  Interactive session details: {state.interactive_session}")
         
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session is not None and 
             state.interactive_session.get('session_active', False)):
             
-            print(f"🔄 Interactive session active: {state.interactive_session['agent_type']}")
+            print_to_log(f"🔄 Interactive session active: {state.interactive_session['agent_type']}")
             
             # Check if this is a continuation command vs a new request
             query_lower = query.lower().strip()
-            print(f"🔍 DEBUG: Query to check: '{query_lower}'")
+            print_to_log(f"🔍 DEBUG: Query to check: '{query_lower}'")
             
             # Pure continuation commands (context-independent)
             pure_continuation_commands = ['proceed', 'continue', 'next', 'back', 'summary', 'explain', 'help', 'yes', 'okay', 'cool', 'nice', 'go ahead', 'yeah', 'fine', 'good', 'sure', 'alright', 'agreed', 'approve', 'sounds good', 'move forward']
@@ -874,7 +881,7 @@ Generate Python code to fulfill this request:"""
             is_clear_command = any(cmd in query_lower for cmd in clear_session_commands)
             
             if is_clear_command:
-                print(f"🔄 Explicit session clear requested")
+                print_to_log(f"🔄 Explicit session clear requested")
                 state.interactive_session = None
                 slack_manager = self.slack_manager
                 slack_manager.send_message(state.chat_session, "✅ Session cleared. You can now start a new workflow.")
@@ -907,19 +914,19 @@ Generate Python code to fulfill this request:"""
                     
                     if temp_orchestrator._intent_embeddings:
                         intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query_lower)
-                        print(f"[Session] New request semantic analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
+                        print_to_log(f"[Session] New request semantic analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
                         
                         # Use moderate threshold for new request detection
                         if confidence_info.get("max_score", 0) > 0.25:
                             is_new = (intent == "new_ml_request")
-                            print(f"[Session] Semantic new request decision: {'NEW REQUEST' if is_new else 'CONTINUATION'}")
+                            print_to_log(f"[Session] Semantic new request decision: {'NEW REQUEST' if is_new else 'CONTINUATION'}")
                             return is_new
                     
-                    print(f"[Session] New request semantic analysis failed, using keyword fallback")
+                    print_to_log(f"[Session] New request semantic analysis failed, using keyword fallback")
                     return False
                     
                 except Exception as e:
-                    print(f"[Session] Semantic new request error: {e}, using keyword fallback")
+                    print_to_log(f"[Session] Semantic new request error: {e}, using keyword fallback")
                     return False
             
             # Check for new ML requests that should bypass interactive session (keyword fallback)
@@ -976,18 +983,18 @@ Generate Python code to fulfill this request:"""
                         
                         if temp_orchestrator._intent_embeddings:
                             intent, confidence_info = temp_orchestrator._classify_with_semantic_similarity(query_lower)
-                            print(f"[Session] Semantic continuation analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
+                            print_to_log(f"[Session] Semantic continuation analysis: {intent} (confidence: {confidence_info['max_score']:.3f})")
                             
                             # Use lower threshold for continuation detection (more permissive)
                             if confidence_info.get("max_score", 0) > 0.2:
                                 is_continuation = (intent.startswith('continue_') or intent.endswith('_continuation'))
-                                print(f"[Session] Semantic decision: {'CONTINUATION' if is_continuation else 'NEW REQUEST'}")
+                                print_to_log(f"[Session] Semantic decision: {'CONTINUATION' if is_continuation else 'NEW REQUEST'}")
                                 return is_continuation
                         
-                        print(f"[Session] Semantic analysis failed, falling back to keyword matching")
+                        print_to_log(f"[Session] Semantic analysis failed, falling back to keyword matching")
                 
                 except Exception as e:
-                    print(f"[Session] Semantic continuation error: {e}, using keyword fallback")
+                    print_to_log(f"[Session] Semantic continuation error: {e}, using keyword fallback")
                 
                 # Phase 4: Keyword fallback (original logic)
                 if agent_type == 'preprocessing':
@@ -1069,10 +1076,10 @@ Generate Python code to fulfill this request:"""
                         'set datetime', 'specify datetime', 'provide datetime', 'datetime is', 'date is', 'time is'
                     ]
                     is_fs_continuation = any(cmd in query_lower for cmd in fs_continuations)
-                    print(f"🔧 DEBUG FS CONTINUATION: Query='{query_lower}', Is continuation={is_fs_continuation}")
+                    print_to_log(f"🔧 DEBUG FS CONTINUATION: Query='{query_lower}', Is continuation={is_fs_continuation}")
                     if is_fs_continuation:
                         matched_keywords = [cmd for cmd in fs_continuations if cmd in query_lower]
-                        print(f"🔧 DEBUG FS CONTINUATION: Matched keywords={matched_keywords}")
+                        print_to_log(f"🔧 DEBUG FS CONTINUATION: Matched keywords={matched_keywords}")
                     return is_fs_continuation
                 
                 return False
@@ -1088,15 +1095,15 @@ Generate Python code to fulfill this request:"""
             is_new_request = semantic_new_request or (not semantic_continuation and keyword_new_request)
             is_continuation = semantic_continuation
             
-            print(f"[Session] Analysis results:")
-            print(f"  Semantic new request: {semantic_new_request}")
-            print(f"  Semantic continuation: {semantic_continuation}")
-            print(f"  Keyword new request: {keyword_new_request}")
-            print(f"  Final decision - New request: {is_new_request}, Continuation: {is_continuation}")
-            print(f"🔧 DEBUG SESSION: Has interactive_session: {state.interactive_session is not None}")
+            print_to_log(f"[Session] Analysis results:")
+            print_to_log(f"  Semantic new request: {semantic_new_request}")
+            print_to_log(f"  Semantic continuation: {semantic_continuation}")
+            print_to_log(f"  Keyword new request: {keyword_new_request}")
+            print_to_log(f"  Final decision - New request: {is_new_request}, Continuation: {is_continuation}")
+            print_to_log(f"🔧 DEBUG SESSION: Has interactive_session: {state.interactive_session is not None}")
             if state.interactive_session:
-                print(f"🔧 DEBUG SESSION: Interactive session: {state.interactive_session}")
-            print(f"🔧 DEBUG SESSION: Query: '{query}'")
+                print_to_log(f"🔧 DEBUG SESSION: Interactive session: {state.interactive_session}")
+            print_to_log(f"🔧 DEBUG SESSION: Query: '{query}'")
             
             # Handle conflicts: if both detected, prioritize based on context
             if is_new_request and is_continuation:
@@ -1111,54 +1118,54 @@ Generate Python code to fulfill this request:"""
                 if (state.interactive_session and 
                     state.interactive_session.get('agent_type') == 'feature_selection' and
                     any(pattern in query_lower for pattern in fs_query_patterns)):
-                    print(f"🔄 Feature selection query detected - treating as continuation despite new request words")
+                    print_to_log(f"🔄 Feature selection query detected - treating as continuation despite new request words")
                     is_new_request = False
                 # If query starts with new request pattern, treat as new request
                 elif any(pattern in query_lower[:20] for pattern in new_request_patterns):
-                    print(f"🆕 New ML request detected (despite continuation words) - clearing session")
+                    print_to_log(f"🆕 New ML request detected (despite continuation words) - clearing session")
                     state.interactive_session = None
                 else:
-                    print(f"🔄 Treating as continuation command despite new request words")
+                    print_to_log(f"🔄 Treating as continuation command despite new request words")
                     is_new_request = False
             
             # Now handle the routing based on the final decision
             if is_new_request:
-                print(f"🆕 New ML request detected - clearing interactive session and routing through orchestrator")
+                print_to_log(f"🆕 New ML request detected - clearing interactive session and routing through orchestrator")
                 state.interactive_session = None
             elif is_continuation or is_target_specification:
-                print(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
-                print(f"🔧 DEBUG CONTINUATION: Query='{query}', Agent={state.interactive_session['agent_type']}")
-                print(f"🔧 DEBUG CONTINUATION: Session ID={state.chat_session}")
-                print(f"🔧 DEBUG CONTINUATION: Interactive session details={state.interactive_session}")
+                print_to_log(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
+                print_to_log(f"🔧 DEBUG CONTINUATION: Query='{query}', Agent={state.interactive_session['agent_type']}")
+                print_to_log(f"🔧 DEBUG CONTINUATION: Session ID={state.chat_session}")
+                print_to_log(f"🔧 DEBUG CONTINUATION: Interactive session details={state.interactive_session}")
                 
                 # Route to the appropriate agent to continue the interactive session
                 agent_type = state.interactive_session['agent_type']
                 if agent_type == "preprocessing":
-                    print("🔧 DEBUG: Routing to preprocessing interactive handler")
+                    print_to_log("🔧 DEBUG: Routing to preprocessing interactive handler")
                     # Handle preprocessing commands directly
                     return self._handle_preprocessing_interaction(state, query)
                 elif agent_type == "feature_selection":
-                    print("🔧 DEBUG: Routing to feature selection interactive handler")
+                    print_to_log("🔧 DEBUG: Routing to feature selection interactive handler")
                     
                     # ✅ CRITICAL FIX: Ensure slack_manager is passed to state before calling handler
                     slack_manager = self.slack_manager
-                    print(f"🔧 [Interactive FS] Using slack_manager id: {id(slack_manager)}")
-                    print(f"🔧 [Interactive FS] Slack manager has {len(slack_manager.session_channels)} channels")
+                    print_to_log(f"🔧 [Interactive FS] Using slack_manager id: {id(slack_manager)}")
+                    print_to_log(f"🔧 [Interactive FS] Slack manager has {len(slack_manager.session_channels)} channels")
                     
                     state._slack_manager = slack_manager
                     state.slack_session_info = {
                         'channels': dict(slack_manager.session_channels),
                         'threads': dict(slack_manager.session_threads)
                     }
-                    print(f"💾 [Interactive FS] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
+                    print_to_log(f"💾 [Interactive FS] Passed slack session info: {len(state.slack_session_info['channels'])} channels")
                     
                     from agents_wrapper import feature_selection_agent
                     # Use interactive command handler for feature selection
                     result = feature_selection_agent.handle_interactive_command(state, query)
-                    print(f"🔧 DEBUG: Feature selection handler returned: {type(result)}")
+                    print_to_log(f"🔧 DEBUG: Feature selection handler returned: {type(result)}")
                     return self._prepare_response(result)
                 else:
-                    print(f"❌ DEBUG: Unknown agent type for continuation: {agent_type}")
+                    print_to_log(f"❌ DEBUG: Unknown agent type for continuation: {agent_type}")
                 # Add other interactive agents as needed
         
         # Add raw data if provided
@@ -1203,13 +1210,13 @@ Generate Python code to fulfill this request:"""
             thread_logger.log_response(response['response'], success=response.get("success", True))
             
             # Log the response for debugging/monitoring
-            print(f"📤 Response: {response['response']}")
-            print(f"✅ Query processing completed for session {session_id}")
+            print_to_log(f"📤 Response: {response['response']}")
+            print_to_log(f"✅ Query processing completed for session {session_id}")
             return response
             
         except Exception as e:
             error_msg = f"Pipeline execution failed: {str(e)}"
-            print(f"❌ {error_msg}")
+            print_to_log(f"❌ {error_msg}")
             
             # Log error with thread logger
             processing_time = time.time() - start_time
@@ -1239,7 +1246,7 @@ Generate Python code to fulfill this request:"""
             thread_logger.log_response(error_response['response'], success=False)
             
             # Log the error response for debugging/monitoring
-            print(f"📤 Error Response: {error_response['response']}")
+            print_to_log(f"📤 Error Response: {error_response['response']}")
             
             # Save session state and conversation history for errors (single point)
             self._save_session_state(session_id, state)
@@ -1274,28 +1281,28 @@ Generate Python code to fulfill this request:"""
             # Load previous session state to ensure we have the latest state
             previous_state = self._load_session_state(state.chat_session)
             if previous_state:
-                print(f"📂 Loaded previous session state in preprocessing handler")
-                print(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
+                print_to_log(f"📂 Loaded previous session state in preprocessing handler")
+                print_to_log(f"🔧 DEBUG: Previous state keys: {list(previous_state.keys())}")
                 # Restore preprocessing state if available
                 if 'preprocessing_state' in previous_state:
                     state.preprocessing_state = previous_state['preprocessing_state']
-                    print(f"🔧 DEBUG: Restored preprocessing_state in handler: {state.preprocessing_state}")
-                    print(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
-                    print(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
+                    print_to_log(f"🔧 DEBUG: Restored preprocessing_state in handler: {state.preprocessing_state}")
+                    print_to_log(f"🔧 DEBUG: Current phase after restore: {state.preprocessing_state.get('current_phase')}")
+                    print_to_log(f"🔧 DEBUG: Missing results after restore: {state.preprocessing_state.get('missing_results') is not None}")
                 # Restore interactive session if available
                 if 'interactive_session' in previous_state:
                     state.interactive_session = previous_state['interactive_session']
-                    print(f"🔧 DEBUG: Restored interactive_session in handler: {state.interactive_session}")
+                    print_to_log(f"🔧 DEBUG: Restored interactive_session in handler: {state.interactive_session}")
                 
                 # ✅ CRITICAL FIX: Restore DataFrame data to prevent session loading/saving problems
                 if 'cleaned_data' in previous_state and previous_state['cleaned_data'] is not None:
                     state.cleaned_data = previous_state['cleaned_data']
-                    print(f"🔧 DEBUG: Restored cleaned_data in handler: {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+                    print_to_log(f"🔧 DEBUG: Restored cleaned_data in handler: {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
                 if 'raw_data' in previous_state and previous_state['raw_data'] is not None:
                     state.raw_data = previous_state['raw_data']
-                    print(f"🔧 DEBUG: Restored raw_data in handler: {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                    print_to_log(f"🔧 DEBUG: Restored raw_data in handler: {state.raw_data.shape if state.raw_data is not None else 'None'}")
             else:
-                print(f"🔧 DEBUG: No previous state found in preprocessing handler")
+                print_to_log(f"🔧 DEBUG: No previous state found in preprocessing handler")
             
             # Use the pipeline's slack_manager instead of the global one
             slack_manager = self.slack_manager
@@ -1359,14 +1366,14 @@ Please specify a valid column name."""
                 phase_active = active_phase in ['outliers', 'missing_values', 'encoding', 'transformations']
                 if not phase_active:
                     # Start the interactive preprocessing workflow
-                    print("🚀 Starting interactive preprocessing workflow")
+                    print_to_log("🚀 Starting interactive preprocessing workflow")
                     # Pass the pipeline's slack_manager to the state
                     state._slack_manager = self.slack_manager
                     processed_state = preprocessing_agent.handle_interactive_command(state, 'proceed')
                     
                     # Debug: Check if preprocessing state was set
-                    print(f"🔧 DEBUG: After proceed - preprocessing_state: {processed_state.preprocessing_state}")
-                    print(f"🔧 DEBUG: After proceed - has outlier_results: {processed_state.preprocessing_state.get('outlier_results') is not None if processed_state.preprocessing_state else False}")
+                    print_to_log(f"🔧 DEBUG: After proceed - preprocessing_state: {processed_state.preprocessing_state}")
+                    print_to_log(f"🔧 DEBUG: After proceed - has outlier_results: {processed_state.preprocessing_state.get('outlier_results') is not None if processed_state.preprocessing_state else False}")
                     
                     # Save the updated state to session state file
                     self._save_session_state(processed_state.session_id, processed_state)
@@ -1376,7 +1383,7 @@ Please specify a valid column name."""
                     return self._prepare_response(processed_state, "Interactive preprocessing started.")
                 else:
                     # Phase-aware: treat 'proceed' as 'continue' when already inside a phase
-                    print("🔄 Proceed received in-phase → treating as 'continue'")
+                    print_to_log("🔄 Proceed received in-phase → treating as 'continue'")
                     state._slack_manager = self.slack_manager
                     processed_state = preprocessing_agent.handle_interactive_command(state, 'continue')
                     self._save_session_state(processed_state.session_id, processed_state)
@@ -1389,54 +1396,54 @@ Please specify a valid column name."""
                 current_phase = state.preprocessing_state.get('current_phase')
             elif state.interactive_session and 'current_phase' in state.interactive_session:
                 current_phase = state.interactive_session.get('current_phase')
-            print(f"🔧 DEBUG: Checking 4-Level BGE routing - current_phase: '{current_phase}'")
-            print(f"🔧 DEBUG: preprocessing_state current_phase: {state.preprocessing_state.get('current_phase') if state.preprocessing_state else 'N/A'}")
-            print(f"🔧 DEBUG: interactive_session current_phase: {state.interactive_session.get('current_phase') if state.interactive_session else 'N/A'}")
+            print_to_log(f"🔧 DEBUG: Checking 4-Level BGE routing - current_phase: '{current_phase}'")
+            print_to_log(f"🔧 DEBUG: preprocessing_state current_phase: {state.preprocessing_state.get('current_phase') if state.preprocessing_state else 'N/A'}")
+            print_to_log(f"🔧 DEBUG: interactive_session current_phase: {state.interactive_session.get('current_phase') if state.interactive_session else 'N/A'}")
             
             if current_phase in ['overview', 'outliers', 'missing_values', 'encoding', 'transformations', 'completion']:
                 # Route to preprocessing agent for phase-specific handling
                 from agents_wrapper import preprocessing_agent
                 
-                print(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
+                print_to_log(f"🔄 [4-Level Flow] Routing to preprocessing agent for phase: {current_phase}")
                 
                 # 4-Level Classification Flow:
-                print(f"🎯 [4-Level Flow] Starting classification cascade for: '{query}'")
-                print(f"   📍 Level 1: SKIP (already in preprocessing session)")
-                print(f"   📍 Level 2: session_continuation (already determined - we're in preprocessing phase)")
-                print(f"   📍 Level 3: continue_preprocessing (already determined - we're staying in preprocessing)")
-                print(f"   📍 Level 4: Classifying specific preprocessing action...")
+                print_to_log(f"🎯 [4-Level Flow] Starting classification cascade for: '{query}'")
+                print_to_log(f"   📍 Level 1: SKIP (already in preprocessing session)")
+                print_to_log(f"   📍 Level 2: session_continuation (already determined - we're in preprocessing phase)")
+                print_to_log(f"   📍 Level 3: continue_preprocessing (already determined - we're staying in preprocessing)")
+                print_to_log(f"   📍 Level 4: Classifying specific preprocessing action...")
                 
                 action_intent = self._classify_preprocessing_action(query)
-                print(f"🎯 [4-Level Flow] Final Level 4 Action Intent: '{action_intent}'")
+                print_to_log(f"🎯 [4-Level Flow] Final Level 4 Action Intent: '{action_intent}'")
                 
                 # Map Level 4 action to underlying commands handled by wrapper
                 mapped = query
                 if action_intent == 'proceed':
                     mapped = 'PROCEED: continue'  # Clear intent signal
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'PROCEED: continue' command (BGE intent)")
+                    print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'PROCEED: continue' command (BGE intent)")
                 elif action_intent == 'summary':
                     mapped = 'SUMMARY: summary'  # Clear intent signal
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SUMMARY: summary' command (BGE intent)")
+                    print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SUMMARY: summary' command (BGE intent)")
                 elif action_intent == 'override':
                     mapped = f'OVERRIDE: {query}'  # Clear intent signal + original query
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'OVERRIDE: {query}' command (BGE intent)")
+                    print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'OVERRIDE: {query}' command (BGE intent)")
                 elif action_intent == 'skip':
                     # Check if it's a specific phase skip (skip outliers, skip encoding, etc.)
                     specific_skips = ['skip outliers', 'skip missing', 'skip encoding', 'skip transformations']
                     if any(skip_cmd in query.lower() for skip_cmd in specific_skips):
                         mapped = f'SKIP: {query}'  # preserve specific skip commands with intent signal
-                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: {query}' command (specific phase skip with BGE intent)")
+                        print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: {query}' command (specific phase skip with BGE intent)")
                     else:
                         mapped = 'SKIP: skip'  # generic skip with intent signal
-                        print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: skip' command (generic skip with BGE intent)")
+                        print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'SKIP: skip' command (generic skip with BGE intent)")
                 elif action_intent == 'query':
                     mapped = f"QUERY: {query}"  # Clear intent signal + original query
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'QUERY: {query}' command (query with intent)")
+                    print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → 'QUERY: {query}' command (query with intent)")
                 else:
                     mapped = query  # fallback
-                    print(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (fallback)")
+                    print_to_log(f"🔄 [4-Level Flow] Mapping '{action_intent}' → '{query}' command (fallback)")
                 
-                print(f"✅ [4-Level Flow] Final mapped command: '{mapped}' → Sending to preprocessing agent")
+                print_to_log(f"✅ [4-Level Flow] Final mapped command: '{mapped}' → Sending to preprocessing agent")
                 
                 # Pass the pipeline's slack_manager to the state
                 state._slack_manager = self.slack_manager
@@ -1462,7 +1469,7 @@ What would you like to do?"""
                 return self._prepare_response(state, "Help message sent.")
                 
         except Exception as e:
-            print(f"❌ Error in preprocessing interaction: {e}")
+            print_to_log(f"❌ Error in preprocessing interaction: {e}")
             return self._prepare_response(state, f"Error processing command: {str(e)}")
     
     def _generate_response_text(self, state: PipelineState) -> str:
@@ -1504,7 +1511,7 @@ What would you like to do?"""
         # Auto-detect target column if not set
         target_was_auto_detected = False
         if state.target_column is None and hasattr(data, 'columns'):
-            print(f"🔧 DEBUG: Auto-detecting target column from columns: {list(data.columns)}")
+            print_to_log(f"🔧 DEBUG: Auto-detecting target column from columns: {list(data.columns)}")
             
             # Common target column names
             common_target_names = ['target', 'label', 'class', 'y', 'outcome', 'result', 'prediction', 'is_fraud', 'default_risk', 'churn', 'conversion']
@@ -1512,21 +1519,21 @@ What would you like to do?"""
             for col in data.columns:
                 if col.lower() in common_target_names:
                     state.target_column = col
-                    print(f"🎯 Auto-detected target column: {col}")
+                    print_to_log(f"🎯 Auto-detected target column: {col}")
                     target_was_auto_detected = True
                     break
             
             # If no common name found, use the last column as target
             if state.target_column is None:
                 state.target_column = data.columns[-1]
-                print(f"🎯 Using last column as target: {state.target_column}")
+                print_to_log(f"🎯 Using last column as target: {state.target_column}")
                 target_was_auto_detected = True
         
         state_manager.save_state(state)
         
-        print(f"📊 Data loaded for session {session_id}: {data.shape if hasattr(data, 'shape') else 'Unknown shape'}")
+        print_to_log(f"📊 Data loaded for session {session_id}: {data.shape if hasattr(data, 'shape') else 'Unknown shape'}")
         if state.target_column:
-            print(f"🎯 Target column: {state.target_column}")
+            print_to_log(f"🎯 Target column: {state.target_column}")
         
         # If target was auto-detected, automatically show preprocessing menu
         # BUT only if there's no existing interactive session already loaded
@@ -1535,8 +1542,8 @@ What would you like to do?"""
             if (hasattr(state, 'interactive_session') and 
                 state.interactive_session is not None and 
                 state.interactive_session.get('session_active', False)):
-                print("🎯 Target auto-detected but interactive session already active - skipping auto menu")
-                print(f"🎯 Existing session: {state.interactive_session}")
+                print_to_log("🎯 Target auto-detected but interactive session already active - skipping auto menu")
+                print_to_log(f"🎯 Existing session: {state.interactive_session}")
                 return
                 
             # Only auto-show when the current intent is preprocessing/full_pipeline
@@ -1545,9 +1552,9 @@ What would you like to do?"""
                 # Try to infer from last routing decision if stored
                 current_intent = getattr(state, 'last_route', None)
             if current_intent not in ['preprocessing', 'full_pipeline']:
-                print("🎯 Target auto-detected but intent is not preprocessing/full_pipeline; skipping auto menu")
+                print_to_log("🎯 Target auto-detected but intent is not preprocessing/full_pipeline; skipping auto menu")
                 return
-            print("🎯 Target auto-detected - automatically showing preprocessing menu")
+            print_to_log("🎯 Target auto-detected - automatically showing preprocessing menu")
             # Set up interactive session
             state.interactive_session = {
                 "agent_type": "preprocessing",
@@ -1583,7 +1590,7 @@ What would you like to do?"""
 💬 **What would you like to do?**"""
                 
                 slack_manager.send_message(state.chat_session, menu_msg)
-                print("✅ Auto-sent preprocessing menu to Slack")
+                print_to_log("✅ Auto-sent preprocessing menu to Slack")
             
             state_manager.save_state(state)
     
@@ -1622,13 +1629,13 @@ What would you like to do?"""
         Returns:
             Classified action: 'proceed', 'skip', 'override', 'query', 'summary'
         """
-        print(f"🔍 [Level 4] Processing query: '{query}'")
+        print_to_log(f"🔍 [Level 4] Processing query: '{query}'")
         
         try:
             # BGE-based classification using orchestrator's embeddings (same as Levels 1-3)
             from orchestrator import orchestrator
             if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
-                print(f"🧠 [Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
+                print_to_log(f"🧠 [Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
                 
                 action_definitions = {
                     "proceed_action": "proceed with current phase, continue current step, apply current strategy, move forward with current plan, advance current phase, execute current strategy, cool, yes, ok, fine, good, sure, yeah, alright, sounds good, let's go, proceed now, continue current, apply this, do this, execute this, go ahead, go ahead with this, go ahead in preprocessing, go ahead with current, go ahead and proceed, go ahead with analysis, move ahead, carry on, keep going, continue ahead, go forward, advance ahead, proceed ahead, go on, go through, go with this, go with current, let's proceed, let's continue, let's go ahead, let's move forward, start processing, begin processing, start analysis, begin analysis",
@@ -1642,7 +1649,7 @@ What would you like to do?"""
                 # Use orchestrator's embedding system (same as main pipeline)
                 query_embedding = orchestrator._get_embedding(query)
                 if query_embedding is not None:
-                    print(f"✅ [Level 4] Query embedding generated successfully via orchestrator")
+                    print_to_log(f"✅ [Level 4] Query embedding generated successfully via orchestrator")
                     similarities = {}
                     for intent_name, definition in action_definitions.items():
                         intent_embedding = orchestrator._get_embedding(definition)
@@ -1657,33 +1664,33 @@ What would you like to do?"""
                     
                     if similarities:
                         # Show all similarity scores for debugging
-                        print(f"🔍 [Level 4] BGE similarity scores:")
+                        print_to_log(f"🔍 [Level 4] BGE similarity scores:")
                         for intent, score in sorted(similarities.items(), key=lambda x: x[1], reverse=True):
                             action_name = intent.replace('_action', '')
-                            print(f"   {action_name}: {score:.3f}")
+                            print_to_log(f"   {action_name}: {score:.3f}")
                         
                         best_intent = max(similarities.items(), key=lambda x: x[1])
                         action_intent = best_intent[0].replace('_action', '')  # Remove _action suffix
-                        print(f"🎯 [Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
+                        print_to_log(f"🎯 [Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
                         
                         if best_intent[1] > 0.3:  # Confidence threshold
-                            print(f"✅ [Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
+                            print_to_log(f"✅ [Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
                             return action_intent
                         else:
-                            print(f"⚠️ [Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
+                            print_to_log(f"⚠️ [Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
                 else:
-                    print(f"❌ [Level 4] Failed to generate query embedding via orchestrator")
+                    print_to_log(f"❌ [Level 4] Failed to generate query embedding via orchestrator")
             else:
-                print(f"⚠️ [Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
+                print_to_log(f"⚠️ [Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
         
         except Exception as e:
-            print(f"❌ [Level 4] BGE classification error: {e}")
-            print(f"🔄 [Level 4] Falling back to keyword classification")
+            print_to_log(f"❌ [Level 4] BGE classification error: {e}")
+            print_to_log(f"🔄 [Level 4] Falling back to keyword classification")
         
         # Keyword fallback classification
-        print(f"🔑 [Level 4] Starting keyword fallback classification...")
+        print_to_log(f"🔑 [Level 4] Starting keyword fallback classification...")
         query_lower = query.lower().strip()
-        print(f"🔍 [Level 4] Normalized query: '{query_lower}'")
+        print_to_log(f"🔍 [Level 4] Normalized query: '{query_lower}'")
         
         # Query keywords - check FIRST for highest priority (questions should override other keywords)
         # Use more precise matching to avoid "how" matching in "show"
@@ -1691,24 +1698,24 @@ What would you like to do?"""
         
         # Check for "how" more precisely (avoid matching in "show")
         if ' how ' in f' {query_lower} ' or query_lower.startswith('how ') or query_lower.endswith(' how'):
-            print(f"✅ [Level 4] Matched precise 'how' query pattern")
+            print_to_log(f"✅ [Level 4] Matched precise 'how' query pattern")
             return 'query'
         
         # Check for "why" more precisely 
         if ' why ' in f' {query_lower} ' or query_lower.startswith('why ') or query_lower.endswith(' why'):
-            print(f"✅ [Level 4] Matched precise 'why' query pattern")
+            print_to_log(f"✅ [Level 4] Matched precise 'why' query pattern")
             return 'query'
             
         matched_query = [kw for kw in question_keywords if kw in query_lower]
         if matched_query:
-            print(f"✅ [Level 4] Matched query keywords: {matched_query}")
+            print_to_log(f"✅ [Level 4] Matched query keywords: {matched_query}")
             return 'query'
         
         # Skip keywords (check second - higher priority for commands like "skip next phase")
         skip_keywords = ['skip', 'pass', 'ignore', 'no thanks', 'bypass', 'move on']
         matched_skip = [kw for kw in skip_keywords if kw in query_lower]
         if matched_skip:
-            print(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
+            print_to_log(f"✅ [Level 4] Matched skip keywords: {matched_skip}")
             return 'skip'
         
         # Proceed keywords (enhanced with "go ahead" variations)
@@ -1716,21 +1723,21 @@ What would you like to do?"""
                            'yeah', 'yep', 'fine', 'alright', 'right', 'correct', 'agreed', 'approve', 'carry on', 'keep going', 'move ahead', 'go forward', 'go through', 'go with', 'let\'s go', 'let\'s proceed', 'start', 'begin']
         matched_proceed = [kw for kw in proceed_keywords if kw in query_lower]
         if matched_proceed:
-            print(f"✅ [Level 4] Matched proceed keywords: {matched_proceed}")
+            print_to_log(f"✅ [Level 4] Matched proceed keywords: {matched_proceed}")
             return 'proceed'
         
         # Override keywords
         override_keywords = ['use', 'set', 'change', 'override', 'apply', 'modify', 'alter']
         matched_override = [kw for kw in override_keywords if kw in query_lower]
         if matched_override:
-            print(f"✅ [Level 4] Matched override keywords: {matched_override}")
+            print_to_log(f"✅ [Level 4] Matched override keywords: {matched_override}")
             return 'override'
         
         # Summary keywords
         summary_keywords = ['summary', 'show', 'strategies', 'current', 'plan', 'display']
         matched_summary = [kw for kw in summary_keywords if kw in query_lower]
         if matched_summary:
-            print(f"✅ [Level 4] Matched summary keywords: {matched_summary}")
+            print_to_log(f"✅ [Level 4] Matched summary keywords: {matched_summary}")
             return 'summary'
         
         # Datetime/Target keywords
@@ -1746,15 +1753,15 @@ What would you like to do?"""
         ]
         matched_datetime = [kw for kw in datetime_keywords if kw in query_lower]
         if matched_datetime:
-            print(f"✅ [Level 4] Matched datetime/target keywords: {matched_datetime}")
+            print_to_log(f"✅ [Level 4] Matched datetime/target keywords: {matched_datetime}")
             return 'datetime'
         
         # Default to proceed for short unrecognized patterns (likely affirmative)
         if len(query_lower.strip()) <= 5:  # Short responses likely affirmative
-            print(f"🔄 [Level 4] Short response (≤5 chars), defaulting to 'proceed'")
+            print_to_log(f"🔄 [Level 4] Short response (≤5 chars), defaulting to 'proceed'")
             return 'proceed'
         
-        print(f"🔄 [Level 4] No keywords matched, defaulting to 'query'")
+        print_to_log(f"🔄 [Level 4] No keywords matched, defaulting to 'query'")
         return 'query'
 
     def _classify_feature_selection_action(self, query: str) -> str:
@@ -1767,13 +1774,13 @@ What would you like to do?"""
         Returns:
             Classified action: 'proceed', 'analysis', 'query', 'summary', 'revert'
         """
-        print(f"🔍 [FS Level 4] Processing query: '{query}'")
+        print_to_log(f"🔍 [FS Level 4] Processing query: '{query}'")
         
         try:
             # BGE-based classification using orchestrator's embeddings (same as Levels 1-3)
             from orchestrator import orchestrator
             if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
-                print(f"🧠 [FS Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
+                print_to_log(f"🧠 [FS Level 4] BGE embeddings available via orchestrator, attempting semantic classification...")
                 
                 action_definitions = {
                     "proceed_action": "proceed with final summary, finish analysis, complete the analysis, I'm done, finalize, okay looks good, looks good, looks great, that's perfect, this is fine, go ahead, all set, perfect, good to go, proceed with final, finish feature selection, complete feature selection, done with analysis, ready to finish, wrap up analysis, finalize selection, end analysis, conclude analysis, complete this, finish this, done here, all done, looks perfect, this looks good, satisfied with results, happy with selection, ready to proceed, ready to continue, ready to move on",
@@ -1788,7 +1795,7 @@ What would you like to do?"""
                 # Use orchestrator's embedding system (same as main pipeline)
                 query_embedding = orchestrator._get_embedding(query)
                 if query_embedding is not None:
-                    print(f"✅ [FS Level 4] Query embedding generated successfully via orchestrator")
+                    print_to_log(f"✅ [FS Level 4] Query embedding generated successfully via orchestrator")
                     similarities = {}
                     for intent_name, definition in action_definitions.items():
                         intent_embedding = orchestrator._get_embedding(definition)
@@ -1803,33 +1810,33 @@ What would you like to do?"""
                     
                     if similarities:
                         # Show all similarity scores for debugging
-                        print(f"🔍 [FS Level 4] BGE similarity scores:")
+                        print_to_log(f"🔍 [FS Level 4] BGE similarity scores:")
                         for intent, score in sorted(similarities.items(), key=lambda x: x[1], reverse=True):
                             action_name = intent.replace('_action', '')
-                            print(f"   {action_name}: {score:.3f}")
+                            print_to_log(f"   {action_name}: {score:.3f}")
                         
                         best_intent = max(similarities.items(), key=lambda x: x[1])
                         action_intent = best_intent[0].replace('_action', '')  # Remove _action suffix
-                        print(f"🎯 [FS Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
+                        print_to_log(f"🎯 [FS Level 4] BGE classified '{query}' as '{action_intent}' (confidence: {best_intent[1]:.3f})")
                         
                         if best_intent[1] > 0.3:  # Confidence threshold
-                            print(f"✅ [FS Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
+                            print_to_log(f"✅ [FS Level 4] BGE confidence above threshold (0.3), returning: '{action_intent}'")
                             return action_intent
                         else:
-                            print(f"⚠️ [FS Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
+                            print_to_log(f"⚠️ [FS Level 4] BGE confidence below threshold ({best_intent[1]:.3f} < 0.3), falling back to keywords")
                 else:
-                    print(f"❌ [FS Level 4] Failed to generate query embedding via orchestrator")
+                    print_to_log(f"❌ [FS Level 4] Failed to generate query embedding via orchestrator")
             else:
-                print(f"⚠️ [FS Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
+                print_to_log(f"⚠️ [FS Level 4] BGE embeddings not available in orchestrator, using keyword fallback")
         
         except Exception as e:
-            print(f"❌ [FS Level 4] BGE classification error: {e}")
-            print(f"🔄 [FS Level 4] Falling back to keyword classification")
+            print_to_log(f"❌ [FS Level 4] BGE classification error: {e}")
+            print_to_log(f"🔄 [FS Level 4] Falling back to keyword classification")
         
         # Keyword fallback classification
-        print(f"🔑 [FS Level 4] Starting keyword fallback classification...")
+        print_to_log(f"🔑 [FS Level 4] Starting keyword fallback classification...")
         query_lower = query.lower().strip()
-        print(f"🔍 [FS Level 4] Normalized query: '{query_lower}'")
+        print_to_log(f"🔍 [FS Level 4] Normalized query: '{query_lower}'")
         
         # Suggestion keywords - check EARLY for recommendation requests
         suggestion_keywords = [
@@ -1842,7 +1849,7 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in suggestion_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for SUGGESTION intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for SUGGESTION intent")
             return "suggestion"
         
         # Summary keywords - check FIRST for specific progress/status queries
@@ -1854,7 +1861,7 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in summary_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for SUMMARY intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for SUMMARY intent")
             return "summary"
         
         # Query keywords - check after summary for general questions
@@ -1866,7 +1873,7 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in query_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for QUERY intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for QUERY intent")
             return "query"
         
         # Analysis keywords (run/do/apply analysis)
@@ -1884,7 +1891,7 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in analysis_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for ANALYSIS intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for ANALYSIS intent")
             return "analysis"
         
         # Proceed keywords (finish/complete)
@@ -1894,7 +1901,7 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in proceed_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for PROCEED intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for PROCEED intent")
             return "proceed"
         
         # Revert keywords
@@ -1904,7 +1911,7 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in revert_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for REVERT intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for REVERT intent")
             return "revert"
         
         # Datetime keywords for CSI analysis
@@ -1918,11 +1925,11 @@ What would you like to do?"""
         ]
         
         if any(keyword in query_lower for keyword in datetime_keywords):
-            print(f"🎯 [FS Level 4] Keyword match found for DATETIME intent")
+            print_to_log(f"🎯 [FS Level 4] Keyword match found for DATETIME intent")
             return "datetime"
         
         # Default fallback
-        print(f"🤷 [FS Level 4] No specific keyword matches found, defaulting to ANALYSIS")
+        print_to_log(f"🤷 [FS Level 4] No specific keyword matches found, defaulting to ANALYSIS")
         return "analysis"
 
     def _classify_in_phase_intent(self, query: str) -> str:
@@ -1941,7 +1948,7 @@ What would you like to do?"""
             if hasattr(orchestrator, '_intent_embeddings') and orchestrator._intent_embeddings is not None:
                 intent, scores = orchestrator._classify_with_semantic_similarity(query)
                 if scores.get('max_score', 0) > 0.6:  # High confidence threshold for in-phase
-                    print(f"🧠 Semantic classification: '{query}' → '{intent}' (confidence: {scores.get('max_score', 0):.2f})")
+                    print_to_log(f"🧠 Semantic classification: '{query}' → '{intent}' (confidence: {scores.get('max_score', 0):.2f})")
                     return intent
             
             # Fallback to keyword matching
@@ -1980,7 +1987,7 @@ What would you like to do?"""
             return 'query'
             
         except Exception as e:
-            print(f"⚠️ Error in in-phase intent classification: {e}")
+            print_to_log(f"⚠️ Error in in-phase intent classification: {e}")
             return 'query'  # Safe fallback
 
 
@@ -2045,13 +2052,13 @@ if __name__ == "__main__":
     ml_pipeline.load_data(sample_data, session_id)
     
     for query in test_queries:
-        print(f"\n{'='*60}")
-        print(f"Testing query: {query}")
-        print('='*60)
+        print_to_log(f"\n{'='*60}")
+        print_to_log(f"Testing query: {query}")
+        print_to_log('='*60)
         
         result = ml_pipeline.process_query(query, session_id)
-        print(f"\nResult: {result['response']}")
+        print_to_log(f"\nResult: {result['response']}")
         
         if not result['success']:
-            print(f"Error: {result.get('error')}")
+            print_to_log(f"Error: {result.get('error')}")
             break

@@ -8,6 +8,12 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+# Import master log handler to activate it
+try:
+    import master_log_handler
+except ImportError:
+    pass
+
 def setup_colored_logging(instance_name: str = None) -> str:
     """
     Setup colored logging for the application

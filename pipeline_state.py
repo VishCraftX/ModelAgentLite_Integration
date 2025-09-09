@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
 """
 Global Pipeline State for Multi-Agent ML System
 Defines the shared state that flows through all agents in the LangGraph pipeline
@@ -180,7 +181,7 @@ class PipelineState(BaseModel):
         elif phase == "transformations":
             self._save_transformation_strategies(phase_results)
         
-        print(f"✅ Saved {phase} strategies to session state")
+        print_to_log(f"✅ Saved {phase} strategies to session state")
     
     def _save_outlier_strategies(self, phase_results: Dict):
         """Save outlier treatment strategies"""
@@ -352,7 +353,7 @@ class PipelineState(BaseModel):
         elif phase == "transformations":
             self._save_transformation_strategies(phase_results)
         
-        print(f"✅ Saved {phase} strategies to session state")
+        print_to_log(f"✅ Saved {phase} strategies to session state")
     
     def _save_outlier_strategies(self, phase_results: Dict):
         """Save outlier treatment strategies"""
@@ -512,7 +513,7 @@ class StateManager:
         except PermissionError:
             # Fallback to user's home directory if /tmp has permission issues
             fallback_dir = os.path.expanduser("~/mal_integration_states")
-            print(f"⚠️ Permission denied for {self.base_dir}, using fallback: {fallback_dir}")
+            print_to_log(f"⚠️ Permission denied for {self.base_dir}, using fallback: {fallback_dir}")
             self.base_dir = fallback_dir
             os.makedirs(self.base_dir, exist_ok=True)
     
@@ -525,10 +526,10 @@ class StateManager:
         try:
             os.makedirs(session_dir, exist_ok=True)
         except PermissionError as e:
-            print(f"❌ Permission error creating session directory: {e}")
+            print_to_log(f"❌ Permission error creating session directory: {e}")
             # Try creating in a more accessible location
             fallback_session_dir = os.path.expanduser(f"~/mal_integration_sessions/{state.session_id}")
-            print(f"🔄 Using fallback directory: {fallback_session_dir}")
+            print_to_log(f"🔄 Using fallback directory: {fallback_session_dir}")
             os.makedirs(fallback_session_dir, exist_ok=True)
             session_dir = fallback_session_dir
         
@@ -599,7 +600,7 @@ class StateManager:
             return PipelineState(**state_dict)
         
         except Exception as e:
-            print(f"Error loading state for session {session_id}: {e}")
+            print_to_log(f"Error loading state for session {session_id}: {e}")
             return None
     
     def list_sessions(self) -> List[str]:
@@ -625,7 +626,7 @@ class StateManager:
                 shutil.rmtree(session_dir)
                 return True
             except Exception as e:
-                print(f"Error deleting session {session_id}: {e}")
+                print_to_log(f"Error deleting session {session_id}: {e}")
                 return False
         return False
     
@@ -642,7 +643,7 @@ class StateManager:
             if os.path.exists(state_file):
                 file_mtime = os.path.getmtime(state_file)
                 if file_mtime < cutoff_time:
-                    print(f"Cleaning up old session: {session_id}")
+                    print_to_log(f"Cleaning up old session: {session_id}")
                     self.delete_session(session_id)
 
 

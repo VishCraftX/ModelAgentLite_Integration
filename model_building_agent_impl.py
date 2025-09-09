@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
+# Import master log handler to capture logger.info calls
+try:
+    import master_log_handler
+except ImportError:
+    pass
+
+
 """
 LangGraph Implementation of ModelAgentLite
 Architecture: UI -> Prompt Understanding Agent -> Controller Agent -> Model Building Agent
@@ -100,11 +108,11 @@ def fix_code_with_complete_rewrite(original_code: str, error_msg: str, error_typ
         model_to_use = ERROR_FIXING_MODEL_2
         model_description = "different model (fresh perspective)"
     else:
-        print("⚠️ Maximum attempts reached")
+        print_to_log("⚠️ Maximum attempts reached")
         return None
     
-    print(f"🔧 Attempt {attempt}: Complete rewrite using {model_description}")
-    print(f"🔧 Using original system prompt ({len(original_system_prompt)} chars) to maintain requirements")
+    print_to_log(f"🔧 Attempt {attempt}: Complete rewrite using {model_description}")
+    print_to_log(f"🔧 Using original system prompt ({len(original_system_prompt)} chars) to maintain requirements")
     
     try:
         # Create error fixing prompt that preserves original system requirements
@@ -155,17 +163,17 @@ REWRITTEN CODE:"""
             rewritten_code = extract_first_code_block(reply)
             
             if rewritten_code and rewritten_code.strip():
-                print(f"📝 Complete rewrite successful: {len(original_code)} → {len(rewritten_code)} chars")
+                print_to_log(f"📝 Complete rewrite successful: {len(original_code)} → {len(rewritten_code)} chars")
                 return rewritten_code
             else:
-                print(f"⚠️ No valid code extracted from LLM response")
+                print_to_log(f"⚠️ No valid code extracted from LLM response")
                 return None
         else:
-            print(f"⚠️ Invalid LLM response format")
+            print_to_log(f"⚠️ Invalid LLM response format")
             return None
             
     except Exception as e:
-        print(f"❌ Error in complete rewrite: {e}")
+        print_to_log(f"❌ Error in complete rewrite: {e}")
         return None
 
 def fix_code_with_tiered_llm_DEPRECATED(original_code: str, error_msg: str, error_type: str, data_shape: tuple, user_query: str = "", intent: str = "", attempt: int = 1) -> str:
@@ -179,12 +187,12 @@ def fix_code_with_tiered_llm_DEPRECATED(original_code: str, error_msg: str, erro
         model_to_use = ERROR_FIXING_MODEL_2
         model_description = "different model (fresh perspective)"
     else:
-        print("⚠️ Maximum attempts reached, using fallback rules")
+        print_to_log("⚠️ Maximum attempts reached, using fallback rules")
         return auto_fix_code_errors_fallback(original_code, error_msg, error_type)
     
     # Check model availability
     if not ensure_model_available(model_to_use):
-        print(f"❌ Model {model_to_use} not available, trying fallback")
+        print_to_log(f"❌ Model {model_to_use} not available, trying fallback")
         if attempt == 1:
             return fix_code_with_tiered_llm(original_code, error_msg, error_type, data_shape, user_query, intent, 2)
         else:
@@ -231,8 +239,8 @@ COMMON QUICK FIXES:
 FIXED CODE BLOCK:"""
 
     try:
-        print(f"🔧 Attempt {attempt}: Surgical fix using {model_description}")
-        print(f"📍 Targeting lines {start_line+1}-{end_line} ({end_line-start_line} lines)")
+        print_to_log(f"🔧 Attempt {attempt}: Surgical fix using {model_description}")
+        print_to_log(f"📍 Targeting lines {start_line+1}-{end_line} ({end_line-start_line} lines)")
         
         response = ollama.chat(
             model=model_to_use,
@@ -259,11 +267,11 @@ FIXED CODE BLOCK:"""
         fixed_lines = lines[:start_line] + fixed_block.split('\n') + lines[end_line:]
         reconstructed_code = '\n'.join(fixed_lines)
         
-        print(f"🔧 Surgical fix applied: {len(failing_block)} → {len(fixed_block)} chars in block")
+        print_to_log(f"🔧 Surgical fix applied: {len(failing_block)} → {len(fixed_block)} chars in block")
         return reconstructed_code
         
     except Exception as e:
-        print(f"⚠️ Surgical fix attempt {attempt} failed: {e}")
+        print_to_log(f"⚠️ Surgical fix attempt {attempt} failed: {e}")
         if attempt == 1:
             return fix_code_with_tiered_llm(original_code, error_msg, error_type, data_shape, user_query, intent, 2)
         else:
@@ -274,7 +282,7 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     
     # Fix missing X_test, y_test variables
     if "name 'X_test' is not defined" in error_msg or "name 'y_test' is not defined" in error_msg:
-        print("🔧 Fallback: Adding missing train/test split...")
+        print_to_log("🔧 Fallback: Adding missing train/test split...")
         # Add train/test split after data splitting
         if "X = sample_data.drop('target', axis=1)" in code and "train_test_split" not in code:
             # Find the line with X = sample_data.drop and add train/test split after it
@@ -290,7 +298,7 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     
     # Fix graphviz ImportError for tree plotting
     if "graphviz" in error_msg.lower() and "plot_tree" in code:
-        print("🔧 Fallback: Fixing graphviz ImportError by removing tree plotting...")
+        print_to_log("🔧 Fallback: Fixing graphviz ImportError by removing tree plotting...")
         # Remove the problematic plot_tree lines
         lines = code.split('\n')
         filtered_lines = []
@@ -308,7 +316,7 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     
     # Fix pd.qcut "Bin edges must be unique" error
     if "Bin edges must be unique" in error_msg and "pd.qcut" in code:
-        print("🔧 Fallback: Fixing pd.qcut duplicate edges error...")
+        print_to_log("🔧 Fallback: Fixing pd.qcut duplicate edges error...")
         # Replace pd.qcut with pd.qcut(..., duplicates='drop')
         fixed_code = code.replace(
             "pd.qcut(test_df['probability'], q=10, labels=False)",
@@ -325,7 +333,7 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     
     # Fix "cannot import name" errors by removing problematic imports
     if "cannot import name" in error_msg and "ImportError" in error_type:
-        print("🔧 Fallback: Fixing import error...")
+        print_to_log("🔧 Fallback: Fixing import error...")
         lines = code.split('\n')
         fixed_lines = []
         for line in lines:
@@ -347,7 +355,7 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     
     # Fix "name 'X_test' is not defined" when using existing models
     if "name 'X_test' is not defined" in error_msg:
-        print("🔧 Fallback: Fixing undefined X_test error...")
+        print_to_log("🔧 Fallback: Fixing undefined X_test error...")
         # Add data preparation code at the beginning
         data_prep = """
 # Prepare data for existing model usage
@@ -370,7 +378,7 @@ def check_model_availability(model_name: str) -> bool:
         )
         return True
     except Exception as e:
-        print(f"⚠️ Model {model_name} not available: {e}")
+        print_to_log(f"⚠️ Model {model_name} not available: {e}")
         return False
 
 def ensure_model_available(model_name: str) -> bool:
@@ -379,20 +387,20 @@ def ensure_model_available(model_name: str) -> bool:
         return True
     
     try:
-        print(f"📥 Attempting to pull model: {model_name}")
+        print_to_log(f"📥 Attempting to pull model: {model_name}")
         # Note: ollama.pull() might not be available in all versions
         # This is a placeholder - you might need to use subprocess or ollama CLI
         import subprocess
         result = subprocess.run(['ollama', 'pull', model_name], 
                               capture_output=True, text=True, timeout=300)
         if result.returncode == 0:
-            print(f"✅ Successfully pulled {model_name}")
+            print_to_log(f"✅ Successfully pulled {model_name}")
             return check_model_availability(model_name)
         else:
-            print(f"❌ Failed to pull {model_name}: {result.stderr}")
+            print_to_log(f"❌ Failed to pull {model_name}: {result.stderr}")
             return False
     except Exception as e:
-        print(f"❌ Error pulling model {model_name}: {e}")
+        print_to_log(f"❌ Error pulling model {model_name}: {e}")
         return False
 
 def preload_ollama_models():
@@ -402,57 +410,57 @@ def preload_ollama_models():
     
     # Preload main model
     try:
-        print(f"🔄 Preloading main model ({MAIN_MODEL})...")
+        print_to_log(f"🔄 Preloading main model ({MAIN_MODEL})...")
         if ensure_model_available(MAIN_MODEL):
             response = ollama.chat(
                 model=MAIN_MODEL,
                 messages=[{"role": "user", "content": "warmup"}],
                 keep_alive="10m"
             )
-            print(f"✅ Main model preloaded")
+            print_to_log(f"✅ Main model preloaded")
             success_count += 1
         else:
-            print(f"❌ Main model not available")
+            print_to_log(f"❌ Main model not available")
     except Exception as e:
-        print(f"⚠️ Failed to preload main model: {e}")
+        print_to_log(f"⚠️ Failed to preload main model: {e}")
     
     # Preload first error-fixing model (same as main)
     if ERROR_FIXING_MODEL_1 != MAIN_MODEL:
         try:
-            print(f"🔄 Preloading error-fixing model 1 ({ERROR_FIXING_MODEL_1})...")
+            print_to_log(f"🔄 Preloading error-fixing model 1 ({ERROR_FIXING_MODEL_1})...")
             if ensure_model_available(ERROR_FIXING_MODEL_1):
                 response = ollama.chat(
                     model=ERROR_FIXING_MODEL_1,
                     messages=[{"role": "user", "content": "warmup"}],
                     keep_alive="10m"
                 )
-                print(f"✅ Error-fixing model 1 preloaded")
+                print_to_log(f"✅ Error-fixing model 1 preloaded")
                 success_count += 1
             else:
-                print(f"❌ Error-fixing model 1 not available")
+                print_to_log(f"❌ Error-fixing model 1 not available")
         except Exception as e:
-            print(f"⚠️ Failed to preload error-fixing model 1: {e}")
+            print_to_log(f"⚠️ Failed to preload error-fixing model 1: {e}")
     else:
-        print(f"✅ Error-fixing model 1 same as main model")
+        print_to_log(f"✅ Error-fixing model 1 same as main model")
         success_count += 1
     
     # Preload second error-fixing model (DeepSeek)
     try:
-        print(f"🔄 Preloading error-fixing model 2 ({ERROR_FIXING_MODEL_2})...")
+        print_to_log(f"🔄 Preloading error-fixing model 2 ({ERROR_FIXING_MODEL_2})...")
         if ensure_model_available(ERROR_FIXING_MODEL_2):
             response = ollama.chat(
                 model=ERROR_FIXING_MODEL_2,
                 messages=[{"role": "user", "content": "warmup"}],
                 keep_alive="10m"
             )
-            print(f"✅ Error-fixing model 2 preloaded")
+            print_to_log(f"✅ Error-fixing model 2 preloaded")
             success_count += 1
         else:
-            print(f"❌ Error-fixing model 2 not available")
+            print_to_log(f"❌ Error-fixing model 2 not available")
     except Exception as e:
-        print(f"⚠️ Failed to preload error-fixing model 2: {e}")
+        print_to_log(f"⚠️ Failed to preload error-fixing model 2: {e}")
     
-    print(f"📊 Model preloading summary: {success_count}/{total_models} models ready")
+    print_to_log(f"📊 Model preloading summary: {success_count}/{total_models} models ready")
     return success_count > 0  # Return True if at least one model is available
 
 # =============================================================================
@@ -651,9 +659,9 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
     
     # Single line execution start
     timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"⚙️ EXEC START [{timestamp}] Session: {user_id} | Data: {df.shape} | Code: {len(code)} chars")
-    print(f"🔍 ExecutionAgent called with verbose={verbose}, max_retries={max_retries}")
-    print(f"🔍 Complete code rewrite error fixing is ENABLED (replaced broken surgical approach)")
+    print_to_log(f"⚙️ EXEC START [{timestamp}] Session: {user_id} | Data: {df.shape} | Code: {len(code)} chars")
+    print_to_log(f"🔍 ExecutionAgent called with verbose={verbose}, max_retries={max_retries}")
+    print_to_log(f"🔍 Complete code rewrite error fixing is ENABLED (replaced broken surgical approach)")
     
     # Log code execution start
     thread_logger.log_data_operation("code_execution_start", {
@@ -748,18 +756,18 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
         try:
             env['current_model'] = joblib.load(state['model_path'])
             if verbose:
-                print(f"✅ Loaded existing model from {state['model_path']}")
-                print(f"📊 Model type: {type(env['current_model']).__name__}")
+                print_to_log(f"✅ Loaded existing model from {state['model_path']}")
+                print_to_log(f"📊 Model type: {type(env['current_model']).__name__}")
         except Exception as e:
             if verbose:
-                print(f"⚠️ Failed to load existing model: {e}")
+                print_to_log(f"⚠️ Failed to load existing model: {e}")
     else:
         if verbose:
             model_path = state.get('model_path', 'None')
             path_exists = os.path.exists(model_path) if model_path else False
-            print(f"🔍 No existing model found - Path: {model_path}, Exists: {path_exists}")
-            print(f"🔍 Available model states: {list(model_states.keys())}")
-            print(f"🔍 Global model states: {list(global_model_states.keys())}")
+            print_to_log(f"🔍 No existing model found - Path: {model_path}, Exists: {path_exists}")
+            print_to_log(f"🔍 Available model states: {list(model_states.keys())}")
+            print_to_log(f"🔍 Global model states: {list(global_model_states.keys())}")
             # Try to find any recent model files in artifacts directory first, then root
             import glob
             search_paths = []
@@ -773,18 +781,18 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                 found_models = glob.glob(pattern)
                 if found_models:
                     recent_models.extend(found_models)
-                    print(f"🔍 Found {len(found_models)} model(s) with pattern: {pattern}")
+                    print_to_log(f"🔍 Found {len(found_models)} model(s) with pattern: {pattern}")
             
             if recent_models:
                 latest_model = max(recent_models, key=os.path.getctime)
-                print(f"🔍 Found recent model file: {latest_model}")
+                print_to_log(f"🔍 Found recent model file: {latest_model}")
                 # Load it manually if we found one
                 try:
                     env['current_model'] = joblib.load(latest_model)
-                    print(f"✅ Manually loaded model from {latest_model}")
-                    print(f"📊 Model type: {type(env['current_model']).__name__}")
+                    print_to_log(f"✅ Manually loaded model from {latest_model}")
+                    print_to_log(f"📊 Model type: {type(env['current_model']).__name__}")
                 except Exception as e:
-                    print(f"⚠️ Failed to manually load model: {e}")
+                    print_to_log(f"⚠️ Failed to manually load model: {e}")
     
     # Execute code with retries
     for attempts in range(1, max_retries + 1):
@@ -794,23 +802,23 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
         
         try:
             if verbose:
-                print(f"🔄 Execution attempt {attempts}/{max_retries}")
-                print(f"📝 DEBUG - Generated Code (Attempt {attempts}):")
-                print("=" * 60)
-                print(code)
-                print("=" * 60)
-                print(f"🔍 About to execute {len(code)} characters of code...")
-                print(f"🔍 Code starts with: {code[:100]}...")
-                print(f"🔍 Environment has sample_data shape: {df.shape}")
-                print("🔍 Starting execution now...")
+                print_to_log(f"🔄 Execution attempt {attempts}/{max_retries}")
+                print_to_log(f"📝 DEBUG - Generated Code (Attempt {attempts}):")
+                print_to_log("=" * 60)
+                print_to_log(code)
+                print_to_log("=" * 60)
+                print_to_log(f"🔍 About to execute {len(code)} characters of code...")
+                print_to_log(f"🔍 Code starts with: {code[:100]}...")
+                print_to_log(f"🔍 Environment has sample_data shape: {df.shape}")
+                print_to_log("🔍 Starting execution now...")
             
             # Execution start - no additional progress needed
             
             # Execute the code with timeout (if supported)
-            print("🔍 About to call exec()...")
-            print(f"🔍 Environment variables available: {list(env.keys())}")
-            print(f"🔍 'intent' in environment: {'intent' in env}")
-            print(f"🔍 'intent' value: {env.get('intent', 'NOT_FOUND')}")
+            print_to_log("🔍 About to call exec()...")
+            print_to_log(f"🔍 Environment variables available: {list(env.keys())}")
+            print_to_log(f"🔍 'intent' in environment: {'intent' in env}")
+            print_to_log(f"🔍 'intent' value: {env.get('intent', 'NOT_FOUND')}")
             
             import sys, threading
             try:
@@ -826,15 +834,15 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                 signal.alarm(60)
                 try:
                     exec(code, env)
-                    print("🔍 exec() completed successfully!")
+                    print_to_log("🔍 exec() completed successfully!")
                 except TimeoutError as e:
-                    print(f"⏰ Execution timed out: {e}")
+                    print_to_log(f"⏰ Execution timed out: {e}")
                     raise e
                 finally:
                     signal.alarm(0)  # Disable alarm
             else:
                 exec(code, env)
-                print("🔍 exec() completed successfully!")
+                print_to_log("🔍 exec() completed successfully!")
             
             # Success - show final completion only
             if progress_callback:
@@ -848,20 +856,20 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             
             # Save model if any model-like object is present in the result
             if isinstance(result, dict):
-                print(f"🔍 Checking result for model objects. Result keys: {list(result.keys())}")
+                print_to_log(f"🔍 Checking result for model objects. Result keys: {list(result.keys())}")
                 model_objects = []
                 for key, value in list(result.items()):
-                    print(f"🔍 Checking key '{key}': type={type(value)}, has_predict={hasattr(value, 'predict')}, has_fit={hasattr(value, 'fit')}")
+                    print_to_log(f"🔍 Checking key '{key}': type={type(value)}, has_predict={hasattr(value, 'predict')}, has_fit={hasattr(value, 'fit')}")
                     if hasattr(value, 'predict') and hasattr(value, 'fit'):
                         model_objects.append((key, value))
-                        print(f"✅ Found model object: {key} -> {type(value)}")
+                        print_to_log(f"✅ Found model object: {key} -> {type(value)}")
                 
-                print(f"🔍 Total model objects found: {len(model_objects)}")
+                print_to_log(f"🔍 Total model objects found: {len(model_objects)}")
                 if model_objects:
                     save_key, model_obj = model_objects[0]
                     try:
                         model_filename = f"model_{user_id}_{int(time.time())}.joblib"
-                        print(f"🔍 Attempting to save model to: {model_filename}")
+                        print_to_log(f"🔍 Attempting to save model to: {model_filename}")
                         # Use the thread-safe wrapper that saves to artifacts directory
                         model_path = env["safe_joblib_dump"](model_obj, model_filename)
                         result['model_path'] = model_path
@@ -874,16 +882,16 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                         # Also update global model states
                         global_model_states[user_id] = model_states[user_id]
                         if verbose:
-                            print(f"✅ Saved new model to {model_path} (from result key: {save_key})")
+                            print_to_log(f"✅ Saved new model to {model_path} (from result key: {save_key})")
                     except Exception as e:
                         if verbose:
-                            print(f"⚠️ Failed to save model: {e}")
+                            print_to_log(f"⚠️ Failed to save model: {e}")
                 else:
-                    print(f"⚠️ No model objects found in result. Available keys: {list(result.keys())}")
+                    print_to_log(f"⚠️ No model objects found in result. Available keys: {list(result.keys())}")
             
             # Single line execution success
             result_info = f"Dict: {len(result)} keys" if isinstance(result, dict) else f"Type: {type(result).__name__}"
-            print(f"✅ EXEC SUCCESS [{user_id}] {result_info}")
+            print_to_log(f"✅ EXEC SUCCESS [{user_id}] {result_info}")
             
             # Log successful execution
             if thread_logger:
@@ -902,7 +910,7 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             # Handle I/O errors specifically with enhanced fallback
             error_msg = f"I/O Error (Errno {getattr(io_exc, 'errno', 'unknown')}): {str(io_exc)}"
             if verbose:
-                print(f"💾 I/O Error during execution: {error_msg}")
+                print_to_log(f"💾 I/O Error during execution: {error_msg}")
             
             # Log I/O error
             if thread_logger:
@@ -925,11 +933,11 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                     "suggested_actions": diagnosis['suggested_actions']
                 }
                 if verbose:
-                    print(f"🔍 Diagnosis: {diagnosis['likely_causes']}")
-                    print(f"💡 Suggestions: {diagnosis['suggested_actions']}")
+                    print_to_log(f"🔍 Diagnosis: {diagnosis['likely_causes']}")
+                    print_to_log(f"💡 Suggestions: {diagnosis['suggested_actions']}")
                 
                 # Single line fallback
-                print(f"⚠️ EXEC FALLBACK [{user_id}] I/O Error - using fallback result")
+                print_to_log(f"⚠️ EXEC FALLBACK [{user_id}] I/O Error - using fallback result")
                 
                 return fallback_result
             
@@ -939,24 +947,24 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
         except Exception as exc:
             error_msg = str(exc)
             error_type = type(exc).__name__
-            print(f"🚨 EXCEPTION CAUGHT in ExecutionAgent!")
-            print(f"🔍 Error type: {error_type}")
-            print(f"🔍 Error message: {error_msg}")
-            print(f"🔍 Current attempt: {attempts}/{max_retries}")
-            print(f"🔍 Should try tiered LLM? {attempts <= 2}")
+            print_to_log(f"🚨 EXCEPTION CAUGHT in ExecutionAgent!")
+            print_to_log(f"🔍 Error type: {error_type}")
+            print_to_log(f"🔍 Error message: {error_msg}")
+            print_to_log(f"🔍 Current attempt: {attempts}/{max_retries}")
+            print_to_log(f"🔍 Should try tiered LLM? {attempts <= 2}")
             
             # Handle import/library errors specifically
             if error_type in ["ImportError", "ModuleNotFoundError"] or "No module named" in error_msg:
                 missing_library = extract_missing_library(error_msg)
                 if missing_library:
-                    print(f"📦 MISSING LIBRARY DETECTED: {missing_library}")
+                    print_to_log(f"📦 MISSING LIBRARY DETECTED: {missing_library}")
                     
                     # Try to provide installation guidance and fallback
                     install_guidance = get_library_install_guidance(missing_library)
                     fallback_code = get_library_fallback_code(code, missing_library)
                     
                     if fallback_code and attempts == 1:
-                        print(f"🔧 ATTEMPTING FALLBACK: Replacing {missing_library} with alternative...")
+                        print_to_log(f"🔧 ATTEMPTING FALLBACK: Replacing {missing_library} with alternative...")
                         
                         # Notify user about fallback via progress callback
                         if progress_callback:
@@ -979,56 +987,56 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                         }
             
             if verbose:
-                print(f"❌ {error_type} during execution: {error_msg}")
+                print_to_log(f"❌ {error_type} during execution: {error_msg}")
                 if "dictionary changed size during iteration" in error_msg:
-                    print("🔍 DICT ITERATION ERROR DETECTED:")
-                    print("   This usually happens when modifying a dict while iterating over it")
-                    print("   Common causes: for k,v in dict.items(): dict[new_key] = value")
-                    print("   Solution: Create a copy first or collect changes separately")
+                    print_to_log("🔍 DICT ITERATION ERROR DETECTED:")
+                    print_to_log("   This usually happens when modifying a dict while iterating over it")
+                    print_to_log("   Common causes: for k,v in dict.items(): dict[new_key] = value")
+                    print_to_log("   Solution: Create a copy first or collect changes separately")
             
             # NEW APPROACH: Complete code rewrite with full context (much more reliable)
             if attempts <= 2:  # Try LLM complete rewrite for first two attempts
-                print(f"🔧 STARTING complete code rewrite for attempt {attempts}...")
-                print(f"🔧 Passing full code and error to LLM for complete rewrite...")
+                print_to_log(f"🔧 STARTING complete code rewrite for attempt {attempts}...")
+                print_to_log(f"🔧 Passing full code and error to LLM for complete rewrite...")
                 fixed_code = fix_code_with_complete_rewrite(code, error_msg, error_type, user_query, intent, attempts, original_system_prompt)
                 if fixed_code and fixed_code != code:
-                    print(f"✅ Complete rewrite provided a solution")
-                    print(f"📝 Code length: {len(code)} → {len(fixed_code)} characters")
+                    print_to_log(f"✅ Complete rewrite provided a solution")
+                    print_to_log(f"📝 Code length: {len(code)} → {len(fixed_code)} characters")
                     code = fixed_code
-                    print(f"🔄 RETRYING with rewritten code immediately...")
+                    print_to_log(f"🔄 RETRYING with rewritten code immediately...")
                     continue  # Retry with rewritten code immediately
                 else:
-                    print(f"⚠️ Complete rewrite couldn't provide a different solution")
+                    print_to_log(f"⚠️ Complete rewrite couldn't provide a different solution")
                     # Try rule-based fallback when LLM rewrite fails
-                    print(f"🔧 Falling back to rule-based error fixing...")
+                    print_to_log(f"🔧 Falling back to rule-based error fixing...")
                     fallback_code = auto_fix_code_errors_fallback(code, error_msg, error_type)
                     if fallback_code and fallback_code != code:
-                        print(f"✅ Rule-based fallback provided a solution")
-                        print(f"📝 Code length: {len(code)} → {len(fallback_code)} characters")
+                        print_to_log(f"✅ Rule-based fallback provided a solution")
+                        print_to_log(f"📝 Code length: {len(code)} → {len(fallback_code)} characters")
                         code = fallback_code
-                        print(f"🔄 RETRYING with fallback-fixed code immediately...")
+                        print_to_log(f"🔄 RETRYING with fallback-fixed code immediately...")
                         continue  # Retry with fallback-fixed code immediately
             else:
-                print(f"🚫 Skipping LLM rewrite (attempt {attempts} > 2)")
+                print_to_log(f"🚫 Skipping LLM rewrite (attempt {attempts} > 2)")
                 # For attempts > 2, go straight to rule-based fallback
-                print(f"🔧 Using rule-based error fixing for attempt {attempts}...")
+                print_to_log(f"🔧 Using rule-based error fixing for attempt {attempts}...")
                 fallback_code = auto_fix_code_errors_fallback(code, error_msg, error_type)
                 if fallback_code and fallback_code != code:
-                    print(f"✅ Rule-based fallback provided a solution")
-                    print(f"📝 Code length: {len(code)} → {len(fallback_code)} characters")
+                    print_to_log(f"✅ Rule-based fallback provided a solution")
+                    print_to_log(f"📝 Code length: {len(code)} → {len(fallback_code)} characters")
                     code = fallback_code
-                    print(f"🔄 RETRYING with fallback-fixed code immediately...")
+                    print_to_log(f"🔄 RETRYING with fallback-fixed code immediately...")
                     continue  # Retry with fallback-fixed code immediately
             
             if attempts == max_retries:
                 if verbose:
-                    print(f"💥 Final failure after {max_retries} attempts.")
-                print(f"❌ EXEC FAILED [{user_id}] {error_type}: {error_msg}")
+                    print_to_log(f"💥 Final failure after {max_retries} attempts.")
+                print_to_log(f"❌ EXEC FAILED [{user_id}] {error_type}: {error_msg}")
                 return f"Final error after {max_retries} attempts: {error_msg}"
             
             # Add delay before retry for any error (only if not auto-fixed)
             if verbose:
-                print(f"⏳ Waiting {attempts} seconds before retry...")
+                print_to_log(f"⏳ Waiting {attempts} seconds before retry...")
             time.sleep(attempts)
 
 # =============================================================================
@@ -1040,7 +1048,7 @@ def prompt_understanding_agent(state: AgentState) -> AgentState:
     Classifies user intent using Qwen 2.5 model
     Maps to your current classify_user_intent function
     """
-    print(f"🧠 PROMPT UNDERSTANDING AGENT - Processing query: {state['query'][:60]}...")
+    print_to_log(f"🧠 PROMPT UNDERSTANDING AGENT - Processing query: {state['query'][:60]}...")
     
     query = state["query"]
     user_id = state["user_id"]
@@ -1143,7 +1151,7 @@ Respond with ONLY one word: new_model, multi_model, or use_existing"""
             # Fallback classification
             intent = fallback_classify_intent(query)
         
-        print(f"🎯 Intent classified: {intent}")
+        print_to_log(f"🎯 Intent classified: {intent}")
         
         # Update state
         state["intent"] = intent
@@ -1156,7 +1164,7 @@ Respond with ONLY one word: new_model, multi_model, or use_existing"""
         return state
         
     except Exception as e:
-        print(f"⚠️ Prompt understanding failed: {e}")
+        print_to_log(f"⚠️ Prompt understanding failed: {e}")
         intent = fallback_classify_intent(query)
         state["intent"] = intent
         return state
@@ -1185,11 +1193,11 @@ def semantic_classify_model_intent(query: str) -> str:
             use_case="model_sub_classification"
         )
         
-        print(f"[ModelAgent] Model intent classification: {result} (method: {method_used})")
+        print_to_log(f"[ModelAgent] Model intent classification: {result} (method: {method_used})")
         return result
         
     except Exception as e:
-        print(f"[ModelAgent] Universal classifier error: {e}, using keyword fallback")
+        print_to_log(f"[ModelAgent] Universal classifier error: {e}, using keyword fallback")
         return fallback_classify_intent_keywords(query)
 
 
@@ -1236,14 +1244,14 @@ def llm_classify_model_intent(query: str) -> str:
                     return "new_model"
                     
         except Exception as ollama_error:
-            print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
+            print_to_log(f"[ModelAgent] Ollama LLM error: {ollama_error}")
             
         # Use keyword fallback instead of OpenAI
-        print(f"[ModelAgent] Using keyword fallback for intent classification")
+        print_to_log(f"[ModelAgent] Using keyword fallback for intent classification")
         return fallback_classify_intent_keywords(query)
             
     except Exception as e:
-        print(f"[ModelAgent] LLM classification failed: {e}")
+        print_to_log(f"[ModelAgent] LLM classification failed: {e}")
     
     return None
 
@@ -1305,11 +1313,11 @@ def semantic_detect_plot_request(query: str) -> bool:
             use_case="feature_detection"
         )
         
-        print(f"[ModelAgent] Plot detection: {result} (method: {method_used})")
+        print_to_log(f"[ModelAgent] Plot detection: {result} (method: {method_used})")
         return result == "plot_request"
         
     except Exception as e:
-        print(f"[ModelAgent] Universal classifier plot detection error: {e}, using keyword fallback")
+        print_to_log(f"[ModelAgent] Universal classifier plot detection error: {e}, using keyword fallback")
         # Keyword fallback
         plot_keywords = ['show', 'plot', 'visualize', 'display']
         tree_keywords = ['tree', 'decision tree', 'model']
@@ -1335,11 +1343,11 @@ def semantic_detect_financial_analysis(query: str) -> bool:
             use_case="feature_detection"
         )
         
-        print(f"[ModelAgent] Financial analysis detection: {result} (method: {method_used})")
+        print_to_log(f"[ModelAgent] Financial analysis detection: {result} (method: {method_used})")
         return result == "financial_analysis"
         
     except Exception as e:
-        print(f"[ModelAgent] Universal classifier financial analysis error: {e}, using keyword fallback")
+        print_to_log(f"[ModelAgent] Universal classifier financial analysis error: {e}, using keyword fallback")
         # Keyword fallback
         financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
         return any(fk in query.lower() for fk in financial_keywords)
@@ -1379,14 +1387,14 @@ def llm_detect_plot_request(query: str) -> bool:
                     return False
                     
         except Exception as ollama_error:
-            print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
+            print_to_log(f"[ModelAgent] Ollama LLM error: {ollama_error}")
             
         # Use keyword fallback instead of OpenAI
-        print(f"[ModelAgent] Using keyword fallback for plot detection")
+        print_to_log(f"[ModelAgent] Using keyword fallback for plot detection")
         return keyword_detect_plot(query)
             
     except Exception as e:
-        print(f"[ModelAgent] LLM plot detection failed: {e}")
+        print_to_log(f"[ModelAgent] LLM plot detection failed: {e}")
     
     return None
 
@@ -1425,15 +1433,15 @@ def llm_detect_financial_analysis(query: str) -> bool:
                     return False
                     
         except Exception as ollama_error:
-            print(f"[ModelAgent] Ollama LLM error: {ollama_error}")
+            print_to_log(f"[ModelAgent] Ollama LLM error: {ollama_error}")
             
         # Use keyword fallback instead of OpenAI
-        print(f"[ModelAgent] Using keyword fallback for financial analysis")
+        print_to_log(f"[ModelAgent] Using keyword fallback for financial analysis")
         financial_keywords = ['segment', 'decile', 'rank', 'bucket', 'badrate', 'coverage', 'rank ordering', 'segmentation']
         return any(fk in query.lower() for fk in financial_keywords)
             
     except Exception as e:
-        print(f"[ModelAgent] LLM financial analysis failed: {e}")
+        print_to_log(f"[ModelAgent] LLM financial analysis failed: {e}")
     
     return None
 
@@ -1446,7 +1454,7 @@ def controller_agent(state: AgentState) -> AgentState:
     Routes requests based on intent and model state
     Acts as the central controller in your architecture
     """
-    print(f"🎛️ CONTROLLER AGENT - Routing based on intent: {state['intent']}")
+    print_to_log(f"🎛️ CONTROLLER AGENT - Routing based on intent: {state['intent']}")
     
     # No progress update needed - internal routing is fast
     
@@ -1458,11 +1466,11 @@ def controller_agent(state: AgentState) -> AgentState:
     if intent == "new_model":
         routing_decision = "build_new_model"
         if has_existing_model:
-            print("ℹ️ Building new model (existing model will be replaced)")
+            print_to_log("ℹ️ Building new model (existing model will be replaced)")
     
     elif intent == "multi_model":
         routing_decision = "build_multi_model"
-        print(f"🔄 Multi-model comparison requested - will build and compare multiple models")
+        print_to_log(f"🔄 Multi-model comparison requested - will build and compare multiple models")
     
     elif intent == "use_existing":
         if has_existing_model:
@@ -1479,7 +1487,7 @@ def controller_agent(state: AgentState) -> AgentState:
     else:
         routing_decision = "general_response"
     
-    print(f"🚦 Routing decision: {routing_decision}")
+    print_to_log(f"🚦 Routing decision: {routing_decision}")
     
     # Update state
     state["routing_decision"] = routing_decision
@@ -1500,7 +1508,7 @@ def model_building_agent(state: AgentState) -> AgentState:
     Handles all model building, using, and visualization tasks
     Maps to your current send_to_llm and ExecutionAgent functions
     """
-    print(f"🏗️ MODEL BUILDING AGENT - Processing: {state['routing_decision']}")
+    print_to_log(f"🏗️ MODEL BUILDING AGENT - Processing: {state['routing_decision']}")
     
     # Get thread logger
     user_id = state["user_id"]
@@ -1529,7 +1537,7 @@ def model_building_agent(state: AgentState) -> AgentState:
         if routing_decision == "general_response":
             # For general queries like "Hi", respond naturally using direct LLM call
             try:
-                print(f"🔍 DEBUG: Generating conversational response for query: '{query}'")
+                print_to_log(f"🔍 DEBUG: Generating conversational response for query: '{query}'")
                 response = ollama.chat(
                     # model="krith/qwen2.5-coder-14b-instruct:IQ2_M",
                     model=MAIN_MODEL,
@@ -1538,13 +1546,13 @@ def model_building_agent(state: AgentState) -> AgentState:
                         {"role": "user", "content": f"The user said: '{query}'. Respond in a friendly, natural way as an AI assistant. Do not list capabilities unless specifically asked. Keep it conversational and brief."}
                     ]
                 )
-                print(f"🔍 DEBUG: Raw LLM response: {response}")
+                print_to_log(f"🔍 DEBUG: Raw LLM response: {response}")
                 generated_response = response["message"]["content"].strip()
-                print(f"🔍 DEBUG: Extracted response: '{generated_response}'")
+                print_to_log(f"🔍 DEBUG: Extracted response: '{generated_response}'")
                 state["response"] = generated_response
                 return state
             except Exception as e:
-                print(f"🔥 Error generating conversational response: {e}")
+                print_to_log(f"🔥 Error generating conversational response: {e}")
                 # Show error instead of hiding it
                 state["response"] = f"❌ Error generating response: {str(e)}"
                 return state
@@ -1560,7 +1568,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
     # Modify prompt based on routing decision
     if routing_decision == "use_existing_model" and state.get("has_existing_model"):
         # Direct handling for existing model operations (no LLM codegen)
-        print("🔧 Using existing model path without code generation...")
+        print_to_log("🔧 Using existing model path without code generation...")
         user_model_path = state.get("model_path") or global_model_states.get(user_id, {}).get("model_path")
         # Auto-discover a recently saved model if path is missing or file doesn't exist
         if not user_model_path or not os.path.exists(user_model_path):
@@ -1597,7 +1605,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     global_model_states[user_id]['model_path'] = user_model_path
                     if 'last_result' not in global_model_states[user_id]:
                         global_model_states[user_id]['last_result'] = {}
-                    print(f"🔍 Auto-discovered model file: {user_model_path}")
+                    print_to_log(f"🔍 Auto-discovered model file: {user_model_path}")
             except Exception as _:
                 pass
         if not user_model_path or not os.path.exists(user_model_path):
@@ -1606,7 +1614,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
 
         try:
             current_model = joblib.load(user_model_path)
-            print(f"✅ Loaded model from {user_model_path} | Type: {type(current_model).__name__}")
+            print_to_log(f"✅ Loaded model from {user_model_path} | Type: {type(current_model).__name__}")
         except Exception as e:
             state["response"] = f"❌ Failed to load existing model: {e}"
             return state
@@ -1750,7 +1758,7 @@ Then you can use it for predictions, visualizations, and analysis."""
             else:
                 context_prompt = f"The user said: '{query}'. Respond naturally and conversationally as an AI assistant. Don't list capabilities unless they specifically ask what you can do."
             
-            print(f"🔍 DEBUG: Generating conversational response (with data: {data is not None}) for query: '{query}'")
+            print_to_log(f"🔍 DEBUG: Generating conversational response (with data: {data is not None}) for query: '{query}'")
             # Use ollama directly for conversational responses (not code generation)
             response = ollama.chat(
                 # model="krith/qwen2.5-coder-14b-instruct:IQ2_M",
@@ -1761,13 +1769,13 @@ Then you can use it for predictions, visualizations, and analysis."""
                 ]
             )
             
-            print(f"🔍 DEBUG: Raw LLM response: {response}")
+            print_to_log(f"🔍 DEBUG: Raw LLM response: {response}")
             generated_response = response["message"]["content"].strip()
-            print(f"🔍 DEBUG: Extracted response: '{generated_response}'")
+            print_to_log(f"🔍 DEBUG: Extracted response: '{generated_response}'")
             state["response"] = generated_response
             return state
         except Exception as e:
-            print(f"🔥 Error generating conversational response: {e}")
+            print_to_log(f"🔥 Error generating conversational response: {e}")
             # Show error instead of hiding it
             state["response"] = f"❌ Error generating conversational response: {str(e)}"
             return state
@@ -1816,7 +1824,7 @@ else:
 ```"""
 
         try:
-            print("🤔 Generating code for general analysis...")
+            print_to_log("🤔 Generating code for general analysis...")
             # Start thinking animation for LLM call
             if progress_callback:
                 progress_callback("🤔 Generating code using AI...", "Code Generation")
@@ -1828,13 +1836,13 @@ else:
                 return state
             
             state["code"] = code
-            print(f"📝 GENERAL CODE EXECUTION - Generated code ({len(code)} chars):")
-            print("=" * 60)
-            print(code)
-            print("=" * 60)
+            print_to_log(f"📝 GENERAL CODE EXECUTION - Generated code ({len(code)} chars):")
+            print_to_log("=" * 60)
+            print_to_log(code)
+            print_to_log("=" * 60)
             
             # Execute the code
-            print("⚙️ Executing generated code...")
+            print_to_log("⚙️ Executing generated code...")
             # Get artifacts directory for this thread
             artifacts_dir = None
             try:
@@ -1845,9 +1853,9 @@ else:
                     artifacts_dir = os.path.join(thread_dir, "artifacts")
                     if not os.path.exists(artifacts_dir):
                         os.makedirs(artifacts_dir, exist_ok=True)
-                        print(f"📁 Created artifacts directory: {artifacts_dir}")
+                        print_to_log(f"📁 Created artifacts directory: {artifacts_dir}")
             except Exception as e:
-                print(f"⚠️ Failed to create artifacts directory: {e}")
+                print_to_log(f"⚠️ Failed to create artifacts directory: {e}")
                 artifacts_dir = None
             
             # ExecutionAgent will handle progress updates
@@ -1865,15 +1873,15 @@ else:
                 original_system_prompt=system_prompt  # Pass original system prompt for error fixing
             )
             
-            print(f"🔍 EXECUTION RESULT DEBUG:")
-            print(f"   📝 Result type: {type(result)}")
-            print(f"   📝 Result value: {repr(result)}")
-            print(f"   📝 Is string: {isinstance(result, str)}")
+            print_to_log(f"🔍 EXECUTION RESULT DEBUG:")
+            print_to_log(f"   📝 Result type: {type(result)}")
+            print_to_log(f"   📝 Result value: {repr(result)}")
+            print_to_log(f"   📝 Is string: {isinstance(result, str)}")
             if isinstance(result, str):
-                print(f"   📝 Contains 'error': {'error' in result.lower()}")
+                print_to_log(f"   📝 Contains 'error': {'error' in result.lower()}")
             
             if isinstance(result, str) and "error" in result.lower():
-                print(f"🚨 DETECTED ERROR STRING - Setting execution_result to None")
+                print_to_log(f"🚨 DETECTED ERROR STRING - Setting execution_result to None")
                 state["execution_result"] = None  # Signal execution failure to Slack
                 state["error_message"] = result  # Store actual error for logging
                 state["response"] = f"❌ {result}"
@@ -1900,13 +1908,13 @@ else:
             return state
             
         except Exception as e:
-            print(f"💥 Code execution failed: {e}")
+            print_to_log(f"💥 Code execution failed: {e}")
             state["response"] = f"❌ Code execution failed: {str(e)}"
             return state
     
     elif routing_decision == "build_multi_model":
         # NEW: Multi-model comparison workflow
-        print("🔄 Starting multi-model comparison workflow...")
+        print_to_log("🔄 Starting multi-model comparison workflow...")
         
         if progress_callback:
             progress_callback("🔄 Processing your request...", "Multi-Model Training")
@@ -1962,14 +1970,15 @@ try:
     from sklearn.ensemble import RandomForestClassifier
     models['Random Forest'] = RandomForestClassifier()
 except ImportError:
-    print("Warning: sklearn RandomForest not available")
+    print_to_log("Warning: sklearn RandomForest not available")
 
 try:
     from lightgbm import LGBMClassifier
     # 🚨 FIX: Use verbosity=-1 to prevent verbose_eval errors
     models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
 except ImportError:
-    print("Warning: LightGBM not available")
+    print_to_log("Warning: LightGBM not available")
+    
 
 try:
     from xgboost import XGBClassifier
@@ -2072,7 +2081,7 @@ ENHANCED RESPONSE FORMATTING:
 Generate complete, executable Python code that implements this dynamic multi-model comparison system."""
 
         try:
-            print("🤔 Generating multi-model comparison code...")
+            print_to_log("🤔 Generating multi-model comparison code...")
             if progress_callback:
                 progress_callback("🤔 Generating code...", "Code Generation")
             
@@ -2083,10 +2092,10 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 return state
             
             state["code"] = code
-            print(f"📝 MULTI-MODEL CODE - Generated ({len(code)} chars)")
+            print_to_log(f"📝 MULTI-MODEL CODE - Generated ({len(code)} chars)")
             
             # Execute the multi-model comparison code
-            print("⚙️ Executing multi-model comparison...")
+            print_to_log("⚙️ Executing multi-model comparison...")
             
             # Get artifacts directory
             artifacts_dir = None
@@ -2098,7 +2107,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                     if not os.path.exists(artifacts_dir):
                         os.makedirs(artifacts_dir, exist_ok=True)
             except Exception as e:
-                print(f"⚠️ Failed to create artifacts directory: {e}")
+                print_to_log(f"⚠️ Failed to create artifacts directory: {e}")
             
             # ExecutionAgent will handle progress
             
@@ -2219,16 +2228,16 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                         state["artifacts"] = state.get("artifacts", {})
                         state["artifacts"]["files"] = plot_files
                         result["artifacts"] = {"files": plot_files}
-                        print(f"📊 {len(plot_files)} comparison plots ready for upload")
+                        print_to_log(f"📊 {len(plot_files)} comparison plots ready for upload")
             else:
                 state["response"] = f"❌ Multi-model comparison failed: {result if isinstance(result, str) else 'Unexpected result format'}"
             
             return state
             
         except Exception as e:
-            print(f"💥 Multi-model comparison failed: {e}")
+            print_to_log(f"💥 Multi-model comparison failed: {e}")
             import traceback
-            print(f"💥 Full traceback: {traceback.format_exc()}")
+            print_to_log(f"💥 Full traceback: {traceback.format_exc()}")
             state["response"] = f"❌ Multi-model comparison failed: {str(e)}"
             return state
         
@@ -2278,7 +2287,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
     
     # Generate code using LLM with thinking animation
     try:
-        print("🤔 Generating code...")
+        print_to_log("🤔 Generating code...")
         if progress_callback:
             progress_callback("🤔 Generating code...", "Code Generation")
         
@@ -2289,11 +2298,11 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
             return state
         
         state["code"] = code
-        print(f"📝 MODEL BUILDING AGENT - Generated code ({len(code)} chars)")
+        print_to_log(f"📝 MODEL BUILDING AGENT - Generated code ({len(code)} chars)")
         
         # Execute the code
-        print("⚙️ Executing generated code...")
-        print(f"🔍 About to call ExecutionAgent with {len(code)} chars of code")
+        print_to_log("⚙️ Executing generated code...")
+        print_to_log(f"🔍 About to call ExecutionAgent with {len(code)} chars of code")
         # Get artifacts directory for this thread
         artifacts_dir = None
         try:
@@ -2304,9 +2313,9 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                 artifacts_dir = os.path.join(thread_dir, "artifacts")
                 if not os.path.exists(artifacts_dir):
                     os.makedirs(artifacts_dir, exist_ok=True)
-                    print(f"📁 Created artifacts directory: {artifacts_dir}")
+                    print_to_log(f"📁 Created artifacts directory: {artifacts_dir}")
         except Exception as e:
-            print(f"⚠️ Failed to create artifacts directory: {e}")
+            print_to_log(f"⚠️ Failed to create artifacts directory: {e}")
             artifacts_dir = None
         
         try:
@@ -2331,7 +2340,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         except Exception as exec_error:
             # ExecutionAgent handles its own errors with tiered LLM
             # If we get here, it means ExecutionAgent gave up after all retries
-            print(f"🚨 ExecutionAgent failed after all retries: {exec_error}")
+            print_to_log(f"🚨 ExecutionAgent failed after all retries: {exec_error}")
             state["response"] = f"❌ Code execution failed: {str(exec_error)}"
             return state
         
@@ -2363,46 +2372,51 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
             if isinstance(result, dict) and 'plot_path' in result and result['plot_path']:
                 plot_path = result['plot_path']
                 if os.path.exists(plot_path):
-                    print(f"📊 Plot ready for upload: {plot_path}")
+                    # Store in both state and result for compatibility
+                    state["artifacts"] = state.get("artifacts", {})
+                    state["artifacts"]["files"] = [{"path": plot_path, "title": "Decision Tree Plot", "type": "plot"}]
+                    # Also add to result so wrapper can access it
+                    result["artifacts"] = {"files": [{"path": plot_path, "title": "Decision Tree Plot", "type": "plot"}]}
+                    print_to_log(f"📊 Plot ready for upload: {plot_path}")
                 else:
-                    print(f"⚠️ Plot file not found: {plot_path}")
+                    print_to_log(f"⚠️ Plot file not found: {plot_path}")
         
         # Update model state if new model was built
-        print(f"🔍 MODEL STATE TRACKING:")
-        print(f"🔍 routing_decision: {routing_decision}")
-        print(f"🔍 result type: {type(result)}")
-        print(f"🔍 result keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+        print_to_log(f"🔍 MODEL STATE TRACKING:")
+        print_to_log(f"🔍 routing_decision: {routing_decision}")
+        print_to_log(f"🔍 result type: {type(result)}")
+        print_to_log(f"🔍 result keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
         
         if routing_decision == "build_new_model" and isinstance(result, dict):
             # Check if model was successfully built (either has model_path or performance metrics)
             has_model_path = result.get('model_path')
             has_performance_metrics = any(key in result for key in ['accuracy', 'precision', 'model_performance', 'classification_report'])
             
-            print(f"🔍 has_model_path: {has_model_path}")
-            print(f"🔍 has_performance_metrics: {has_performance_metrics}")
-            print(f"🔍 Performance keys found: {[k for k in result.keys() if k in ['accuracy', 'precision', 'model_performance', 'classification_report']]}")
+            print_to_log(f"🔍 has_model_path: {has_model_path}")
+            print_to_log(f"🔍 has_performance_metrics: {has_performance_metrics}")
+            print_to_log(f"🔍 Performance keys found: {[k for k in result.keys() if k in ['accuracy', 'precision', 'model_performance', 'classification_report']]}")
             
             if has_model_path or has_performance_metrics:
                 if has_model_path:
                     state["model_path"] = result['model_path']
-                    print(f"✅ New model saved: {result['model_path']}")
+                    print_to_log(f"✅ New model saved: {result['model_path']}")
                     # Update global model states (preserve existing data)
                     if user_id not in global_model_states:
                         global_model_states[user_id] = {}
                     global_model_states[user_id]['model_path'] = result['model_path']
                     global_model_states[user_id]['last_result'] = result
                     # Preserve sample_data if it exists
-                    print(f"🔍 Updated global_model_states for {user_id}")
+                    print_to_log(f"🔍 Updated global_model_states for {user_id}")
                 else:
                     # Model was built but not saved - still mark as having a model
-                    print(f"✅ New model built successfully (performance metrics detected)")
+                    print_to_log(f"✅ New model built successfully (performance metrics detected)")
                 
                 state["has_existing_model"] = True
-                print(f"🔍 Set has_existing_model = True")
+                print_to_log(f"🔍 Set has_existing_model = True")
             else:
-                print(f"⚠️ Model not recognized - no model_path and no performance metrics")
+                print_to_log(f"⚠️ Model not recognized - no model_path and no performance metrics")
         else:
-            print(f"⚠️ Model state not updated - routing_decision={routing_decision}, result_is_dict={isinstance(result, dict)}")
+            print_to_log(f"⚠️ Model state not updated - routing_decision={routing_decision}, result_is_dict={isinstance(result, dict)}")
         
         state["messages"].append({
             "agent": "model_building", 
@@ -2413,9 +2427,9 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
         return state
         
     except Exception as e:
-        print(f"💥 Model building failed: {e}")
-        print(f"🔍 Error type: {type(e).__name__}")
-        print(f"🔍 Error occurred in model building agent, not ExecutionAgent")
+        print_to_log(f"💥 Model building failed: {e}")
+        print_to_log(f"🔍 Error type: {type(e).__name__}")
+        print_to_log(f"🔍 Error occurred in model building agent, not ExecutionAgent")
         state["response"] = f"❌ Model building failed: {str(e)}"
         return state
 
@@ -2660,8 +2674,8 @@ def detect_problem_type(y: pd.Series) -> str:
 def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> tuple[str, str, str]:
     """Generate model code using modular LLM prompts - returns (reply, code, system_prompt)"""
     
-    print(f"🔍 DEBUG - generate_model_code called with user_id: {user_id}")
-    print(f"🔍 DEBUG - global_model_states keys: {list(global_model_states.keys())}")
+    print_to_log(f"🔍 DEBUG - generate_model_code called with user_id: {user_id}")
+    print_to_log(f"🔍 DEBUG - global_model_states keys: {list(global_model_states.keys())}")
     
     # Get sample_data from global model states to detect problem type
     try:
@@ -2669,10 +2683,10 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         global_info = global_model_states.get(user_id, {})
         sample_data = global_info.get('sample_data')
         
-        print(f"🔍 DEBUG - global_info keys: {list(global_info.keys())}")
-        print(f"🔍 DEBUG - sample_data is None: {sample_data is None}")
+        print_to_log(f"🔍 DEBUG - global_info keys: {list(global_info.keys())}")
+        print_to_log(f"🔍 DEBUG - sample_data is None: {sample_data is None}")
         if sample_data is not None:
-            print(f"🔍 DEBUG - sample_data shape: {sample_data.shape}")
+            print_to_log(f"🔍 DEBUG - sample_data shape: {sample_data.shape}")
             
             # Analyze column types instead of listing all columns
             numeric_cols = sample_data.select_dtypes(include=['int64', 'float64', 'int32', 'float32']).columns
@@ -2680,14 +2694,14 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
             boolean_cols = sample_data.select_dtypes(include=['bool']).columns
             datetime_cols = sample_data.select_dtypes(include=['datetime64']).columns
             
-            print(f"🔍 DEBUG - Column analysis:")
-            print(f"   📊 Numeric features: {len(numeric_cols)}")
-            print(f"   🏷️  Categorical features: {len(categorical_cols)}")
+            print_to_log(f"🔍 DEBUG - Column analysis:")
+            print_to_log(f"   📊 Numeric features: {len(numeric_cols)}")
+            print_to_log(f"   🏷️  Categorical features: {len(categorical_cols)}")
             if len(boolean_cols) > 0:
-                print(f"   ✅ Boolean features: {len(boolean_cols)}")
+                print_to_log(f"   ✅ Boolean features: {len(boolean_cols)}")
             if len(datetime_cols) > 0:
-                print(f"   📅 DateTime features: {len(datetime_cols)}")
-            print(f"   🎯 Target column: {'target' if 'target' in sample_data.columns else 'Not found'}")
+                print_to_log(f"   📅 DateTime features: {len(datetime_cols)}")
+            print_to_log(f"   🎯 Target column: {'target' if 'target' in sample_data.columns else 'Not found'}")
         
         # If not found, we'll assume classification for now
         problem_type = "classification"
@@ -2696,17 +2710,17 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         if sample_data is not None and 'target' in sample_data.columns:
             y = sample_data["target"]
             problem_type = detect_problem_type(y)
-            print(f"🔍 PROBLEM TYPE DETECTION:")
-            print(f"   📊 Target column found: {y.nunique()} unique values")
-            print(f"   🎯 Detected problem type: {problem_type}")
+            print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
+            print_to_log(f"   📊 Target column found: {y.nunique()} unique values")
+            print_to_log(f"   🎯 Detected problem type: {problem_type}")
         else:
-            print(f"🔍 PROBLEM TYPE DETECTION:")
-            print(f"   ⚠️ No sample_data or target column found")
-            print(f"   🎯 Defaulting to: {problem_type}")
+            print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
+            print_to_log(f"   ⚠️ No sample_data or target column found")
+            print_to_log(f"   🎯 Defaulting to: {problem_type}")
     except Exception as e:
-        print(f"🔍 PROBLEM TYPE DETECTION:")
-        print(f"   ❌ Error during detection: {e}")
-        print(f"   🎯 Defaulting to: classification")
+        print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
+        print_to_log(f"   ❌ Error during detection: {e}")
+        print_to_log(f"   🎯 Defaulting to: classification")
         problem_type = "classification"
 
     # Use original_query if available to avoid false matches in system instructions
@@ -2716,11 +2730,13 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
     is_rank_ordering_request = any(
         k in detection_text for k in ['rank ordering','bucket','decile','segment']
     )
-    print(f"🔍 KEYWORD DETECTION:")
-    print(f"   📝 User prompt: '{prompt}'")
-    print(f"   📝 Detection text (original_query): '{original_query}'")
-    print(f"   🎯 Rank ordering keywords found: {is_rank_ordering_request}")
-    print(f"   🌳 Tree keywords found: {'tree' in detection_text}")
+    print_to_log(f"🔍 KEYWORD DETECTION:")
+    print_to_log(f"   📝 User prompt: '{prompt}'")
+    print_to_log(f"   🎯 Rank ordering keywords found: {is_rank_ordering_request}")
+    print_to_log(f"   🌳 Tree keywords found: {'tree' in prompt.lower()}")
+    
+    # Use original_query if available to avoid false matches in system instructions
+    detection_text = original_query.lower() if original_query else prompt.lower()
     
     # 🧠 SEMANTIC + KEYWORD HYBRID APPROACH for Decision Tree Detection
     from toolbox import UniversalPatternClassifier
@@ -2778,50 +2794,50 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         "existing tree", "current tree", "saved tree"
     ])
     
-    print(f"   🌳 Tree keywords found: {tree_in_prompt}")
-    print(f"   🌳 Wants tree plot: {wants_tree_plot}")
-    print(f"   🌳 Using existing tree: {using_existing_tree}")
-    print(f"   🌳 Is DecisionTree request: {is_decision_tree_request}")
+    print_to_log(f"   🌳 Tree keywords found: {tree_in_prompt}")
+    print_to_log(f"   🌳 Wants tree plot: {wants_tree_plot}")
+    print_to_log(f"   🌳 Using existing tree: {using_existing_tree}")
+    print_to_log(f"   🌳 Is DecisionTree request: {is_decision_tree_request}")
     
     # Enhanced debug logging for decision tree detection
-    print(f"   🔍 Detection method: {detection_method}")
-    print(f"   🧠 Semantic result: {pattern_result} (method: {method})")
-    print(f"   🎯 Semantic decision tree: {semantic_decision_tree}")
-    print(f"   ❌ Other tree model detected: {is_other_tree_model}")
-    print(f"   🔤 Keyword fallback: {keyword_decision_tree}")
-    print(f"   📝 Contextual tree: {contextual_tree}")
+    print_to_log(f"   🔍 Detection method: {detection_method}")
+    print_to_log(f"   🧠 Semantic result: {pattern_result} (method: {method})")
+    print_to_log(f"   🎯 Semantic decision tree: {semantic_decision_tree}")
+    print_to_log(f"   ❌ Other tree model detected: {is_other_tree_model}")
+    print_to_log(f"   🔤 Keyword fallback: {keyword_decision_tree}")
+    print_to_log(f"   📝 Contextual tree: {contextual_tree}")
     if original_query:
-        print(f"   📋 Detection text: '{original_query}'")
+        print_to_log(f"   📋 Detection text: '{original_query}'")
     else:
-        print(f"   ⚠️ Using modified prompt for detection")
+        print_to_log(f"   ⚠️ Using modified prompt for detection")
 
     # Build system prompt
-    print(f"🔍 PROMPT ASSEMBLY:")
+    print_to_log(f"🔍 PROMPT ASSEMBLY:")
     system_prompt = BASE_SYSTEM_PROMPT
-    print(f"   📋 BASE_SYSTEM_PROMPT added ({len(BASE_SYSTEM_PROMPT)} chars)")
+    print_to_log(f"   📋 BASE_SYSTEM_PROMPT added ({len(BASE_SYSTEM_PROMPT)} chars)")
     
     if problem_type == "regression":
         system_prompt += "\n" + REGRESSION_METRICS_PROMPT
-        print(f"   📊 REGRESSION_METRICS_PROMPT added ({len(REGRESSION_METRICS_PROMPT)} chars)")
+        print_to_log(f"   📊 REGRESSION_METRICS_PROMPT added ({len(REGRESSION_METRICS_PROMPT)} chars)")
     else:
         system_prompt += "\n" + CLASSIFICATION_METRICS_PROMPT
-        print(f"   📊 CLASSIFICATION_METRICS_PROMPT added ({len(CLASSIFICATION_METRICS_PROMPT)} chars)")
+        print_to_log(f"   📊 CLASSIFICATION_METRICS_PROMPT added ({len(CLASSIFICATION_METRICS_PROMPT)} chars)")
 
     if is_rank_ordering_request:
         system_prompt += "\n" + RANK_ORDERING_PROMPT
-        print(f"   📈 RANK_ORDERING_PROMPT added ({len(RANK_ORDERING_PROMPT)} chars)")
+        print_to_log(f"   📈 RANK_ORDERING_PROMPT added ({len(RANK_ORDERING_PROMPT)} chars)")
 
     if wants_tree_plot and not using_existing_tree and is_decision_tree_request:
         system_prompt += "\n" + DECISION_TREE_PLOT_PROMPT
-        print(f"   🌳 DECISION_TREE_PLOT_PROMPT added ({len(DECISION_TREE_PLOT_PROMPT)} chars)")
+        print_to_log(f"   🌳 DECISION_TREE_PLOT_PROMPT added ({len(DECISION_TREE_PLOT_PROMPT)} chars)")
     elif wants_tree_plot and not is_decision_tree_request:
-        print(f"   🚫 Skipping tree plot for non-DecisionTree model (LGBM/XGB/etc.)")
+        print_to_log(f"   🚫 Skipping tree plot for non-DecisionTree model (LGBM/XGB/etc.)")
     elif tree_in_prompt:
-        print(f"   🌳 Tree keyword detected but plot not needed (using existing tree for other purposes)")
+        print_to_log(f"   🌳 Tree keyword detected but plot not needed (using existing tree for other purposes)")
     
-    print(f"🔍 FINAL PROMPT STATS:")
-    print(f"   📏 Total system prompt length: {len(system_prompt)} characters")
-    print(f"   📝 User prompt length: {len(prompt)} characters")
+    print_to_log(f"🔍 FINAL PROMPT STATS:")
+    print_to_log(f"   📏 Total system prompt length: {len(system_prompt)} characters")
+    print_to_log(f"   📝 User prompt length: {len(prompt)} characters")
 
     # Call LLM with much smaller, focused prompt
     try:
@@ -2844,9 +2860,9 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         return reply, code, system_prompt
         
     except Exception as e:
-        print(f"🔥 Error in generate_model_code: {e}")
+        print_to_log(f"🔥 Error in generate_model_code: {e}")
         import traceback
-        print(f"🔥 Full traceback: {traceback.format_exc()}")
+        print_to_log(f"🔥 Full traceback: {traceback.format_exc()}")
         return f"LLM error: {e}", "", ""
 
 
@@ -3198,7 +3214,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             return "✅ Model operation completed successfully!"
             
     except Exception as e:
-        print(f"⚠️ Error formatting model response: {e}")
+        print_to_log(f"⚠️ Error formatting model response: {e}")
         return f"❌ Error formatting response: {str(e)}"
 
 # =============================================================================
@@ -3218,7 +3234,7 @@ class LangGraphModelAgent:
         """Ensure base user data directory exists"""
         if not os.path.exists(self.base_data_dir):
             os.makedirs(self.base_data_dir)
-            print(f"📁 Created base directory: {self.base_data_dir}")
+            print_to_log(f"📁 Created base directory: {self.base_data_dir}")
     
     def _get_thread_id(self, user_id: str) -> tuple[str, str]:
         """Extract user and thread from user_id format: user_threadts"""
@@ -3233,7 +3249,7 @@ class LangGraphModelAgent:
         thread_dir = os.path.join(self.base_data_dir, user, thread_ts)
         if not os.path.exists(thread_dir):
             os.makedirs(thread_dir, exist_ok=True)
-            print(f"📁 Created thread directory: {thread_dir}")
+            print_to_log(f"📁 Created thread directory: {thread_dir}")
         return thread_dir
     
     # Conversation history is now handled by the main pipeline - methods removed
@@ -3259,9 +3275,9 @@ class LangGraphModelAgent:
                 data = self.user_states[user_id]["data"]
                 data.to_pickle(data_file)
                 user, thread_ts = self._get_thread_id(user_id)
-                print(f"💾 Saved session data for user {user}, thread {thread_ts}: {data.shape}")
+                print_to_log(f"💾 Saved session data for user {user}, thread {thread_ts}: {data.shape}")
         except Exception as e:
-            print(f"⚠️ Failed to save session data for {user_id}: {e}")
+            print_to_log(f"⚠️ Failed to save session data for {user_id}: {e}")
     
     def _load_session_data(self, user_id: str) -> pd.DataFrame:
         """Load DataFrame data from disk for specific thread"""
@@ -3270,10 +3286,10 @@ class LangGraphModelAgent:
             if os.path.exists(data_file):
                 data = pd.read_pickle(data_file)
                 user, thread_ts = self._get_thread_id(user_id)
-                print(f"📊 Restored session data for user {user}, thread {thread_ts}: {data.shape}")
+                print_to_log(f"📊 Restored session data for user {user}, thread {thread_ts}: {data.shape}")
                 return data
         except Exception as e:
-            print(f"⚠️ Failed to load session data for {user_id}: {e}")
+            print_to_log(f"⚠️ Failed to load session data for {user_id}: {e}")
         return pd.DataFrame()  # Return empty DataFrame if loading fails
         
     def load_data(self, data: pd.DataFrame, user_id: str = "default_user"):
@@ -3307,13 +3323,13 @@ class LangGraphModelAgent:
         boolean_cols = data.select_dtypes(include=['bool']).columns
         datetime_cols = data.select_dtypes(include=['datetime64']).columns
         
-        print(f"📊 Data loaded for user {user_id}: {data.shape}")
-        print(f"   📊 Numeric features: {len(numeric_cols)}, 🏷️ Categorical: {len(categorical_cols)}")
+        print_to_log(f"📊 Data loaded for user {user_id}: {data.shape}")
+        print_to_log(f"   📊 Numeric features: {len(numeric_cols)}, 🏷️ Categorical: {len(categorical_cols)}")
         if len(boolean_cols) > 0:
-            print(f"   ✅ Boolean features: {len(boolean_cols)}")
+            print_to_log(f"   ✅ Boolean features: {len(boolean_cols)}")
         if len(datetime_cols) > 0:
-            print(f"   📅 DateTime features: {len(datetime_cols)}")
-        print(f"   🎯 Target column: {'target' if 'target' in data.columns else 'Not found'}")
+            print_to_log(f"   📅 DateTime features: {len(datetime_cols)}")
+        print_to_log(f"   🎯 Target column: {'target' if 'target' in data.columns else 'Not found'}")
         self._save_session_data(user_id)  # Also save the DataFrame data
     
         # Conversation history methods removed - handled by main pipeline
@@ -3321,9 +3337,9 @@ class LangGraphModelAgent:
     def process_query(self, query: str, user_id: str = "default_user", progress_callback=None) -> Dict[str, Any]:
         """Process a user query through the agent graph with optional progress updates"""
         
-        print(f"🔍 PROCESS_QUERY DEBUG - progress_callback received: {progress_callback}")
-        print(f"🔍 PROCESS_QUERY DEBUG - progress_callback type: {type(progress_callback)}")
-        print(f"🔍 PROCESS_QUERY DEBUG - progress_callback is None: {progress_callback is None}")
+        print_to_log(f"🔍 PROCESS_QUERY DEBUG - progress_callback received: {progress_callback}")
+        print_to_log(f"🔍 PROCESS_QUERY DEBUG - progress_callback type: {type(progress_callback)}")
+        print_to_log(f"🔍 PROCESS_QUERY DEBUG - progress_callback is None: {progress_callback is None}")
         
         # Initialize user state if not present and load conversation history
         if user_id not in self.user_states:
@@ -3362,17 +3378,17 @@ class LangGraphModelAgent:
                 artifacts_models.extend(glob.glob(os.path.join(artifacts_dir, "*model*.joblib")))
                 recent_models.extend(artifacts_models)
                 if artifacts_models:
-                    print(f"🔍 Found {len(artifacts_models)} model(s) in artifacts directory")
+                    print_to_log(f"🔍 Found {len(artifacts_models)} model(s) in artifacts directory")
             
             # Fallback to current directory
             root_models = glob.glob(f"model_{user_id}_*.joblib")
             recent_models.extend(root_models)
             if root_models:
-                print(f"🔍 Found {len(root_models)} model(s) in root directory")
+                print_to_log(f"🔍 Found {len(root_models)} model(s) in root directory")
             
             if recent_models:
                 user_model_path = max(recent_models, key=os.path.getctime)
-                print(f"🔍 Selected most recent model: {user_model_path}")
+                print_to_log(f"🔍 Selected most recent model: {user_model_path}")
                 # Update global state (preserve existing data)
                 if user_id not in global_model_states:
                     global_model_states[user_id] = {}
@@ -3397,8 +3413,8 @@ class LangGraphModelAgent:
                     global_model_states[user_id] = {}
                 global_model_states[user_id]['sample_data'] = restored_data
                 
-                print(f"🔄 Restored session data from disk: {data.shape}")
-                print(f"🔄 Updated global_model_states with restored sample_data")
+                print_to_log(f"🔄 Restored session data from disk: {data.shape}")
+                print_to_log(f"🔄 Updated global_model_states with restored sample_data")
         
         # Initialize state
         initial_state = AgentState(
@@ -3417,15 +3433,15 @@ class LangGraphModelAgent:
             progress_callback=progress_callback  # Add progress callback to state
         )
         
-        print(f"🚀 NEW QUERY [{datetime.now().strftime('%H:%M:%S')}] User: {user_id} | Query: {query[:60]}{'...' if len(query) > 60 else ''}")
+        print_to_log(f"🚀 NEW QUERY [{datetime.now().strftime('%H:%M:%S')}] User: {user_id} | Query: {query[:60]}{'...' if len(query) > 60 else ''}")
         
         # Send initial progress update
-        print(f"🔍 DEBUG - progress_callback is None: {progress_callback is None}")
+        print_to_log(f"🔍 DEBUG - progress_callback is None: {progress_callback is None}")
         if progress_callback:
-            print(f"📡 CALLING progress_callback (initial)")
-            # Removed "Starting query analysis..." progress message as requested
+            print_to_log(f"📡 CALLING progress_callback: Starting query analysis...")
+            progress_callback("Starting query analysis...", "Intent Classification")
         else:
-            print(f"⚠️ progress_callback is None - no progress updates will be sent")
+            print_to_log(f"⚠️ progress_callback is None - no progress updates will be sent")
         
         # Run the graph
         final_state = self.graph.invoke(initial_state)
@@ -3458,9 +3474,9 @@ class LangGraphModelAgent:
             global_model_states[user_id]['model_path'] = final_state["model_path"]
             global_model_states[user_id]['last_result'] = final_state.get("execution_result")
             # Preserve sample_data if it exists
-            print(f"🔄 Synced model state for {user_id}: {final_state['model_path']}")
+            print_to_log(f"🔄 Synced model state for {user_id}: {final_state['model_path']}")
         
-        print(f"✅ COMPLETED [{user_id}] Response ready")
+        print_to_log(f"✅ COMPLETED [{user_id}] Response ready")
         
         # Conversation history is now handled by the main pipeline
         # self._save_conversation_history(user_id)  # Disabled to avoid duplicates
@@ -3498,12 +3514,12 @@ if __name__ == "__main__":
     ]
     
     for query in test_queries:
-        print(f"\n{'='*80}")
-        print(f"Testing: {query}")
-        print('='*80)
+        print_to_log(f"\n{'='*80}")
+        print_to_log(f"Testing: {query}")
+        print_to_log('='*80)
         
         result = agent.process_query(query, "test_user")
         
-        print(f"Response: {result['response']}")
-        print(f"Intent: {result['intent']}")
-        print(f"Routing: {result['routing_decision']}")
+        print_to_log(f"Response: {result['response']}")
+        print_to_log(f"Intent: {result['intent']}")
+        print_to_log(f"Routing: {result['routing_decision']}")
