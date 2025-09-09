@@ -1,5 +1,5 @@
 """
-Utility functions for ModelAgentLite_LG
+Utility functions for ModelAgentLite_LG and Agent System
 """
 
 import re
@@ -7,6 +7,13 @@ import os
 import tempfile
 import time
 from typing import Dict, List, Optional, Tuple, Any
+
+# Import for username resolution
+try:
+    from toolbox import SlackManager
+    SLACK_MANAGER_AVAILABLE = True
+except ImportError:
+    SLACK_MANAGER_AVAILABLE = False
 
 def extract_first_code_block(text: str) -> str:
     """
@@ -371,4 +378,116 @@ def get_file_stats(data_frame) -> Dict[str, Any]:
             }
         stats['categorical_summary'] = categorical_stats
     
-    return stats 
+    return stats
+
+
+# =============================================================================
+# USERNAME UTILITIES
+# =============================================================================
+
+def get_username_for_user_id(user_id: str) -> str:
+    """
+    Get username for user_id, using Slack API if available.
+    This is the centralized function used across the entire project.
+    
+    Args:
+        user_id: The Slack user ID
+        
+    Returns:
+        str: Username suitable for folder naming
+    """
+    try:
+        if SLACK_MANAGER_AVAILABLE:
+            # Try to get the global slack_manager instance
+            from toolbox import slack_manager
+            if slack_manager:
+                return slack_manager.get_username_from_user_id(user_id)
+    except:
+        pass
+    
+    # Fallback to sanitized user_id
+    return sanitize_for_folder_name(user_id)
+
+
+def sanitize_for_folder_name(name: str) -> str:
+    """
+    Sanitize a name to be safe for use as a folder name.
+    Removes or replaces characters that are not allowed in folder names.
+    
+    Args:
+        name: The name to sanitize
+        
+    Returns:
+        str: Sanitized name safe for folder use
+    """
+    # Remove or replace problematic characters
+    sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
+    
+    # Remove leading/trailing dots and spaces
+    sanitized = sanitized.strip('. ')
+    
+    # Ensure it's not empty and not too long
+    if not sanitized:
+        sanitized = "unknown_user"
+    elif len(sanitized) > 50:
+        sanitized = sanitized[:50]
+    
+    return sanitized
+
+
+def get_username_session_id(session_id: str) -> str:
+    """
+    Convert session_id to use username instead of user_id.
+    Handles both user_id_thread_ts and single user_id formats.
+    
+    Args:
+        session_id: Session ID in format user_id_thread_ts or just user_id
+        
+    Returns:
+        str: Session ID with username instead of user_id
+    """
+    if "_" in session_id:
+        user_id_part, thread_ts = session_id.split("_", 1)
+        username = get_username_for_user_id(user_id_part)
+        return f"{username}_{thread_ts}"
+    else:
+        # Single user_id case
+        username = get_username_for_user_id(session_id)
+        return username
+
+
+def get_username_artifacts_dir(user_id: str, thread_id: str = None) -> str:
+    """
+    Get artifacts directory path using username instead of user_id.
+    
+    Args:
+        user_id: The Slack user ID
+        thread_id: Optional thread ID
+        
+    Returns:
+        str: Artifacts directory path with username
+    """
+    username = get_username_for_user_id(user_id)
+    if thread_id:
+        return f"user_data/{username}/{thread_id}/artifacts"
+    else:
+        return f"user_data/{username}/artifacts"
+
+
+def get_username_user_data_dir(user_id: str, thread_id: str = None) -> str:
+    """
+    Get user data directory path using username instead of user_id.
+    
+    Args:
+        user_id: The Slack user ID
+        thread_id: Optional thread ID
+        
+    Returns:
+        str: User data directory path with username
+    """
+    username = get_username_for_user_id(user_id)
+    if thread_id:
+        return f"user_data/{username}/{thread_id}"
+    else:
+        return f"user_data/{username}" 

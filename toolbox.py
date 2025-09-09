@@ -286,34 +286,8 @@ class ArtifactManager:
     
     def _get_username_session_id(self, session_id: str) -> str:
         """Convert session_id to use username instead of user_id"""
-        if "_" in session_id:
-            user_id_part, thread_ts = session_id.split("_", 1)
-            if self.slack_manager:
-                username = self.slack_manager.get_username_from_user_id(user_id_part)
-                return f"{username}_{thread_ts}"
-            else:
-                # Fallback to sanitized user_id
-                sanitized_user = self._sanitize_for_folder_name(user_id_part)
-                return f"{sanitized_user}_{thread_ts}"
-        else:
-            # Single user_id case
-            if self.slack_manager:
-                username = self.slack_manager.get_username_from_user_id(session_id)
-                return username
-            else:
-                return self._sanitize_for_folder_name(session_id)
-    
-    def _sanitize_for_folder_name(self, name: str) -> str:
-        """Sanitize a name to be safe for use as a folder name"""
-        import re
-        sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
-        sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
-        sanitized = sanitized.strip('. ')
-        if not sanitized:
-            sanitized = "unknown_user"
-        elif len(sanitized) > 50:
-            sanitized = sanitized[:50]
-        return sanitized
+        from agent_utils import get_username_session_id
+        return get_username_session_id(session_id)
     
     def get_session_dir(self, session_id: str) -> Path:
         """Get or create session directory using username"""
@@ -822,19 +796,8 @@ class UserDirectoryManager:
             return self.slack_manager.get_username_from_user_id(user_id)
         else:
             # Fallback to sanitized user_id
-            return self._sanitize_for_folder_name(user_id)
-    
-    def _sanitize_for_folder_name(self, name: str) -> str:
-        """Sanitize a name to be safe for use as a folder name"""
-        import re
-        sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
-        sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
-        sanitized = sanitized.strip('. ')
-        if not sanitized:
-            sanitized = "unknown_user"
-        elif len(sanitized) > 50:
-            sanitized = sanitized[:50]
-        return sanitized
+            from agent_utils import sanitize_for_folder_name
+            return sanitize_for_folder_name(user_id)
     
     def _get_user_thread_dir(self, user_id: str) -> str:
         """Get directory path for specific user thread using username"""

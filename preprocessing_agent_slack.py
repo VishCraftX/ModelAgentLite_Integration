@@ -5,6 +5,9 @@ try:
 except ImportError:
     pass
 
+# Import for username resolution
+from agent_utils import get_username_for_user_id
+
 
 """
 Slack-Compatible Sequential Preprocessing Agent
@@ -255,7 +258,8 @@ class SlackPreprocessingBot:
             response = requests.get(file_info["url_private_download"], headers=headers)
             
             # Save file temporarily
-            file_path = f"temp_{user_id}_{file_info['name']}"
+            username = get_username_for_user_id(user_id)
+            file_path = f"temp_{username}_{file_info['name']}"
             with open(file_path, 'wb') as f:
                 f.write(response.content)
             
@@ -655,7 +659,8 @@ Would you like to proceed to feature selection or download the processed dataset
     def _convert_to_sequential_state(self, session: PreprocessingSession) -> SequentialState:
         """Convert PreprocessingSession to SequentialState for compatibility"""
         # Create a temporary file for the current dataframe
-        temp_file = f"temp_sequential_{session.user_id}.csv"
+        username = get_username_for_user_id(session.user_id)
+        temp_file = f"temp_sequential_{username}.csv"
         session.current_df.to_csv(temp_file, index=False)
         
         return SequentialState(

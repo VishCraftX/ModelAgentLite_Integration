@@ -6,6 +6,9 @@ try:
 except ImportError:
     pass
 
+# Import for username resolution
+from agent_utils import get_username_for_user_id, get_username_artifacts_dir
+
 
 """
 LangGraph Implementation of ModelAgentLite
@@ -30,7 +33,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import tool
 
 # Import utilities
-from model_agent_utils import extract_first_code_block, safe_joblib_dump, safe_plt_savefig, diagnose_io_error
+from agent_utils import extract_first_code_block, safe_joblib_dump, safe_plt_savefig, diagnose_io_error
 
 # Import thread logging system
 from thread_logger import get_thread_logger
@@ -771,10 +774,11 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             # Try to find any recent model files in artifacts directory first, then root
             import glob
             search_paths = []
+            username = get_username_for_user_id(user_id)
             if artifacts_dir and os.path.exists(artifacts_dir):
-                search_paths.append(os.path.join(artifacts_dir, f"model_{user_id}_*.joblib"))
+                search_paths.append(os.path.join(artifacts_dir, f"model_{username}_*.joblib"))
                 search_paths.append(os.path.join(artifacts_dir, "*model*.joblib"))  # Any model file
-            search_paths.append(f"model_{user_id}_*.joblib")  # Fallback to root
+            search_paths.append(f"model_{username}_*.joblib")  # Fallback to root
             
             recent_models = []
             for pattern in search_paths:
@@ -868,7 +872,8 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
                 if model_objects:
                     save_key, model_obj = model_objects[0]
                     try:
-                        model_filename = f"model_{user_id}_{int(time.time())}.joblib"
+                        username = get_username_for_user_id(user_id)
+                        model_filename = f"model_{username}_{int(time.time())}.joblib"
                         print_to_log(f"🔍 Attempting to save model to: {model_filename}")
                         # Use the thread-safe wrapper that saves to artifacts directory
                         model_path = env["safe_joblib_dump"](model_obj, model_filename)
@@ -1582,15 +1587,20 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     candidates.append(maybe_path)
                 
                 # 2) Search in artifacts directory first, then root
-                artifacts_dir = f"user_data/{user_id.split('_')[0]}/{user_id.split('_')[1]}/artifacts" if '_' in user_id else None
+                if '_' in user_id:
+                    user_id_part, thread_id = user_id.split('_', 1)
+                    artifacts_dir = get_username_artifacts_dir(user_id_part, thread_id)
+                else:
+                    artifacts_dir = None
                 search_locations = []
                 if artifacts_dir and os.path.exists(artifacts_dir):
                     search_locations.append(artifacts_dir)
                 search_locations.append(".")  # Current directory as fallback
                 
+                username = get_username_for_user_id(user_id)
                 for location in search_locations:
                     # Named by generator
-                    candidates.extend(glob.glob(os.path.join(location, f"model_{user_id}_*.joblib")))
+                    candidates.extend(glob.glob(os.path.join(location, f"model_{username}_*.joblib")))
                     # Common fallback names
                     candidates.extend(glob.glob(os.path.join(location, "*model*.joblib")))
                     candidates.extend(glob.glob(os.path.join(location, "*.joblib")))
@@ -3372,16 +3382,22 @@ class LangGraphModelAgent:
             recent_models = []
             
             # First, search in artifacts directory
-            artifacts_dir = f"user_data/{user_id.split('_')[0]}/{user_id.split('_')[1]}/artifacts" if '_' in user_id else None
+            if '_' in user_id:
+                user_id_part, thread_id = user_id.split('_', 1)
+                artifacts_dir = get_username_artifacts_dir(user_id_part, thread_id)
+                username = get_username_for_user_id(user_id_part)
+            else:
+                username = get_username_for_user_id(user_id)
+                artifacts_dir = None
             if artifacts_dir and os.path.exists(artifacts_dir):
-                artifacts_models = glob.glob(os.path.join(artifacts_dir, f"model_{user_id}_*.joblib"))
+                artifacts_models = glob.glob(os.path.join(artifacts_dir, f"model_{username}_*.joblib"))
                 artifacts_models.extend(glob.glob(os.path.join(artifacts_dir, "*model*.joblib")))
                 recent_models.extend(artifacts_models)
                 if artifacts_models:
                     print_to_log(f"🔍 Found {len(artifacts_models)} model(s) in artifacts directory")
             
             # Fallback to current directory
-            root_models = glob.glob(f"model_{user_id}_*.joblib")
+            root_models = glob.glob(f"model_{username}_*.joblib")
             recent_models.extend(root_models)
             if root_models:
                 print_to_log(f"🔍 Found {len(root_models)} model(s) in root directory")

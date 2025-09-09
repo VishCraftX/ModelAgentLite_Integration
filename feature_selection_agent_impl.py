@@ -5,6 +5,11 @@ try:
     import master_log_handler
 except ImportError:
     pass
+
+# Import for username resolution
+from agent_utils import get_username_for_user_id
+
+
 """
 NEW AGENTIC FEATURE SELECTION BOT - Clean Architecture
 Designed for reliable state management and proper Slack integration
@@ -1205,7 +1210,8 @@ class AgenticFeatureSelectionBot:
             response = requests.get(file_info["url_private_download"], headers=headers)
             
             # Save file temporarily
-            file_path = f"temp_{user_id}_{file_info['name']}"
+            username = get_username_for_user_id(user_id)
+            file_path = f"temp_{username}_{file_info['name']}"
             with open(file_path, 'wb') as f:
                 f.write(response.content)
             

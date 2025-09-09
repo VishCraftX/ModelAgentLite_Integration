@@ -11,17 +11,24 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from pathlib import Path
 
+# Import for username resolution
+from agent_utils import get_username_for_user_id
+
 
 class ThreadLogger:
-    """Thread-specific logger that saves to user's thread folder"""
+    """Thread-specific logger that saves to user's thread folder using usernames"""
     
-    def __init__(self, user_id: str, thread_id: str, base_dir: str = "user_data"):
+    def __init__(self, user_id: str, thread_id: str, base_dir: str = "user_data", slack_manager: Optional[SlackManager] = None):
         self.user_id = user_id
         self.thread_id = thread_id
         self.base_dir = base_dir
+        self.slack_manager = slack_manager
         
-        # Create user thread directory
-        self.thread_dir = os.path.join(base_dir, user_id, thread_id)
+        # Get username for directory naming
+        self.username = get_username_for_user_id(user_id)
+        
+        # Create user thread directory using username
+        self.thread_dir = os.path.join(base_dir, self.username, thread_id)
         os.makedirs(self.thread_dir, exist_ok=True)
         
         # Log file paths
@@ -36,9 +43,11 @@ class ThreadLogger:
         # Log session start
         self.log_session_event("session_start", {
             "user_id": user_id,
+            "username": self.username,
             "thread_id": thread_id,
             "timestamp": datetime.now().isoformat()
         })
+    
     
     def _setup_loggers(self):
         """Setup thread-specific loggers"""
@@ -246,18 +255,23 @@ class ThreadLoggerManager:
     
     _instance = None
     _loggers: Dict[str, ThreadLogger] = {}
+    _slack_manager: Optional[SlackManager] = None
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ThreadLoggerManager, cls).__new__(cls)
         return cls._instance
     
+    def set_slack_manager(self, slack_manager: SlackManager):
+        """Set the slack manager for username resolution"""
+        self._slack_manager = slack_manager
+    
     def get_logger(self, user_id: str, thread_id: str) -> ThreadLogger:
         """Get or create thread logger"""
         logger_key = f"{user_id}_{thread_id}"
         
         if logger_key not in self._loggers:
-            self._loggers[logger_key] = ThreadLogger(user_id, thread_id)
+            self._loggers[logger_key] = ThreadLogger(user_id, thread_id, slack_manager=self._slack_manager)
         
         return self._loggers[logger_key]
     

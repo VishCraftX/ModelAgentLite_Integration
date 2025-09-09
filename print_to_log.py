@@ -8,6 +8,9 @@ import os
 from datetime import datetime
 from typing import Any
 
+# Import for username resolution
+from agent_utils import get_username_for_user_id
+
 
 def print_to_log(*args, **kwargs):
     """
@@ -34,8 +37,10 @@ def print_to_log(*args, **kwargs):
                 user_id, thread_id = get_session_context()
                 # If we got valid session context, skip stack inspection
                 if user_id != "system" or thread_id != "general":
+                    # Get username for directory naming
+                    username = get_username_for_user_id(user_id)
                     # Create thread directory and log
-                    thread_dir = os.path.join("user_data", str(user_id), str(thread_id))
+                    thread_dir = os.path.join("user_data", username, str(thread_id))
                     os.makedirs(thread_dir, exist_ok=True)
                     
                     log_file = os.path.join(thread_dir, "master.log")
@@ -88,8 +93,10 @@ def print_to_log(*args, **kwargs):
             except:
                 continue
         
+        # Get username for directory naming
+        username = get_username_for_user_id(user_id)
         # Create thread directory
-        thread_dir = os.path.join("user_data", str(user_id), str(thread_id))
+        thread_dir = os.path.join("user_data", username, str(thread_id))
         os.makedirs(thread_dir, exist_ok=True)
         
         # Log to master.log

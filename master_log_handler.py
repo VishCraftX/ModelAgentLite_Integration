@@ -10,6 +10,9 @@ import inspect
 from datetime import datetime
 from typing import Optional
 
+# Import for username resolution
+from agent_utils import get_username_for_user_id
+
 
 class MasterLogHandler(logging.Handler):
     """Custom logging handler that writes to master.log in thread directories"""
@@ -35,8 +38,10 @@ class MasterLogHandler(logging.Handler):
                     user_id, thread_id = get_session_context()
                     # If we got valid context, skip stack inspection
                     if user_id != "system" or thread_id != "general":
+                        # Get username for directory naming
+                        username = get_username_for_user_id(user_id)
                         # Create thread directory and write log
-                        thread_dir = os.path.join("user_data", str(user_id), str(thread_id))
+                        thread_dir = os.path.join("user_data", username, str(thread_id))
                         os.makedirs(thread_dir, exist_ok=True)
                         
                         log_file = os.path.join(thread_dir, "master.log")
@@ -101,8 +106,10 @@ class MasterLogHandler(logging.Handler):
                 except:
                     continue
             
+            # Get username for directory naming
+            username = get_username_for_user_id(user_id)
             # Create thread directory
-            thread_dir = os.path.join("user_data", str(user_id), str(thread_id))
+            thread_dir = os.path.join("user_data", username, str(thread_id))
             os.makedirs(thread_dir, exist_ok=True)
             
             # Write to master.log
