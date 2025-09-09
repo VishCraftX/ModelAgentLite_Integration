@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from print_to_log import print_to_log
 """
 Global Toolbox for Multi-Agent ML System
 Contains shared utilities used by all agents: SlackManager, ArtifactManager, 
 ProgressTracker, and ExecutionAgent with fallback mechanism
 """
 
+from print_to_log import print_to_log
 import os
 import json
 import time
@@ -49,7 +49,7 @@ except ImportError:
 # LLM for fallback mechanism (optional)
 try:
     import ollama
-    # from langchain_openai import ChatOpenAI  # Removed - using Qwen models only
+    # from langchain_openai import ChatOpenAI  # Removed - using Qwen models only.e
     from langchain_community.chat_models import ChatOllama
     from langchain_core.messages import HumanMessage, SystemMessage
     LLM_AVAILABLE = True
@@ -78,32 +78,99 @@ class SlackManager:
             self.client = None
         self.session_threads = {}  # Maps session_id to thread_ts
         self.session_channels = {}  # Maps session_id to channel_id
+        self.user_cache = {}  # Maps user_id to username for folder naming
+    
+    def get_username_from_user_id(self, user_id: str) -> str:
+        """
+        Fetch username from Slack API and cache it for future use.
+        Returns a sanitized username suitable for folder names.
+        """
+        # Check cache first
+        if user_id in self.user_cache:
+            return self.user_cache[user_id]
+        
+        # If no Slack client available, return sanitized user_id
+        if not self.client:
+            sanitized_name = self._sanitize_for_folder_name(user_id)
+            self.user_cache[user_id] = sanitized_name
+            return sanitized_name
+        
+        try:
+            # Fetch user info from Slack API
+            response = self.client.users_info(user=user_id)
+            user_info = response.get('user', {})
+            
+            # Try to get display name, real name, or username in that order
+            username = (
+                user_info.get('profile', {}).get('display_name') or
+                user_info.get('profile', {}).get('real_name') or
+                user_info.get('name') or
+                user_id
+            )
+            
+            # Sanitize the username for folder naming
+            sanitized_name = self._sanitize_for_folder_name(username)
+            
+            # Cache the result
+            self.user_cache[user_id] = sanitized_name
+            
+            print_to_log(f"👤 Fetched username for {user_id}: {sanitized_name}")
+            return sanitized_name
+            
+        except Exception as e:
+            print_to_log(f"⚠️ Failed to fetch username for {user_id}: {e}")
+            # Fallback to sanitized user_id
+            sanitized_name = self._sanitize_for_folder_name(user_id)
+            self.user_cache[user_id] = sanitized_name
+            return sanitized_name
+    
+    def _sanitize_for_folder_name(self, name: str) -> str:
+        """
+        Sanitize a name to be safe for use as a folder name.
+        Removes or replaces characters that are not allowed in folder names.
+        """
+        import re
+        
+        # Remove or replace problematic characters
+        sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+        sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
+        
+        # Remove leading/trailing dots and spaces
+        sanitized = sanitized.strip('. ')
+        
+        # Ensure it's not empty and not too long
+        if not sanitized:
+            sanitized = "unknown_user"
+        elif len(sanitized) > 50:
+            sanitized = sanitized[:50]
+        
+        return sanitized
     
     def register_session(self, session_id: str, channel: str, thread_ts: str = None):
         """Register a new session with channel and thread information"""
-        print_to_log(f"🔍 DEBUG: register_session called:")
-        print_to_log(f"  Session ID: {session_id}")
-        print_to_log(f"  Channel: {channel}")
-        print_to_log(f"  Thread TS: {thread_ts}")
-        print_to_log(f"  Before registration - sessions: {self.session_channels}")
-        print_to_log(f"  Before registration - threads: {self.session_threads}")
+        print(f"🔍 DEBUG: register_session called:")
+        print(f"  Session ID: {session_id}")
+        print(f"  Channel: {channel}")
+        print(f"  Thread TS: {thread_ts}")
+        print(f"  Before registration - sessions: {self.session_channels}")
+        print(f"  Before registration - threads: {self.session_threads}")
         
-        print_to_log(f"🔍 DEBUG SlackManager.register_session:")
-        print_to_log(f"  Before: session_channels = {self.session_channels}")
+        print(f"🔍 DEBUG SlackManager.register_session:")
+        print(f"  Before: session_channels = {self.session_channels}")
         self.session_channels[session_id] = channel
         if thread_ts:
             self.session_threads[session_id] = thread_ts
-        print_to_log(f"  After: session_channels = {self.session_channels}")
-        print_to_log(f"  Registered session {session_id} with channel {channel}")
+        print(f"  After: session_channels = {self.session_channels}")
+        print(f"  Registered session {session_id} with channel {channel}")
             
-        print_to_log(f"🔍 DEBUG: After registration:")
-        print_to_log(f"  Sessions: {self.session_channels}")
-        print_to_log(f"  Threads: {self.session_threads}")
+        print(f"🔍 DEBUG: After registration:")
+        print(f"  Sessions: {self.session_channels}")
+        print(f"  Threads: {self.session_threads}")
     
     def send_message(self, session_id: str, text: str, channel: str = None, thread_ts: str = None):
         """Send message to specific session"""
         if not self.client:
-            print_to_log(f"[Slack:{session_id}] {text}")
+            print(f"[Slack:{session_id}] {text}")
             return
         
         try:
@@ -113,31 +180,31 @@ class SlackManager:
             if not thread_ts:
                 thread_ts = self.session_threads.get(session_id)
             
-            print_to_log(f"🔍 DEBUG SlackManager.send_message:")
-            print_to_log(f"  Session ID: {session_id}")
-            print_to_log(f"  Channel: {channel}")
-            print_to_log(f"  Thread TS: {thread_ts}")
-            print_to_log(f"  Available sessions: {list(self.session_channels.keys())}")
-            print_to_log(f"  Session channels: {self.session_channels}")
+            print(f"🔍 DEBUG SlackManager.send_message:")
+            print(f"  Session ID: {session_id}")
+            print(f"  Channel: {channel}")
+            print(f"  Thread TS: {thread_ts}")
+            print(f"  Available sessions: {list(self.session_channels.keys())}")
+            print(f"  Session channels: {self.session_channels}")
             
             # If still no channel, extract from session_id (format: user_threadts)
             if not channel and "_" in session_id:
                 # This is a fallback - ideally channel should be set properly
-                print_to_log(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
-                print_to_log(f"🔍 DEBUG: Available sessions: {self.session_channels}")
-                print_to_log(f"[Slack:{session_id}] {text}")
+                print(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
+                print(f"🔍 DEBUG: Available sessions: {self.session_channels}")
+                print(f"[Slack:{session_id}] {text}")
                 return
             
             if not channel:
-                print_to_log(f"🔍 DEBUG SlackManager.send_message - SESSION NOT FOUND:")
-                print_to_log(f"  Session ID: {session_id}")
-                print_to_log(f"  Available sessions: {list(self.session_channels.keys())}")
-                print_to_log(f"  Session channels: {self.session_channels}")
-                print_to_log(f"❌ No channel available for session {session_id} - message will be logged to console only")
-                print_to_log(f"[Slack:{session_id}] {text}")
+                print(f"🔍 DEBUG SlackManager.send_message - SESSION NOT FOUND:")
+                print(f"  Session ID: {session_id}")
+                print(f"  Available sessions: {list(self.session_channels.keys())}")
+                print(f"  Session channels: {self.session_channels}")
+                print(f"❌ No channel available for session {session_id} - message will be logged to console only")
+                print(f"[Slack:{session_id}] {text}")
                 return
             
-            print_to_log(f"🚀 Attempting to send Slack message to channel {channel}")
+            print(f"🚀 Attempting to send Slack message to channel {channel}")
             response = self.client.chat_postMessage(
                 channel=channel,
                 text=text,
@@ -151,9 +218,9 @@ class SlackManager:
                 
         except Exception as e:
             if SLACK_AVAILABLE and "SlackApiError" in str(type(e)):
-                print_to_log(f"Slack API error for session {session_id}: {e}")
+                print(f"Slack API error for session {session_id}: {e}")
             else:
-                print_to_log(f"Error sending Slack message for session {session_id}: {e}")
+                print(f"Error sending Slack message for session {session_id}: {e}")
     
     def send_progress_update(self, session_id: str, stage: str, message: str):
         """Send formatted progress update"""
@@ -181,7 +248,7 @@ class SlackManager:
             thread_ts = self.session_threads.get(session_id)
             
             if not channel:
-                print_to_log(f"No channel found for session {session_id}")
+                print(f"No channel found for session {session_id}")
                 return
             
             with open(file_path, 'rb') as file_content:
@@ -195,30 +262,63 @@ class SlackManager:
                 )
                 
             if response["ok"]:
-                print_to_log(f"Successfully uploaded {file_path} to session {session_id}")
+                print(f"Successfully uploaded {file_path} to session {session_id}")
             else:
-                print_to_log(f"Failed to upload {file_path}: {response.get('error')}")
+                print(f"Failed to upload {file_path}: {response.get('error')}")
                 
         except Exception as e:
-            print_to_log(f"Error uploading file to Slack: {e}")
+            print(f"Error uploading file to Slack: {e}")
 
 
 class ArtifactManager:
     """
     Manages artifacts (files, plots, models) with session isolation
-    Each session has its own folder structure
+    Each session has its own folder structure using usernames
     """
     
-    def __init__(self, base_dir: str = None):
+    def __init__(self, base_dir: str = None, slack_manager: SlackManager = None):
         if base_dir is None:
             base_dir = os.path.join(tempfile.gettempdir(), "mal_integration_artifacts")
         
         self.base_dir = Path(base_dir)
+        self.slack_manager = slack_manager
         self.base_dir.mkdir(exist_ok=True)
     
+    def _get_username_session_id(self, session_id: str) -> str:
+        """Convert session_id to use username instead of user_id"""
+        if "_" in session_id:
+            user_id_part, thread_ts = session_id.split("_", 1)
+            if self.slack_manager:
+                username = self.slack_manager.get_username_from_user_id(user_id_part)
+                return f"{username}_{thread_ts}"
+            else:
+                # Fallback to sanitized user_id
+                sanitized_user = self._sanitize_for_folder_name(user_id_part)
+                return f"{sanitized_user}_{thread_ts}"
+        else:
+            # Single user_id case
+            if self.slack_manager:
+                username = self.slack_manager.get_username_from_user_id(session_id)
+                return username
+            else:
+                return self._sanitize_for_folder_name(session_id)
+    
+    def _sanitize_for_folder_name(self, name: str) -> str:
+        """Sanitize a name to be safe for use as a folder name"""
+        import re
+        sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+        sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
+        sanitized = sanitized.strip('. ')
+        if not sanitized:
+            sanitized = "unknown_user"
+        elif len(sanitized) > 50:
+            sanitized = sanitized[:50]
+        return sanitized
+    
     def get_session_dir(self, session_id: str) -> Path:
-        """Get or create session directory"""
-        session_dir = self.base_dir / session_id
+        """Get or create session directory using username"""
+        username_session_id = self._get_username_session_id(session_id)
+        session_dir = self.base_dir / username_session_id
         session_dir.mkdir(exist_ok=True)
         return session_dir
     
@@ -244,11 +344,11 @@ class ArtifactManager:
                 with open(file_path, 'w') as f:
                     f.write(str(content))
             
-            print_to_log(f"Saved artifact for {session_id}: {filename}")
+            print(f"Saved artifact for {session_id}: {filename}")
             return str(file_path)
             
         except Exception as e:
-            print_to_log(f"Error saving artifact {filename} for session {session_id}: {e}")
+            print(f"Error saving artifact {filename} for session {session_id}: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -278,7 +378,7 @@ class ArtifactManager:
                     return f.read()
                     
         except Exception as e:
-            print_to_log(f"Error loading artifact {filename} for session {session_id}: {e}")
+            print(f"Error loading artifact {filename} for session {session_id}: {e}")
             return None
     
     def list_artifacts(self, session_id: str) -> List[str]:
@@ -295,7 +395,7 @@ class ArtifactManager:
         session_dir = self.get_session_dir(session_id)
         if session_dir.exists():
             shutil.rmtree(session_dir)
-            print_to_log(f"Cleaned up artifacts for session {session_id}")
+            print(f"Cleaned up artifacts for session {session_id}")
 
 
 class ProgressTracker:
@@ -376,7 +476,7 @@ class ProgressTracker:
         # Console logging (always show for debugging)
         timestamp = datetime.now().strftime("%H:%M:%S")
         agent_info = f" [{state.current_agent}]" if state.current_agent else ""
-        print_to_log(f"[{timestamp}]{agent_info} {message}")
+        print(f"[{timestamp}]{agent_info} {message}")
         
         # Send to Slack with better user experience
         if send_to_slack and should_send and self.slack_manager and state.chat_session:
@@ -447,7 +547,7 @@ class UniversalPatternClassifier:
         """
         # Get base thresholds for use case
         if use_case not in self.THRESHOLD_PROFILES:
-            print_to_log(f"⚠️ Unknown use case '{use_case}', using 'intent_classification'")
+            print(f"⚠️ Unknown use case '{use_case}', using 'intent_classification'")
             use_case = "intent_classification"
             
         base_thresholds = self.THRESHOLD_PROFILES[use_case]
@@ -463,7 +563,7 @@ class UniversalPatternClassifier:
         semantic_threshold = max(0.2, min(0.7, semantic_threshold))
         confidence_threshold = max(0.03, min(0.2, confidence_threshold))
         
-        print_to_log(f"🎯 Pattern classification for {use_case}: semantic={semantic_threshold:.3f}, confidence={confidence_threshold:.3f}")
+        print(f"🎯 Pattern classification for {use_case}: semantic={semantic_threshold:.3f}, confidence={confidence_threshold:.3f}")
         
         # Step 1: Semantic Classification
         if EMBEDDINGS_AVAILABLE:
@@ -471,17 +571,17 @@ class UniversalPatternClassifier:
                 query, pattern_definitions, semantic_threshold, confidence_threshold
             )
             if semantic_result:
-                print_to_log(f"🧠 Semantic pattern classification used (use_case: {use_case})")
+                print(f"🧠 Semantic pattern classification used (use_case: {use_case})")
                 return semantic_result, "semantic"
         
         # Step 2: LLM Classification  
         llm_result = self._llm_classify(query, pattern_definitions, use_case)
         if llm_result:
-            print_to_log(f"🤖 LLM pattern classification used (use_case: {use_case})")
+            print(f"🤖 LLM pattern classification used (use_case: {use_case})")
             return llm_result, "llm"
             
         # Step 3: Keyword Fallback
-        print_to_log(f"⚡ Keyword pattern fallback used (use_case: {use_case})")
+        print(f"⚡ Keyword pattern fallback used (use_case: {use_case})")
         keyword_result = self._keyword_classify(query, pattern_definitions)
         return keyword_result, "keyword"
     
@@ -506,7 +606,7 @@ class UniversalPatternClassifier:
             except Exception as e:
                 continue
                 
-        print_to_log(f"⚠️ Failed to get embedding for text: {text[:50]}...")
+        print(f"⚠️ Failed to get embedding for text: {text[:50]}...")
         return None
     
     def _semantic_classify(self, query: str, pattern_definitions: dict, 
@@ -534,17 +634,17 @@ class UniversalPatternClassifier:
             
             score_diff = best_score - second_score
             
-            print_to_log(f"[Semantic] Best: {best_pattern} (score: {best_score:.3f}, diff: {score_diff:.3f})")
+            print(f"[Semantic] Best: {best_pattern} (score: {best_score:.3f}, diff: {score_diff:.3f})")
             
             # Check both thresholds
             if best_score > semantic_threshold and score_diff > confidence_threshold:
                 return best_pattern
                 
-            print_to_log(f"[Semantic] Below threshold - score: {best_score:.3f} < {semantic_threshold:.3f} or diff: {score_diff:.3f} < {confidence_threshold:.3f}")
+            print(f"[Semantic] Below threshold - score: {best_score:.3f} < {semantic_threshold:.3f} or diff: {score_diff:.3f} < {confidence_threshold:.3f}")
             return None
             
         except Exception as e:
-            print_to_log(f"[Semantic] Error in semantic classification: {e}")
+            print(f"[Semantic] Error in semantic classification: {e}")
             return None
     
     def _llm_classify(self, query: str, pattern_definitions: dict, use_case: str) -> Optional[str]:
@@ -624,12 +724,12 @@ Respond with ONLY the pattern name that best matches the query. If none match we
                         if pattern_name.lower() == result:
                             return pattern_name
             except Exception as e:
-                print_to_log(f"[LLM] Ollama error: {e}")
+                print(f"[LLM] Ollama error: {e}")
                         
             return None
             
         except Exception as e:
-            print_to_log(f"[LLM] Error in LLM classification: {e}")
+            print(f"[LLM] Error in LLM classification: {e}")
             return None
     
     def _keyword_classify(self, query: str, pattern_definitions: dict) -> str:
@@ -696,17 +796,18 @@ Respond with ONLY the pattern name that best matches the query. If none match we
 
 
 class UserDirectoryManager:
-    """Manages user directory structure like in ModelBuildingAgent"""
+    """Manages user directory structure using usernames instead of user IDs"""
     
-    def __init__(self, base_data_dir: str = "user_data"):
+    def __init__(self, base_data_dir: str = "user_data", slack_manager: SlackManager = None):
         self.base_data_dir = base_data_dir
+        self.slack_manager = slack_manager
         self._ensure_base_directory()
     
     def _ensure_base_directory(self):
         """Ensure base user data directory exists"""
         if not os.path.exists(self.base_data_dir):
             os.makedirs(self.base_data_dir)
-            print_to_log(f"📁 Created base directory: {self.base_data_dir}")
+            print(f"📁 Created base directory: {self.base_data_dir}")
     
     def _get_thread_id(self, user_id: str) -> tuple[str, str]:
         """Extract user and thread from user_id format: user_threadts"""
@@ -715,17 +816,38 @@ class UserDirectoryManager:
             return parts[0], parts[1]  # user, thread_ts
         return user_id, "main"  # fallback to main thread
     
+    def _get_username_for_user_id(self, user_id: str) -> str:
+        """Get username for user_id, using Slack API if available"""
+        if self.slack_manager:
+            return self.slack_manager.get_username_from_user_id(user_id)
+        else:
+            # Fallback to sanitized user_id
+            return self._sanitize_for_folder_name(user_id)
+    
+    def _sanitize_for_folder_name(self, name: str) -> str:
+        """Sanitize a name to be safe for use as a folder name"""
+        import re
+        sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+        sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
+        sanitized = sanitized.strip('. ')
+        if not sanitized:
+            sanitized = "unknown_user"
+        elif len(sanitized) > 50:
+            sanitized = sanitized[:50]
+        return sanitized
+    
     def _get_user_thread_dir(self, user_id: str) -> str:
-        """Get directory path for specific user thread"""
-        user, thread_ts = self._get_thread_id(user_id)
-        return os.path.join(self.base_data_dir, user, thread_ts)
+        """Get directory path for specific user thread using username"""
+        user_id_part, thread_ts = self._get_thread_id(user_id)
+        username = self._get_username_for_user_id(user_id_part)
+        return os.path.join(self.base_data_dir, username, thread_ts)
     
     def ensure_user_directory(self, user_id: str) -> str:
         """Ensure user thread directory exists and return path"""
         user_dir = self._get_user_thread_dir(user_id)
         if not os.path.exists(user_dir):
             os.makedirs(user_dir)
-            print_to_log(f"📁 Created user directory: {user_dir}")
+            print(f"📁 Created user directory: {user_dir}")
         return user_dir
     
     def get_artifacts_dir(self, user_id: str) -> str:
@@ -765,7 +887,7 @@ class UserDirectoryManager:
                 # Remove entire user directory
                 import shutil
                 shutil.rmtree(user_dir)
-                print_to_log(f"🗑️ Cleaned up user directory: {user_dir}")
+                print(f"🗑️ Cleaned up user directory: {user_dir}")
 
 
 class ExecutionAgent:
@@ -825,8 +947,8 @@ class ExecutionAgent:
             error_msg = str(e)
             error_traceback = traceback.format_exc()
             
-            print_to_log(f"[ExecutionAgent] Code execution failed: {error_msg}")
-            print_to_log(f"[ExecutionAgent] Traceback: {error_traceback}")
+            print(f"[ExecutionAgent] Code execution failed: {error_msg}")
+            print(f"[ExecutionAgent] Traceback: {error_traceback}")
             
             # Store error
             state.last_error = error_msg
@@ -844,19 +966,19 @@ class ExecutionAgent:
         Use LLM to fix code errors with tiered fallback approach
         """
         if not LLM_AVAILABLE:
-            print_to_log(f"[ExecutionAgent] LLM not available for fallback, skipping fix")
+            print(f"[ExecutionAgent] LLM not available for fallback, skipping fix")
             state.last_error = f"Code execution failed: {error} (LLM fallback not available)"
             return state
             
         if attempt > 2:
-            print_to_log(f"[ExecutionAgent] Maximum fallback attempts reached")
+            print(f"[ExecutionAgent] Maximum fallback attempts reached")
             state.last_error = f"Code execution failed after {attempt-1} fix attempts: {error}"
             return state
         
         # Select model based on attempt
         model_to_use = self.fallback_model_1 if attempt == 1 else self.fallback_model_2
         
-        print_to_log(f"[ExecutionAgent] Attempting fix #{attempt} using {model_to_use}")
+        print(f"[ExecutionAgent] Attempting fix #{attempt} using {model_to_use}")
         
         try:
             # Prepare fallback prompt
@@ -870,14 +992,14 @@ class ExecutionAgent:
                 response = llm.invoke([HumanMessage(content=fallback_prompt)])
                 fixed_code = self._extract_code_from_response(response.content)
             else:
-                print_to_log(f"[ExecutionAgent] HumanMessage not available")
+                print(f"[ExecutionAgent] HumanMessage not available")
                 return self.fallback_fix(state, code, error, attempt + 1)
             
             if not fixed_code or fixed_code.strip() == code.strip():
-                print_to_log(f"[ExecutionAgent] No meaningful fix suggested by {model_to_use}")
+                print(f"[ExecutionAgent] No meaningful fix suggested by {model_to_use}")
                 return self.fallback_fix(state, code, error, attempt + 1)
             
-            print_to_log(f"[ExecutionAgent] Attempting to execute fixed code...")
+            print(f"[ExecutionAgent] Attempting to execute fixed code...")
             
             # Try executing the fixed code
             try:
@@ -895,18 +1017,18 @@ class ExecutionAgent:
                 )
                 
                 self.execution_globals.update(exec_locals)
-                print_to_log(f"[ExecutionAgent] Fix #{attempt} successful!")
+                print(f"[ExecutionAgent] Fix #{attempt} successful!")
                 return state
                 
             except Exception as fix_error:
                 fix_error_msg = str(fix_error)
-                print_to_log(f"[ExecutionAgent] Fix #{attempt} failed: {fix_error_msg}")
+                print(f"[ExecutionAgent] Fix #{attempt} failed: {fix_error_msg}")
                 
                 # Try next fallback
                 return self.fallback_fix(state, fixed_code, fix_error_msg, attempt + 1)
                 
         except Exception as llm_error:
-            print_to_log(f"[ExecutionAgent] LLM fallback error: {llm_error}")
+            print(f"[ExecutionAgent] LLM fallback error: {llm_error}")
             return self.fallback_fix(state, code, error, attempt + 1)
     
     def _create_fallback_prompt(self, code: str, error: str, user_query: str) -> str:
@@ -965,10 +1087,10 @@ FIXED CODE:"""
 
 # Global toolbox instances
 slack_manager = SlackManager()
-artifact_manager = ArtifactManager()
+artifact_manager = ArtifactManager(slack_manager=slack_manager)
 progress_tracker = ProgressTracker(slack_manager)
 execution_agent = ExecutionAgent()
-user_directory_manager = UserDirectoryManager()
+user_directory_manager = UserDirectoryManager(slack_manager=slack_manager)
 pattern_classifier = UniversalPatternClassifier()
 
 
@@ -982,47 +1104,55 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
     if slack_manager and hasattr(slack_manager, 'session_channels'):
         existing_sessions = slack_manager.session_channels.copy()
         existing_threads = slack_manager.session_threads.copy()
-        print_to_log(f"🔍 DEBUG: Preserving {len(existing_sessions)} existing sessions")
-        print_to_log(f"🔍 DEBUG: Existing sessions: {existing_sessions}")
-        print_to_log(f"🔍 DEBUG: Existing threads: {existing_threads}")
-        print_to_log(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
-        print_to_log(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
+        print(f"🔍 DEBUG: Preserving {len(existing_sessions)} existing sessions")
+        print(f"🔍 DEBUG: Existing sessions: {existing_sessions}")
+        print(f"🔍 DEBUG: Existing threads: {existing_threads}")
+        print(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
+        print(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
     
     if slack_token and not hasattr(slack_manager, 'client'):
         # Only create new SlackManager if one doesn't exist yet
         slack_manager = SlackManager(slack_token)
         progress_tracker = ProgressTracker(slack_manager)
-        print_to_log("🔧 Created new SlackManager instance")
+        print("🔧 Created new SlackManager instance")
     elif slack_token and hasattr(slack_manager, 'client'):
         # Reuse existing SlackManager to preserve session channels
-        print_to_log(f"🔄 Reusing existing SlackManager (has {len(slack_manager.session_channels)} sessions)")
+        print(f"🔄 Reusing existing SlackManager (has {len(slack_manager.session_channels)} sessions)")
     elif slack_token:
         # Fallback - create new one
         slack_manager = SlackManager(slack_token)
         # Restore existing sessions
         if existing_sessions:
-            print_to_log(f"🔍 DEBUG: Before restoration - new slack_manager sessions: {slack_manager.session_channels}")
-            print_to_log(f"🔍 DEBUG: Before restoration - new slack_manager threads: {slack_manager.session_threads}")
+            print(f"🔍 DEBUG: Before restoration - new slack_manager sessions: {slack_manager.session_channels}")
+            print(f"🔍 DEBUG: Before restoration - new slack_manager threads: {slack_manager.session_threads}")
             slack_manager.session_channels.update(existing_sessions)
             slack_manager.session_threads.update(existing_threads)
-            print_to_log(f"🔍 DEBUG: Restored {len(existing_sessions)} sessions to new SlackManager")
-            print_to_log(f"🔍 DEBUG: Restored sessions: {slack_manager.session_channels}")
-            print_to_log(f"🔍 DEBUG: Restored threads: {slack_manager.session_threads}")
-            print_to_log(f"🔍 DEBUG: New slack_manager id: {id(slack_manager)}")
+            print(f"🔍 DEBUG: Restored {len(existing_sessions)} sessions to new SlackManager")
+            print(f"🔍 DEBUG: Restored sessions: {slack_manager.session_channels}")
+            print(f"🔍 DEBUG: Restored threads: {slack_manager.session_threads}")
+            print(f"🔍 DEBUG: New slack_manager id: {id(slack_manager)}")
         progress_tracker = ProgressTracker(slack_manager)
-        print_to_log("🔧 Created fallback SlackManager instance")
+        print("🔧 Created fallback SlackManager instance")
     
     if artifacts_dir:
-        artifact_manager = ArtifactManager(artifacts_dir)
+        artifact_manager = ArtifactManager(artifacts_dir, slack_manager)
+    else:
+        # Update existing artifact_manager with slack_manager reference
+        if 'artifact_manager' in globals() and artifact_manager:
+            artifact_manager.slack_manager = slack_manager
     
     if user_data_dir:
-        user_directory_manager = UserDirectoryManager(user_data_dir)
+        user_directory_manager = UserDirectoryManager(user_data_dir, slack_manager)
+    else:
+        # Update existing user_directory_manager with slack_manager reference
+        if 'user_directory_manager' in globals() and user_directory_manager:
+            user_directory_manager.slack_manager = slack_manager
     
     # Initialize universal pattern classifier
     pattern_classifier = UniversalPatternClassifier()
     
-    print_to_log("🧰 Global toolbox initialized with Universal Pattern Classifier")
-    print_to_log(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
-    print_to_log(f"   Artifacts: {artifact_manager.base_dir}")
-    print_to_log(f"   User Data: {user_directory_manager.base_data_dir}")
-    print_to_log(f"   Execution: ✅ Ready with fallback support")
+    print("🧰 Global toolbox initialized with Universal Pattern Classifier")
+    print(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
+    print(f"   Artifacts: {artifact_manager.base_dir}")
+    print(f"   User Data: {user_directory_manager.base_data_dir}")
+    print(f"   Execution: ✅ Ready with fallback support")
