@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
 """
 Unified Orchestrator for Multi-Agent ML System
 Combines enhanced LLM-powered routing with hybrid keyword/LLM approach
@@ -11,6 +12,8 @@ from enum import Enum
 from datetime import datetime
 from pipeline_state import PipelineState
 
+# Import thread logging system
+from thread_logger import get_thread_logger
 # LLM imports (with optional fallback)
 try:
     import ollama
@@ -23,7 +26,7 @@ try:
 except ImportError:
     LLM_AVAILABLE = False
     EMBEDDINGS_AVAILABLE = False
-    print("⚠️ LLM libraries not available, using keyword-only classification")
+    print_to_log("⚠️ LLM libraries not available, using keyword-only classification")
 
 # Text normalization imports
 try:
@@ -33,20 +36,20 @@ try:
     try:
         nltk.data.find('corpora/wordnet')
     except LookupError:
-        print("📦 Downloading NLTK WordNet data...")
+        print_to_log("📦 Downloading NLTK WordNet data...")
         nltk.download('wordnet', quiet=True)
     
     try:
         nltk.data.find('corpora/omw-1.4')
     except LookupError:
-        print("📦 Downloading NLTK OMW data...")
+        print_to_log("📦 Downloading NLTK OMW data...")
         nltk.download('omw-1.4', quiet=True)
     
     lemmatizer = WordNetLemmatizer()
     LEMMATIZER_AVAILABLE = True
 except ImportError:
     LEMMATIZER_AVAILABLE = False
-    print("⚠️ NLTK not available, using basic text normalization")
+    print_to_log("⚠️ NLTK not available, using basic text normalization")
 
 
 class AgentType(Enum):
@@ -64,6 +67,24 @@ class Orchestrator:
     Fast keyword classification with intelligent LLM fallback for ambiguous cases
     """
     
+    def _get_thread_logger(self, state):
+        """Helper function to get thread logger from state"""
+        if hasattr(state, "session_id") and state.session_id:
+            session_id = state.session_id
+        elif hasattr(state, "chat_session") and state.chat_session:
+            session_id = state.chat_session
+        else:
+            return None
+        
+        if "_" in session_id:
+            parts = session_id.split("_")
+            user_id = parts[0] if len(parts) >= 1 else session_id
+            thread_id = "_".join(parts[1:]) if len(parts) > 1 else session_id
+        else:
+            user_id = session_id
+            thread_id = session_id
+        
+        return get_thread_logger(user_id, thread_id)
     def __init__(self):
         self.default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         
@@ -203,7 +224,7 @@ class Orchestrator:
     def _initialize_intent_embeddings(self):
         """Initialize embeddings for all intent definitions"""
         try:
-            print("🧠 Initializing semantic intent embeddings...")
+            print_to_log("🧠 Initializing semantic intent embeddings...")
             self._intent_embeddings = {}
             
             for intent, definition in self.intent_definitions.items():
@@ -212,12 +233,12 @@ class Orchestrator:
                     self._intent_embeddings[intent] = embedding
                     
             if self._intent_embeddings:
-                print(f"✅ Initialized embeddings for {len(self._intent_embeddings)} intents")
+                print_to_log(f"✅ Initialized embeddings for {len(self._intent_embeddings)} intents")
             else:
-                print("❌ Failed to initialize intent embeddings, falling back to keywords")
+                print_to_log("❌ Failed to initialize intent embeddings, falling back to keywords")
                 
         except Exception as e:
-            print(f"⚠️ Error initializing embeddings: {e}")
+            print_to_log(f"⚠️ Error initializing embeddings: {e}")
             self._intent_embeddings = None
     
     def _get_embedding(self, text: str):
@@ -253,28 +274,28 @@ class Orchestrator:
                     if "not found" in str(model_error).lower():
                         continue  # Try next model
                     else:
-                        print(f"⚠️ Error with {model}: {model_error}")
+                        print_to_log(f"⚠️ Error with {model}: {model_error}")
                         continue
             
             if response is None:
-                print("❌ No embedding models available. Try: ollama pull bge-large")
+                print_to_log("❌ No embedding models available. Try: ollama pull bge-large")
                 return None
             
             # Cache successful model for future reference
             if not hasattr(self, '_active_embedding_model'):
                 self._active_embedding_model = successful_model
-                print(f"✅ Using embedding model: {successful_model}")
+                print_to_log(f"✅ Using embedding model: {successful_model}")
             
             if 'embedding' in response:
                 embedding = np.array(response['embedding'])
                 self._embedding_cache[text] = embedding
                 return embedding
             else:
-                print(f"⚠️ No embedding in response for: {text[:50]}...")
+                print_to_log(f"⚠️ No embedding in response for: {text[:50]}...")
                 return None
                 
         except Exception as e:
-            print(f"⚠️ Error getting embedding: {e}")
+            print_to_log(f"⚠️ Error getting embedding: {e}")
             return None
     
     def _classify_with_semantic_similarity(self, query: str) -> Tuple[str, Dict]:
@@ -332,7 +353,7 @@ class Orchestrator:
             return best_intent, confidence_info
             
         except Exception as e:
-            print(f"⚠️ Error in semantic classification: {e}")
+            print_to_log(f"⚠️ Error in semantic classification: {e}")
             # Fallback to keyword classification
             return self._classify_with_keyword_scoring(query)
 
@@ -402,7 +423,7 @@ class Orchestrator:
         Use LLM to classify user intent (fallback for ambiguous cases)
         """
         if not LLM_AVAILABLE:
-            print("⚠️ LLM not available, using fallback classification")
+            print_to_log("⚠️ LLM not available, using fallback classification")
             return self._fallback_classify_intent(query)
         
         # Build context information
@@ -490,11 +511,11 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
                 # Fallback classification
                 intent = self._fallback_classify_intent(query)
             
-            print(f"🎯 LLM Intent classified: {intent}")
+            print_to_log(f"🎯 LLM Intent classified: {intent}")
             return intent
             
         except Exception as e:
-            print(f"⚠️ LLM intent classification failed: {e}")
+            print_to_log(f"⚠️ LLM intent classification failed: {e}")
             # If LLM fails, use fallback classification
             return self._fallback_classify_intent(query)
 
@@ -631,12 +652,12 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             
             # Use BGE embeddings if available
             if EMBEDDINGS_AVAILABLE and hasattr(self, '_get_embedding'):
-                print(f"🧠 [Direct FS BGE] Classifying query: '{query}'")
+                print_to_log(f"🧠 [Direct FS BGE] Classifying query: '{query}'")
                 
                 # Get query embedding
                 query_embedding = self._get_embedding(query)
                 if query_embedding is None:
-                    print("⚠️ [Direct FS BGE] Failed to get query embedding, using keyword fallback")
+                    print_to_log("⚠️ [Direct FS BGE] Failed to get query embedding, using keyword fallback")
                     return self._classify_direct_fs_keywords(query)
                 
                 # Get embeddings for examples (with caching)
@@ -654,7 +675,7 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
                         standard_embeddings.append(emb)
                 
                 if not direct_embeddings or not standard_embeddings:
-                    print("⚠️ [Direct FS BGE] Failed to get example embeddings, using keyword fallback")
+                    print_to_log("⚠️ [Direct FS BGE] Failed to get example embeddings, using keyword fallback")
                     return self._classify_direct_fs_keywords(query)
                 
                 # Calculate average similarities
@@ -682,31 +703,31 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
                 is_direct = avg_direct_similarity > avg_standard_similarity
                 confidence_diff = abs(avg_direct_similarity - avg_standard_similarity)
                 
-                print(f"🔍 [Direct FS BGE] Similarity scores:")
-                print(f"   Direct FS: {avg_direct_similarity:.3f}")
-                print(f"   Standard FS: {avg_standard_similarity:.3f}")
-                print(f"   Confidence diff: {confidence_diff:.3f}")
+                print_to_log(f"🔍 [Direct FS BGE] Similarity scores:")
+                print_to_log(f"   Direct FS: {avg_direct_similarity:.3f}")
+                print_to_log(f"   Standard FS: {avg_standard_similarity:.3f}")
+                print_to_log(f"   Confidence diff: {confidence_diff:.3f}")
                 
                 # Use BGE result if confidence is high enough
                 if confidence_diff > 0.01:  # Minimum confidence threshold (lowered from 0.05)
                     result = is_direct
                     method = "BGE"
-                    print(f"🎯 [Direct FS BGE] Classified as {'DIRECT' if result else 'STANDARD'} (confidence: {confidence_diff:.3f})")
+                    print_to_log(f"🎯 [Direct FS BGE] Classified as {'DIRECT' if result else 'STANDARD'} (confidence: {confidence_diff:.3f})")
                 else:
-                    print(f"⚠️ [Direct FS BGE] Low confidence ({confidence_diff:.3f} < 0.05), using keyword fallback")
+                    print_to_log(f"⚠️ [Direct FS BGE] Low confidence ({confidence_diff:.3f} < 0.05), using keyword fallback")
                     result = self._classify_direct_fs_keywords(query)
                     method = "BGE+Keyword"
                 
-                print(f"✅ [Direct FS {method}] Final result: {'DIRECT' if result else 'STANDARD'}")
+                print_to_log(f"✅ [Direct FS {method}] Final result: {'DIRECT' if result else 'STANDARD'}")
                 return result
                 
             else:
-                print("⚠️ [Direct FS BGE] BGE embeddings not available, using keyword fallback")
+                print_to_log("⚠️ [Direct FS BGE] BGE embeddings not available, using keyword fallback")
                 return self._classify_direct_fs_keywords(query)
                 
         except Exception as e:
-            print(f"❌ [Direct FS BGE] Classification error: {e}")
-            print("🔧 [Direct FS BGE] Falling back to keyword classification")
+            print_to_log(f"❌ [Direct FS BGE] Classification error: {e}")
+            print_to_log("🔧 [Direct FS BGE] Falling back to keyword classification")
             return self._classify_direct_fs_keywords(query)
     
     def _classify_direct_fs_keywords(self, query: str) -> bool:
@@ -735,12 +756,12 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         # Check for explicit direct keywords
         has_direct_keywords = any(keyword in query_lower for keyword in direct_fs_keywords)
         
-        print(f"🔍 [Direct FS Keyword] Query: '{query}'")
-        print(f"🔍 [Direct FS Keyword] Has direct keywords: {has_direct_keywords}")
+        print_to_log(f"🔍 [Direct FS Keyword] Query: '{query}'")
+        print_to_log(f"🔍 [Direct FS Keyword] Has direct keywords: {has_direct_keywords}")
         
         if has_direct_keywords:
             matched_keywords = [kw for kw in direct_fs_keywords if kw in query_lower]
-            print(f"🎯 [Direct FS Keyword] Matched keywords: {matched_keywords}")
+            print_to_log(f"🎯 [Direct FS Keyword] Matched keywords: {matched_keywords}")
         
         return has_direct_keywords
 
@@ -773,7 +794,7 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         
         # CRITICAL: If query has existing model language, NEVER analyze skip patterns
         if has_existing_model_ref:
-            print(f"[Skip Analysis] Skipping pattern analysis - existing model detected: '{query}'")
+            print_to_log(f"[Skip Analysis] Skipping pattern analysis - existing model detected: '{query}'")
             return False
             
         # Only apply skip patterns for explicit skip requests without existing model references
@@ -807,10 +828,10 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         )
         
         if skip_result and skip_result != "no_skip":
-            print(f"[Orchestrator] Skip pattern detected: {skip_result} (method: {method_used})")
+            print_to_log(f"[Orchestrator] Skip pattern detected: {skip_result} (method: {method_used})")
             return self._route_skip_pattern(skip_result, query)
         else:
-            print(f"[Orchestrator] No skip pattern detected (result: {skip_result}, method: {method_used})")
+            print_to_log(f"[Orchestrator] No skip pattern detected (result: {skip_result}, method: {method_used})")
             return None
 
     def _OBSOLETE_llm_classify_skip_patterns(self, query: str) -> str:
@@ -856,14 +877,14 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
                             return valid_type
                             
             except Exception as ollama_error:
-                print(f"[Orchestrator] Ollama LLM error: {ollama_error}")
+                print_to_log(f"[Orchestrator] Ollama LLM error: {ollama_error}")
                 
             # Use keyword fallback instead of OpenAI
-            print(f"[Orchestrator] Using keyword fallback for skip pattern classification")
+            print_to_log(f"[Orchestrator] Using keyword fallback for skip pattern classification")
             return self._keyword_classify_skip_patterns(query)
                 
         except Exception as e:
-            print(f"[Orchestrator] LLM skip pattern classification failed: {e}")
+            print_to_log(f"[Orchestrator] LLM skip pattern classification failed: {e}")
         
         return None
 
@@ -901,7 +922,7 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             ])
             
             if explicit_skip_both:
-                print(f"[Orchestrator] Explicit skip BOTH preprocessing AND feature selection detected")
+                print_to_log(f"[Orchestrator] Explicit skip BOTH preprocessing AND feature selection detected")
                 return "skip_preprocessing_to_modeling"
             
             # Analyze what the user wants to do after skipping preprocessing
@@ -928,19 +949,19 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
     def _route_skip_pattern(self, skip_type: str, query: str) -> str:
         """Route based on classified skip pattern"""
         if skip_type == "skip_to_modeling":
-            print(f"[Orchestrator] Skip to modeling detected - routing to model_building agent")
+            print_to_log(f"[Orchestrator] Skip to modeling detected - routing to model_building agent")
             return "model_building"
         elif skip_type == "skip_preprocessing_to_modeling":
-            print(f"[Orchestrator] Skip preprocessing + model intent detected - routing to model_building agent")
+            print_to_log(f"[Orchestrator] Skip preprocessing + model intent detected - routing to model_building agent")
             return "model_building"
         elif skip_type == "skip_preprocessing_to_features":
-            print(f"[Orchestrator] Skip preprocessing + feature intent detected - routing to feature_selection agent")
+            print_to_log(f"[Orchestrator] Skip preprocessing + feature intent detected - routing to feature_selection agent")
             return "feature_selection"
         elif skip_type == "no_skip":
-            print(f"[Orchestrator] No skip pattern detected - continuing with normal routing")
+            print_to_log(f"[Orchestrator] No skip pattern detected - continuing with normal routing")
             return None
         else:
-            print(f"[Orchestrator] Unknown skip pattern: {skip_type} - continuing with normal routing")
+            print_to_log(f"[Orchestrator] Unknown skip pattern: {skip_type} - continuing with normal routing")
             return None
 
     def _route_by_intent(self, state: PipelineState, intent: str) -> str:
@@ -975,10 +996,10 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
                 is_direct_fs = self._classify_direct_feature_selection(state.user_query or "")
                 
                 if is_direct_fs:
-                    print("[Orchestrator] 🚀 Direct feature selection requested (BGE classified) - using raw data")
+                    print_to_log("[Orchestrator] 🚀 Direct feature selection requested (BGE classified) - using raw data")
                     return "feature_selection"
                 else:
-                    print("[Orchestrator] 📊 Standard feature selection request (BGE classified) - preprocessing first")
+                    print_to_log("[Orchestrator] 📊 Standard feature selection request (BGE classified) - preprocessing first")
                     return "preprocessing"
             return "feature_selection"
         
@@ -991,12 +1012,12 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             ]
             
             if any(pattern in query_lower for pattern in educational_patterns):
-                print("[Orchestrator] Educational query detected - routing to general response")
+                print_to_log("[Orchestrator] Educational query detected - routing to general response")
                 return "general_response"
             
             # Check prerequisites for actual model building
             if state.raw_data is None:
-                print("[Orchestrator] No data available for model building - routing to model_building agent to handle")
+                print_to_log("[Orchestrator] No data available for model building - routing to model_building agent to handle")
                 return "model_building"  # Let model building agent handle the "no data" case
             
             # Check for direct model building keywords
@@ -1008,22 +1029,22 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
             ]
             
             if any(keyword in query_lower for keyword in direct_keywords):
-                print("[Orchestrator] 🚀 Direct model building requested - skipping preprocessing and feature selection")
+                print_to_log("[Orchestrator] 🚀 Direct model building requested - skipping preprocessing and feature selection")
                 # Use raw data as cleaned data for direct model building
                 if state.cleaned_data is None:
                     state.cleaned_data = state.raw_data.copy()
-                    print("[Orchestrator] Using raw data as cleaned data")
+                    print_to_log("[Orchestrator] Using raw data as cleaned data")
                 if state.selected_features is None:
                     state.selected_features = state.raw_data.copy()
-                    print("[Orchestrator] Using all columns as selected features")
+                    print_to_log("[Orchestrator] Using all columns as selected features")
                 return "model_building"
             
             # Normal pipeline flow
             elif state.cleaned_data is None:
-                print("[Orchestrator] Need to preprocess data first")
+                print_to_log("[Orchestrator] Need to preprocess data first")
                 return "preprocessing"
             elif state.selected_features is None:
-                print("[Orchestrator] Need to select features first")
+                print_to_log("[Orchestrator] Need to select features first")
                 return "feature_selection"
             return "model_building"
         
@@ -1136,7 +1157,7 @@ Respond naturally and conversationally. Be helpful and mention that you can hand
             return response["message"]["content"].strip()
             
         except Exception as e:
-            print(f"⚠️ LLM capability response failed: {e}")
+            print_to_log(f"⚠️ LLM capability response failed: {e}")
             # If LLM fails, use fallback response
             return self._fallback_capability_response(state)
 
@@ -1224,7 +1245,7 @@ How can I help you with your ML workflow today?"""
             return response["message"]["content"].strip()
             
         except Exception as e:
-            print(f"⚠️ LLM general response failed: {e}")
+            print_to_log(f"⚠️ LLM general response failed: {e}")
         
         # Fallback responses
         greetings = ["hello", "hi", "hey", "good morning", "good afternoon"]
@@ -1293,8 +1314,12 @@ How can I help you with your ML workflow today?"""
         if not state.user_query:
             return "general_response"  # Do nothing until user provides intent
         
-        print(f"[Orchestrator] Processing query: '{state.user_query}'")
+        print_to_log(f"[Orchestrator] Processing query: '{state.user_query}'")
         
+        # Get thread logger
+        thread_logger = self._get_thread_logger(state)
+        if thread_logger:
+            thread_logger.log_query(state.user_query, agent="orchestrator")
         
         # Use universal pattern classifier for main intent classification
         intent, method_used = self.pattern_classifier.classify_pattern(
@@ -1303,8 +1328,24 @@ How can I help you with your ML workflow today?"""
             use_case="intent_classification"
         )
         
-        print(f"[Orchestrator] Intent classification: {intent} (method: {method_used})")
-        return self._route_by_intent(state, intent)
+        print_to_log(f"[Orchestrator] Intent classification: {intent} (method: {method_used})")
+        
+        # Log classification results
+        if thread_logger:
+            thread_logger.log_classification(state.user_query, {
+                "intent": intent,
+                "method": method_used,
+                "confidence": getattr(self.pattern_classifier, "last_confidence", None)
+            })
+        
+        # Route by intent
+        route_decision = self._route_by_intent(state, intent)
+        
+        # Log routing decision
+        if thread_logger:
+            thread_logger.log_routing(state.user_query, route_decision)
+        
+        return route_decision
 
     def get_routing_explanation(self, state: PipelineState, routing_decision: str) -> str:
         """Get explanation for routing decision"""

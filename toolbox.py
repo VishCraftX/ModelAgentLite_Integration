@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
 """
 Global Toolbox for Multi-Agent ML System
 Contains shared utilities used by all agents: SlackManager, ArtifactManager, 
@@ -80,29 +81,29 @@ class SlackManager:
     
     def register_session(self, session_id: str, channel: str, thread_ts: str = None):
         """Register a new session with channel and thread information"""
-        print(f"🔍 DEBUG: register_session called:")
-        print(f"  Session ID: {session_id}")
-        print(f"  Channel: {channel}")
-        print(f"  Thread TS: {thread_ts}")
-        print(f"  Before registration - sessions: {self.session_channels}")
-        print(f"  Before registration - threads: {self.session_threads}")
+        print_to_log(f"🔍 DEBUG: register_session called:")
+        print_to_log(f"  Session ID: {session_id}")
+        print_to_log(f"  Channel: {channel}")
+        print_to_log(f"  Thread TS: {thread_ts}")
+        print_to_log(f"  Before registration - sessions: {self.session_channels}")
+        print_to_log(f"  Before registration - threads: {self.session_threads}")
         
-        print(f"🔍 DEBUG SlackManager.register_session:")
-        print(f"  Before: session_channels = {self.session_channels}")
+        print_to_log(f"🔍 DEBUG SlackManager.register_session:")
+        print_to_log(f"  Before: session_channels = {self.session_channels}")
         self.session_channels[session_id] = channel
         if thread_ts:
             self.session_threads[session_id] = thread_ts
-        print(f"  After: session_channels = {self.session_channels}")
-        print(f"  Registered session {session_id} with channel {channel}")
+        print_to_log(f"  After: session_channels = {self.session_channels}")
+        print_to_log(f"  Registered session {session_id} with channel {channel}")
             
-        print(f"🔍 DEBUG: After registration:")
-        print(f"  Sessions: {self.session_channels}")
-        print(f"  Threads: {self.session_threads}")
+        print_to_log(f"🔍 DEBUG: After registration:")
+        print_to_log(f"  Sessions: {self.session_channels}")
+        print_to_log(f"  Threads: {self.session_threads}")
     
     def send_message(self, session_id: str, text: str, channel: str = None, thread_ts: str = None):
         """Send message to specific session"""
         if not self.client:
-            print(f"[Slack:{session_id}] {text}")
+            print_to_log(f"[Slack:{session_id}] {text}")
             return
         
         try:
@@ -112,31 +113,31 @@ class SlackManager:
             if not thread_ts:
                 thread_ts = self.session_threads.get(session_id)
             
-            print(f"🔍 DEBUG SlackManager.send_message:")
-            print(f"  Session ID: {session_id}")
-            print(f"  Channel: {channel}")
-            print(f"  Thread TS: {thread_ts}")
-            print(f"  Available sessions: {list(self.session_channels.keys())}")
-            print(f"  Session channels: {self.session_channels}")
+            print_to_log(f"🔍 DEBUG SlackManager.send_message:")
+            print_to_log(f"  Session ID: {session_id}")
+            print_to_log(f"  Channel: {channel}")
+            print_to_log(f"  Thread TS: {thread_ts}")
+            print_to_log(f"  Available sessions: {list(self.session_channels.keys())}")
+            print_to_log(f"  Session channels: {self.session_channels}")
             
             # If still no channel, extract from session_id (format: user_threadts)
             if not channel and "_" in session_id:
                 # This is a fallback - ideally channel should be set properly
-                print(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
-                print(f"🔍 DEBUG: Available sessions: {self.session_channels}")
-                print(f"[Slack:{session_id}] {text}")
+                print_to_log(f"⚠️ No channel stored for session {session_id}, skipping Slack message")
+                print_to_log(f"🔍 DEBUG: Available sessions: {self.session_channels}")
+                print_to_log(f"[Slack:{session_id}] {text}")
                 return
             
             if not channel:
-                print(f"🔍 DEBUG SlackManager.send_message - SESSION NOT FOUND:")
-                print(f"  Session ID: {session_id}")
-                print(f"  Available sessions: {list(self.session_channels.keys())}")
-                print(f"  Session channels: {self.session_channels}")
-                print(f"❌ No channel available for session {session_id} - message will be logged to console only")
-                print(f"[Slack:{session_id}] {text}")
+                print_to_log(f"🔍 DEBUG SlackManager.send_message - SESSION NOT FOUND:")
+                print_to_log(f"  Session ID: {session_id}")
+                print_to_log(f"  Available sessions: {list(self.session_channels.keys())}")
+                print_to_log(f"  Session channels: {self.session_channels}")
+                print_to_log(f"❌ No channel available for session {session_id} - message will be logged to console only")
+                print_to_log(f"[Slack:{session_id}] {text}")
                 return
             
-            print(f"🚀 Attempting to send Slack message to channel {channel}")
+            print_to_log(f"🚀 Attempting to send Slack message to channel {channel}")
             response = self.client.chat_postMessage(
                 channel=channel,
                 text=text,
@@ -150,9 +151,9 @@ class SlackManager:
                 
         except Exception as e:
             if SLACK_AVAILABLE and "SlackApiError" in str(type(e)):
-                print(f"Slack API error for session {session_id}: {e}")
+                print_to_log(f"Slack API error for session {session_id}: {e}")
             else:
-                print(f"Error sending Slack message for session {session_id}: {e}")
+                print_to_log(f"Error sending Slack message for session {session_id}: {e}")
     
     def send_progress_update(self, session_id: str, stage: str, message: str):
         """Send formatted progress update"""
@@ -180,7 +181,7 @@ class SlackManager:
             thread_ts = self.session_threads.get(session_id)
             
             if not channel:
-                print(f"No channel found for session {session_id}")
+                print_to_log(f"No channel found for session {session_id}")
                 return
             
             with open(file_path, 'rb') as file_content:
@@ -194,12 +195,12 @@ class SlackManager:
                 )
                 
             if response["ok"]:
-                print(f"Successfully uploaded {file_path} to session {session_id}")
+                print_to_log(f"Successfully uploaded {file_path} to session {session_id}")
             else:
-                print(f"Failed to upload {file_path}: {response.get('error')}")
+                print_to_log(f"Failed to upload {file_path}: {response.get('error')}")
                 
         except Exception as e:
-            print(f"Error uploading file to Slack: {e}")
+            print_to_log(f"Error uploading file to Slack: {e}")
 
 
 class ArtifactManager:
@@ -243,11 +244,11 @@ class ArtifactManager:
                 with open(file_path, 'w') as f:
                     f.write(str(content))
             
-            print(f"Saved artifact for {session_id}: {filename}")
+            print_to_log(f"Saved artifact for {session_id}: {filename}")
             return str(file_path)
             
         except Exception as e:
-            print(f"Error saving artifact {filename} for session {session_id}: {e}")
+            print_to_log(f"Error saving artifact {filename} for session {session_id}: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -277,7 +278,7 @@ class ArtifactManager:
                     return f.read()
                     
         except Exception as e:
-            print(f"Error loading artifact {filename} for session {session_id}: {e}")
+            print_to_log(f"Error loading artifact {filename} for session {session_id}: {e}")
             return None
     
     def list_artifacts(self, session_id: str) -> List[str]:
@@ -294,7 +295,7 @@ class ArtifactManager:
         session_dir = self.get_session_dir(session_id)
         if session_dir.exists():
             shutil.rmtree(session_dir)
-            print(f"Cleaned up artifacts for session {session_id}")
+            print_to_log(f"Cleaned up artifacts for session {session_id}")
 
 
 class ProgressTracker:
@@ -375,7 +376,7 @@ class ProgressTracker:
         # Console logging (always show for debugging)
         timestamp = datetime.now().strftime("%H:%M:%S")
         agent_info = f" [{state.current_agent}]" if state.current_agent else ""
-        print(f"[{timestamp}]{agent_info} {message}")
+        print_to_log(f"[{timestamp}]{agent_info} {message}")
         
         # Send to Slack with better user experience
         if send_to_slack and should_send and self.slack_manager and state.chat_session:
@@ -446,7 +447,7 @@ class UniversalPatternClassifier:
         """
         # Get base thresholds for use case
         if use_case not in self.THRESHOLD_PROFILES:
-            print(f"⚠️ Unknown use case '{use_case}', using 'intent_classification'")
+            print_to_log(f"⚠️ Unknown use case '{use_case}', using 'intent_classification'")
             use_case = "intent_classification"
             
         base_thresholds = self.THRESHOLD_PROFILES[use_case]
@@ -462,7 +463,7 @@ class UniversalPatternClassifier:
         semantic_threshold = max(0.2, min(0.7, semantic_threshold))
         confidence_threshold = max(0.03, min(0.2, confidence_threshold))
         
-        print(f"🎯 Pattern classification for {use_case}: semantic={semantic_threshold:.3f}, confidence={confidence_threshold:.3f}")
+        print_to_log(f"🎯 Pattern classification for {use_case}: semantic={semantic_threshold:.3f}, confidence={confidence_threshold:.3f}")
         
         # Step 1: Semantic Classification
         if EMBEDDINGS_AVAILABLE:
@@ -470,17 +471,17 @@ class UniversalPatternClassifier:
                 query, pattern_definitions, semantic_threshold, confidence_threshold
             )
             if semantic_result:
-                print(f"🧠 Semantic pattern classification used (use_case: {use_case})")
+                print_to_log(f"🧠 Semantic pattern classification used (use_case: {use_case})")
                 return semantic_result, "semantic"
         
         # Step 2: LLM Classification  
         llm_result = self._llm_classify(query, pattern_definitions, use_case)
         if llm_result:
-            print(f"🤖 LLM pattern classification used (use_case: {use_case})")
+            print_to_log(f"🤖 LLM pattern classification used (use_case: {use_case})")
             return llm_result, "llm"
             
         # Step 3: Keyword Fallback
-        print(f"⚡ Keyword pattern fallback used (use_case: {use_case})")
+        print_to_log(f"⚡ Keyword pattern fallback used (use_case: {use_case})")
         keyword_result = self._keyword_classify(query, pattern_definitions)
         return keyword_result, "keyword"
     
@@ -505,7 +506,7 @@ class UniversalPatternClassifier:
             except Exception as e:
                 continue
                 
-        print(f"⚠️ Failed to get embedding for text: {text[:50]}...")
+        print_to_log(f"⚠️ Failed to get embedding for text: {text[:50]}...")
         return None
     
     def _semantic_classify(self, query: str, pattern_definitions: dict, 
@@ -533,17 +534,17 @@ class UniversalPatternClassifier:
             
             score_diff = best_score - second_score
             
-            print(f"[Semantic] Best: {best_pattern} (score: {best_score:.3f}, diff: {score_diff:.3f})")
+            print_to_log(f"[Semantic] Best: {best_pattern} (score: {best_score:.3f}, diff: {score_diff:.3f})")
             
             # Check both thresholds
             if best_score > semantic_threshold and score_diff > confidence_threshold:
                 return best_pattern
                 
-            print(f"[Semantic] Below threshold - score: {best_score:.3f} < {semantic_threshold:.3f} or diff: {score_diff:.3f} < {confidence_threshold:.3f}")
+            print_to_log(f"[Semantic] Below threshold - score: {best_score:.3f} < {semantic_threshold:.3f} or diff: {score_diff:.3f} < {confidence_threshold:.3f}")
             return None
             
         except Exception as e:
-            print(f"[Semantic] Error in semantic classification: {e}")
+            print_to_log(f"[Semantic] Error in semantic classification: {e}")
             return None
     
     def _llm_classify(self, query: str, pattern_definitions: dict, use_case: str) -> Optional[str]:
@@ -623,12 +624,12 @@ Respond with ONLY the pattern name that best matches the query. If none match we
                         if pattern_name.lower() == result:
                             return pattern_name
             except Exception as e:
-                print(f"[LLM] Ollama error: {e}")
+                print_to_log(f"[LLM] Ollama error: {e}")
                         
             return None
             
         except Exception as e:
-            print(f"[LLM] Error in LLM classification: {e}")
+            print_to_log(f"[LLM] Error in LLM classification: {e}")
             return None
     
     def _keyword_classify(self, query: str, pattern_definitions: dict) -> str:
@@ -705,7 +706,7 @@ class UserDirectoryManager:
         """Ensure base user data directory exists"""
         if not os.path.exists(self.base_data_dir):
             os.makedirs(self.base_data_dir)
-            print(f"📁 Created base directory: {self.base_data_dir}")
+            print_to_log(f"📁 Created base directory: {self.base_data_dir}")
     
     def _get_thread_id(self, user_id: str) -> tuple[str, str]:
         """Extract user and thread from user_id format: user_threadts"""
@@ -724,7 +725,7 @@ class UserDirectoryManager:
         user_dir = self._get_user_thread_dir(user_id)
         if not os.path.exists(user_dir):
             os.makedirs(user_dir)
-            print(f"📁 Created user directory: {user_dir}")
+            print_to_log(f"📁 Created user directory: {user_dir}")
         return user_dir
     
     def get_artifacts_dir(self, user_id: str) -> str:
@@ -764,7 +765,7 @@ class UserDirectoryManager:
                 # Remove entire user directory
                 import shutil
                 shutil.rmtree(user_dir)
-                print(f"🗑️ Cleaned up user directory: {user_dir}")
+                print_to_log(f"🗑️ Cleaned up user directory: {user_dir}")
 
 
 class ExecutionAgent:
@@ -824,8 +825,8 @@ class ExecutionAgent:
             error_msg = str(e)
             error_traceback = traceback.format_exc()
             
-            print(f"[ExecutionAgent] Code execution failed: {error_msg}")
-            print(f"[ExecutionAgent] Traceback: {error_traceback}")
+            print_to_log(f"[ExecutionAgent] Code execution failed: {error_msg}")
+            print_to_log(f"[ExecutionAgent] Traceback: {error_traceback}")
             
             # Store error
             state.last_error = error_msg
@@ -843,19 +844,19 @@ class ExecutionAgent:
         Use LLM to fix code errors with tiered fallback approach
         """
         if not LLM_AVAILABLE:
-            print(f"[ExecutionAgent] LLM not available for fallback, skipping fix")
+            print_to_log(f"[ExecutionAgent] LLM not available for fallback, skipping fix")
             state.last_error = f"Code execution failed: {error} (LLM fallback not available)"
             return state
             
         if attempt > 2:
-            print(f"[ExecutionAgent] Maximum fallback attempts reached")
+            print_to_log(f"[ExecutionAgent] Maximum fallback attempts reached")
             state.last_error = f"Code execution failed after {attempt-1} fix attempts: {error}"
             return state
         
         # Select model based on attempt
         model_to_use = self.fallback_model_1 if attempt == 1 else self.fallback_model_2
         
-        print(f"[ExecutionAgent] Attempting fix #{attempt} using {model_to_use}")
+        print_to_log(f"[ExecutionAgent] Attempting fix #{attempt} using {model_to_use}")
         
         try:
             # Prepare fallback prompt
@@ -869,14 +870,14 @@ class ExecutionAgent:
                 response = llm.invoke([HumanMessage(content=fallback_prompt)])
                 fixed_code = self._extract_code_from_response(response.content)
             else:
-                print(f"[ExecutionAgent] HumanMessage not available")
+                print_to_log(f"[ExecutionAgent] HumanMessage not available")
                 return self.fallback_fix(state, code, error, attempt + 1)
             
             if not fixed_code or fixed_code.strip() == code.strip():
-                print(f"[ExecutionAgent] No meaningful fix suggested by {model_to_use}")
+                print_to_log(f"[ExecutionAgent] No meaningful fix suggested by {model_to_use}")
                 return self.fallback_fix(state, code, error, attempt + 1)
             
-            print(f"[ExecutionAgent] Attempting to execute fixed code...")
+            print_to_log(f"[ExecutionAgent] Attempting to execute fixed code...")
             
             # Try executing the fixed code
             try:
@@ -894,18 +895,18 @@ class ExecutionAgent:
                 )
                 
                 self.execution_globals.update(exec_locals)
-                print(f"[ExecutionAgent] Fix #{attempt} successful!")
+                print_to_log(f"[ExecutionAgent] Fix #{attempt} successful!")
                 return state
                 
             except Exception as fix_error:
                 fix_error_msg = str(fix_error)
-                print(f"[ExecutionAgent] Fix #{attempt} failed: {fix_error_msg}")
+                print_to_log(f"[ExecutionAgent] Fix #{attempt} failed: {fix_error_msg}")
                 
                 # Try next fallback
                 return self.fallback_fix(state, fixed_code, fix_error_msg, attempt + 1)
                 
         except Exception as llm_error:
-            print(f"[ExecutionAgent] LLM fallback error: {llm_error}")
+            print_to_log(f"[ExecutionAgent] LLM fallback error: {llm_error}")
             return self.fallback_fix(state, code, error, attempt + 1)
     
     def _create_fallback_prompt(self, code: str, error: str, user_query: str) -> str:
@@ -981,35 +982,35 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
     if slack_manager and hasattr(slack_manager, 'session_channels'):
         existing_sessions = slack_manager.session_channels.copy()
         existing_threads = slack_manager.session_threads.copy()
-        print(f"🔍 DEBUG: Preserving {len(existing_sessions)} existing sessions")
-        print(f"🔍 DEBUG: Existing sessions: {existing_sessions}")
-        print(f"🔍 DEBUG: Existing threads: {existing_threads}")
-        print(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
-        print(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
+        print_to_log(f"🔍 DEBUG: Preserving {len(existing_sessions)} existing sessions")
+        print_to_log(f"🔍 DEBUG: Existing sessions: {existing_sessions}")
+        print_to_log(f"🔍 DEBUG: Existing threads: {existing_threads}")
+        print_to_log(f"🔍 DEBUG: slack_manager type: {type(slack_manager)}")
+        print_to_log(f"🔍 DEBUG: slack_manager id: {id(slack_manager)}")
     
     if slack_token and not hasattr(slack_manager, 'client'):
         # Only create new SlackManager if one doesn't exist yet
         slack_manager = SlackManager(slack_token)
         progress_tracker = ProgressTracker(slack_manager)
-        print("🔧 Created new SlackManager instance")
+        print_to_log("🔧 Created new SlackManager instance")
     elif slack_token and hasattr(slack_manager, 'client'):
         # Reuse existing SlackManager to preserve session channels
-        print(f"🔄 Reusing existing SlackManager (has {len(slack_manager.session_channels)} sessions)")
+        print_to_log(f"🔄 Reusing existing SlackManager (has {len(slack_manager.session_channels)} sessions)")
     elif slack_token:
         # Fallback - create new one
         slack_manager = SlackManager(slack_token)
         # Restore existing sessions
         if existing_sessions:
-            print(f"🔍 DEBUG: Before restoration - new slack_manager sessions: {slack_manager.session_channels}")
-            print(f"🔍 DEBUG: Before restoration - new slack_manager threads: {slack_manager.session_threads}")
+            print_to_log(f"🔍 DEBUG: Before restoration - new slack_manager sessions: {slack_manager.session_channels}")
+            print_to_log(f"🔍 DEBUG: Before restoration - new slack_manager threads: {slack_manager.session_threads}")
             slack_manager.session_channels.update(existing_sessions)
             slack_manager.session_threads.update(existing_threads)
-            print(f"🔍 DEBUG: Restored {len(existing_sessions)} sessions to new SlackManager")
-            print(f"🔍 DEBUG: Restored sessions: {slack_manager.session_channels}")
-            print(f"🔍 DEBUG: Restored threads: {slack_manager.session_threads}")
-            print(f"🔍 DEBUG: New slack_manager id: {id(slack_manager)}")
+            print_to_log(f"🔍 DEBUG: Restored {len(existing_sessions)} sessions to new SlackManager")
+            print_to_log(f"🔍 DEBUG: Restored sessions: {slack_manager.session_channels}")
+            print_to_log(f"🔍 DEBUG: Restored threads: {slack_manager.session_threads}")
+            print_to_log(f"🔍 DEBUG: New slack_manager id: {id(slack_manager)}")
         progress_tracker = ProgressTracker(slack_manager)
-        print("🔧 Created fallback SlackManager instance")
+        print_to_log("🔧 Created fallback SlackManager instance")
     
     if artifacts_dir:
         artifact_manager = ArtifactManager(artifacts_dir)
@@ -1020,8 +1021,8 @@ def initialize_toolbox(slack_token: str = None, artifacts_dir: str = None, user_
     # Initialize universal pattern classifier
     pattern_classifier = UniversalPatternClassifier()
     
-    print("🧰 Global toolbox initialized with Universal Pattern Classifier")
-    print(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
-    print(f"   Artifacts: {artifact_manager.base_dir}")
-    print(f"   User Data: {user_directory_manager.base_data_dir}")
-    print(f"   Execution: ✅ Ready with fallback support")
+    print_to_log("🧰 Global toolbox initialized with Universal Pattern Classifier")
+    print_to_log(f"   Slack: {'✅ Enabled' if slack_manager.client else '❌ Disabled'}")
+    print_to_log(f"   Artifacts: {artifact_manager.base_dir}")
+    print_to_log(f"   User Data: {user_directory_manager.base_data_dir}")
+    print_to_log(f"   Execution: ✅ Ready with fallback support")

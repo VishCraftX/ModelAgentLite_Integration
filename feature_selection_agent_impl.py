@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
+# Import master log handler to capture logger.info calls
+try:
+    import master_log_handler
+except ImportError:
+    pass
 """
 NEW AGENTIC FEATURE SELECTION BOT - Clean Architecture
 Designed for reliable state management and proper Slack integration
@@ -14,6 +20,9 @@ import logging
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime
+
+# Import thread logging system
+from thread_logger import get_thread_logger
 
 # Setup comprehensive logging
 logging.basicConfig(
@@ -98,7 +107,7 @@ class LLMManager:
         
         # Default to Ollama for unknown models
         else:
-            print(f"⚠️ Unknown model {model_name}, defaulting to Ollama")
+            print_to_log(f"⚠️ Unknown model {model_name}, defaulting to Ollama")
             return ChatOllama(model=model_name, temperature=0)
     
     @staticmethod
@@ -354,13 +363,13 @@ IMPORTANT: Respond with ONLY the JSON object. No explanations, no additional tex
                 result["threshold"] = defaults.get(result["analysis_type"], 0.05)
             elif "threshold" in result and result["threshold"] == 0 and result.get("analysis_type") == "correlation":
                 # Safety check: Never use 0 threshold for correlation (would remove all features)
-                print("⚠️ WARNING: Correlation threshold was 0, setting to safe default 0.8")
+                print_to_log("⚠️ WARNING: Correlation threshold was 0, setting to safe default 0.8")
                 result["threshold"] = 0.8
                 
             return result
             
         except Exception as e:
-            print(f"❌ Error parsing intent with LLM: {e}")
+            print_to_log(f"❌ Error parsing intent with LLM: {e}")
             # Minimal fallback - just return as query
             return {
                 "intent": "QUERY",
@@ -379,7 +388,7 @@ class DataProcessor:
             df = pd.read_csv(session.file_path)
             session.original_df = df.copy()
             
-            print(f"📊 Original dataset: {df.shape[0]} rows, {df.shape[1]} columns")
+            print_to_log(f"📊 Original dataset: {df.shape[0]} rows, {df.shape[1]} columns")
             
             # Step 1: Remove single value columns
             single_value_cols = []
@@ -387,14 +396,14 @@ class DataProcessor:
                 if df[col].nunique() <= 1:
                     single_value_cols.append(col)
             
-            print(f"🔍 Found {len(single_value_cols)} single-value columns to remove")
+            print_to_log(f"🔍 Found {len(single_value_cols)} single-value columns to remove")
             
             # Step 2: Smart object column handling - try to convert to numeric first
             object_cols = [col for col in df.columns if col not in single_value_cols and df[col].dtype == 'object']
             converted_cols = []
             failed_conversion_cols = []
             
-            print(f"🔍 Found {len(object_cols)} object columns, attempting numeric conversion...")
+            print_to_log(f"🔍 Found {len(object_cols)} object columns, attempting numeric conversion...")
             
             for col in object_cols:
                 try:
@@ -418,16 +427,16 @@ class DataProcessor:
                     if non_null_after >= non_null_before * 0.8:  # At least 80% successfully converted
                         df[col] = converted
                         converted_cols.append(col)
-                        print(f"   ✅ Converted '{col}' to numeric ({non_null_after}/{non_null_before} values)")
+                        print_to_log(f"   ✅ Converted '{col}' to numeric ({non_null_after}/{non_null_before} values)")
                     else:
                         failed_conversion_cols.append(col)
-                        print(f"   ❌ Failed to convert '{col}' (only {non_null_after}/{non_null_before} values convertible)")
+                        print_to_log(f"   ❌ Failed to convert '{col}' (only {non_null_after}/{non_null_before} values convertible)")
                         
                 except Exception as e:
                     failed_conversion_cols.append(col)
-                    print(f"   ❌ Error converting '{col}': {str(e)[:50]}")
+                    print_to_log(f"   ❌ Error converting '{col}': {str(e)[:50]}")
             
-            print(f"📈 Conversion summary: {len(converted_cols)} converted, {len(failed_conversion_cols)} remained as objects")
+            print_to_log(f"📈 Conversion summary: {len(converted_cols)} converted, {len(failed_conversion_cols)} remained as objects")
             
             # Step 3: Remove remaining non-numeric columns
             cols_to_remove = single_value_cols + failed_conversion_cols
@@ -459,17 +468,17 @@ class DataProcessor:
                 "timestamp": datetime.now().isoformat()
             }
             
-            print(f"✅ Intelligently cleaned dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
-            print(f"   📊 Summary:")
-            print(f"   • Removed: {len(single_value_cols)} single-value columns")
-            print(f"   • Converted: {len(converted_cols)} object → numeric columns")
-            print(f"   • Removed: {len(failed_conversion_cols)} non-convertible object columns")
-            print(f"   • Final: {clean_df.shape[1]} numeric columns ready for analysis")
+            print_to_log(f"✅ Intelligently cleaned dataset: {clean_df.shape[0]} rows, {clean_df.shape[1]} columns")
+            print_to_log(f"   📊 Summary:")
+            print_to_log(f"   • Removed: {len(single_value_cols)} single-value columns")
+            print_to_log(f"   • Converted: {len(converted_cols)} object → numeric columns")
+            print_to_log(f"   • Removed: {len(failed_conversion_cols)} non-convertible object columns")
+            print_to_log(f"   • Final: {clean_df.shape[1]} numeric columns ready for analysis")
             
             return True
             
         except Exception as e:
-            print(f"❌ Error loading data: {e}")
+            print_to_log(f"❌ Error loading data: {e}")
             return False
     
     @staticmethod
@@ -620,7 +629,7 @@ class AnalysisEngine:
         try:
             # Safety check: Ensure threshold is reasonable
             if threshold <= 0 or threshold >= 1:
-                print(f"⚠️ WARNING: Invalid correlation threshold {threshold}, using default 0.8")
+                print_to_log(f"⚠️ WARNING: Invalid correlation threshold {threshold}, using default 0.8")
                 threshold = 0.8
             
             df = session.current_df
@@ -813,32 +822,32 @@ class AnalysisEngine:
     def run_vif_analysis(session: UserSession, threshold: float = 5.0):
         """Run Variance Inflation Factor (VIF) analysis"""
         try:
-            print(f"🔧 DEBUG VIF ENGINE: Starting VIF analysis with threshold {threshold}")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Starting VIF analysis with threshold {threshold}")
             from statsmodels.stats.outliers_influence import variance_inflation_factor
             from sklearn.preprocessing import StandardScaler
             
             # Get numeric features only (exclude target)
             numeric_features = [f for f in session.current_features if f != session.target_column]
-            print(f"🔧 DEBUG VIF ENGINE: Found {len(numeric_features)} numeric features")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Found {len(numeric_features)} numeric features")
             
             if len(numeric_features) < 2:
                 error_msg = "Need at least 2 features for VIF analysis"
-                print(f"🔧 DEBUG VIF ENGINE: ERROR - {error_msg}")
+                print_to_log(f"🔧 DEBUG VIF ENGINE: ERROR - {error_msg}")
                 return {"error": error_msg}
             
             # Prepare data
             df = session.current_df[numeric_features].copy()
-            print(f"🔧 DEBUG VIF ENGINE: Data shape: {df.shape}")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Data shape: {df.shape}")
             
             # Handle missing values
             missing_before = df.isnull().sum().sum()
             df = df.fillna(df.mean())
-            print(f"🔧 DEBUG VIF ENGINE: Filled {missing_before} missing values")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Filled {missing_before} missing values")
             
             # Scale features for stability
             scaler = StandardScaler()
             df_scaled = pd.DataFrame(scaler.fit_transform(df), columns=df.columns)
-            print(f"🔧 DEBUG VIF ENGINE: Scaled data shape: {df_scaled.shape}")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Scaled data shape: {df_scaled.shape}")
             
             # Calculate VIF for each feature
             vif_scores = {}
@@ -848,20 +857,20 @@ class AnalysisEngine:
                 try:
                     vif_value = variance_inflation_factor(df_scaled.values, i)
                     vif_scores[feature] = vif_value
-                    print(f"🔧 DEBUG VIF ENGINE: {feature} VIF = {vif_value:.4f}")
+                    print_to_log(f"🔧 DEBUG VIF ENGINE: {feature} VIF = {vif_value:.4f}")
                     
                     if vif_value > threshold:
                         features_to_remove.append(feature)
-                        print(f"🔧 DEBUG VIF ENGINE: {feature} marked for removal (VIF {vif_value:.4f} > {threshold})")
+                        print_to_log(f"🔧 DEBUG VIF ENGINE: {feature} marked for removal (VIF {vif_value:.4f} > {threshold})")
                 except Exception as e:
-                    print(f"🔧 DEBUG VIF ENGINE: Error calculating VIF for {feature}: {e}")
+                    print_to_log(f"🔧 DEBUG VIF ENGINE: Error calculating VIF for {feature}: {e}")
                     vif_scores[feature] = float('inf')
                     features_to_remove.append(feature)
             
             # Update session
             features_before = len(session.current_features)
             remaining_cols = [col for col in session.current_features if col not in features_to_remove]
-            print(f"🔧 DEBUG VIF ENGINE: Features before: {features_before}, removing: {len(features_to_remove)}, remaining: {len(remaining_cols)}")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Features before: {features_before}, removing: {len(features_to_remove)}, remaining: {len(remaining_cols)}")
             
             session.current_df = session.current_df[remaining_cols]
             session.current_features = remaining_cols
@@ -876,7 +885,7 @@ class AnalysisEngine:
                 metadata={"vif_scores": vif_scores, "removed_features": features_to_remove}
             )
             session.analysis_chain.append(analysis_step)
-            print(f"🔧 DEBUG VIF ENGINE: Added analysis step to pipeline")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Added analysis step to pipeline")
             
             # Create snapshot
             session.snapshots[f"after_vif"] = {
@@ -884,7 +893,7 @@ class AnalysisEngine:
                 "df": session.current_df.copy(),
                 "step": len(session.analysis_chain) - 1
             }
-            print(f"🔧 DEBUG VIF ENGINE: Created snapshot")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Created snapshot")
             
             result = {
                 "success": True,
@@ -892,12 +901,12 @@ class AnalysisEngine:
                 "remaining_features": len(remaining_cols),
                 "vif_scores": vif_scores
             }
-            print(f"🔧 DEBUG VIF ENGINE: Returning success result: {result}")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: Returning success result: {result}")
             return result
             
         except Exception as e:
             error_msg = f"VIF analysis failed: {str(e)}"
-            print(f"🔧 DEBUG VIF ENGINE: EXCEPTION - {error_msg}")
+            print_to_log(f"🔧 DEBUG VIF ENGINE: EXCEPTION - {error_msg}")
             import traceback
             traceback.print_exc()
             return {"error": error_msg}
@@ -1465,31 +1474,22 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 else:
                     say(f"❌ CSI Analysis failed: {result.get('error', 'Unknown error')}")
             
-        else:
-            say(f"🔧 Analysis type '{analysis_type}' is not yet implemented. Coming soon!")
-    
-    def run_custom_analysis(self, session: UserSession, intent_data: Dict[str, Any], say):
-        """Run custom analyses like VIF, PCA, LASSO"""
-        analysis_type = intent_data.get("analysis_type", "").lower()
-        query_details = intent_data.get("query_details", "")
-        
-        say(f"🔄 **Running {analysis_type.upper()} Analysis**...")
-        
-        if analysis_type == "vif":
-            # Extract threshold from query
-            threshold = intent_data.get("threshold", 5.0)
-            try:
-                # Try to extract threshold from text
-                import re
-                threshold_match = re.search(r'(?:>|>=|above|greater than)\s*([0-9]*\.?[0-9]+)', query_details.lower())
-                if threshold_match:
-                    threshold = float(threshold_match.group(1))
-            except:
-                pass
+        elif analysis_type == "vif":
+            # Extract threshold from intent data or use default
+            if threshold is None:
+                threshold = 5.0  # Default VIF threshold
             
-            print(f"🔧 DEBUG VIF: About to run VIF analysis with threshold {threshold}")
+            # Get thread logger
+            thread_logger = get_thread_logger(session.user_id, session.user_id)
+            
+            print_to_log(f"🔧 DEBUG VIF: About to run VIF analysis with threshold {threshold}")
+            thread_logger.log_analysis("vif", {"threshold": threshold}, {"status": "starting"})
+            
             result = AnalysisEngine.run_vif_analysis(session, threshold)
-            print(f"🔧 DEBUG VIF: Analysis result: {result}")
+            print_to_log(f"🔧 DEBUG VIF: Analysis result: {result}")
+            
+            # Log analysis completion
+            thread_logger.log_analysis("vif", {"threshold": threshold}, result)
             
             if result.get("success"):
                 vif_scores = result.get("vif_scores", {})
@@ -1509,18 +1509,28 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                         response += f"{chr(10)}• {feature}: {score:.4f}"
                 
                 response += f"\n\n🎯 **Analysis added to pipeline!**"
-                print(f"🔧 DEBUG VIF: Sending success response to Slack")
+                print_to_log(f"🔧 DEBUG VIF: Sending success response to Slack")
                 say(response)
             elif result.get("error"):
                 error_msg = f"❌ VIF Analysis failed: {result.get('error', 'Unknown error')}"
-                print(f"🔧 DEBUG VIF: Sending error response to Slack: {error_msg}")
+                print_to_log(f"🔧 DEBUG VIF: Sending error response to Slack: {error_msg}")
                 say(error_msg)
             else:
                 error_msg = f"❌ VIF Analysis failed: Unexpected result format: {result}"
-                print(f"🔧 DEBUG VIF: Sending unexpected result error to Slack: {error_msg}")
+                print_to_log(f"🔧 DEBUG VIF: Sending unexpected result error to Slack: {error_msg}")
                 say(error_msg)
-                
-        elif analysis_type == "shap":
+            
+        else:
+            say(f"🔧 Analysis type '{analysis_type}' is not yet implemented. Coming soon!")
+    
+    def run_custom_analysis(self, session: UserSession, intent_data: Dict[str, Any], say):
+        """Run custom analyses like PCA, LASSO, advanced techniques"""
+        analysis_type = intent_data.get("analysis_type", "").lower()
+        query_details = intent_data.get("query_details", "")
+        
+        say(f"🔄 **Running {analysis_type.upper()} Analysis**...")
+        
+        if analysis_type == "shap":
             # Handle SHAP analysis as a direct tool
             threshold = intent_data.get("threshold", 0.01)
             top_n = None
@@ -1862,7 +1872,7 @@ else:
         if score < threshold_value:
             features_to_remove.append(feature)
 
-print(f"SHAP analysis complete. Features to remove: {{len(features_to_remove)}}")
+print_to_log(f"SHAP analysis complete. Features to remove: {{len(features_to_remove)}}")
 ```
 
 CRITICAL REQUIREMENTS:
@@ -1927,7 +1937,7 @@ for feature, score in analysis_scores.items():
     if score < threshold_value:
         features_to_remove.append(feature)
 
-print(f"{analysis_type.upper()} analysis complete. Features to remove: {{len(features_to_remove)}}")
+print_to_log(f"{analysis_type.upper()} analysis complete. Features to remove: {{len(features_to_remove)}}")
 ```
 
 CRITICAL REQUIREMENTS:
@@ -2267,7 +2277,7 @@ Example good responses:
             say(response.content)
             
         except Exception as e:
-            print(f"❌ Error in LLM query handling: {e}")
+            print_to_log(f"❌ Error in LLM query handling: {e}")
             # Minimal fallback
             if "features" in query.lower():
                 newline = "\n"
@@ -2979,8 +2989,8 @@ Generate a professional analysis summary:"""
     def run(self):
         """Start the bot"""
         handler = SocketModeHandler(self.app, os.environ["SLACK_APP_TOKEN"])
-        print("🚀 New Agentic Feature Selection Bot Started!")
-        print("📡 Socket Mode activated - Bot is ready!")
+        print_to_log("🚀 New Agentic Feature Selection Bot Started!")
+        print_to_log("📡 Socket Mode activated - Bot is ready!")
         handler.start()
 
 if __name__ == "__main__":
@@ -2989,7 +2999,7 @@ if __name__ == "__main__":
     missing_vars = [var for var in required_vars if not os.environ.get(var)]
     
     if missing_vars:
-        print(f"❌ Missing environment variables: {', '.join(missing_vars)}")
+        print_to_log(f"❌ Missing environment variables: {', '.join(missing_vars)}")
         exit(1)
     
     # Start the new bot
