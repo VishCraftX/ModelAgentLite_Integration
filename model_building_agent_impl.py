@@ -3371,8 +3371,8 @@ class LangGraphModelAgent:
         # Send initial progress update
         print(f"🔍 DEBUG - progress_callback is None: {progress_callback is None}")
         if progress_callback:
-            print(f"📡 CALLING progress_callback: Starting query analysis...")
-            progress_callback("Starting query analysis...", "Intent Classification")
+            print(f"📡 CALLING progress_callback (initial)")
+            # Removed "Starting query analysis..." progress message as requested
         else:
             print(f"⚠️ progress_callback is None - no progress updates will be sent")
         
