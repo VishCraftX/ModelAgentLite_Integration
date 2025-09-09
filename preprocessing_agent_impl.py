@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+from print_to_log import print_to_log
+# Import master log handler to capture logger.info calls
+try:
+    import master_log_handler
+except ImportError:
+    pass
+
+
 """
 Sequential Preprocessing Agent - Part 1: Core State Management
 Educational preprocessing agent with phase-by-phase workflow
@@ -22,11 +30,14 @@ from dotenv import load_dotenv
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
+# Import thread logging system
+from thread_logger import get_thread_logger
+
 # Load environment variables
 load_dotenv()
 
-print(f"🔧 DEBUG: Environment loaded - DEFAULT_MODEL: {os.getenv('DEFAULT_MODEL', 'Not set')}")
-print(f"🔧 DEBUG: Using Qwen models only (OpenAI disabled)")
+print_to_log(f"🔧 DEBUG: Environment loaded - DEFAULT_MODEL: {os.getenv('DEFAULT_MODEL', 'Not set')}")
+print_to_log(f"🔧 DEBUG: Using Qwen models only (OpenAI disabled)")
 
 class PreprocessingPhase:
     """Enum-like class for preprocessing phases"""
@@ -84,13 +95,13 @@ def get_llm_from_state(state: SequentialState):
     try:
         # Get default model from environment
         default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
-        print(f"🔧 DEBUG: Using model: {default_model}")
+        print_to_log(f"🔧 DEBUG: Using model: {default_model}")
         
         # Handle None state
         if state is None:
-            print("🔧 DEBUG: State is None, using default LLM configuration")
+            print_to_log("🔧 DEBUG: State is None, using default LLM configuration")
             # OpenAI support removed - always use Qwen models
-            print(f"🔧 DEBUG: Using Qwen models only")
+            print_to_log(f"🔧 DEBUG: Using Qwen models only")
             return ChatOllama(
                 model=default_model,
                 temperature=0
@@ -98,28 +109,28 @@ def get_llm_from_state(state: SequentialState):
         
         # Handle missing model_name
         if not hasattr(state, 'model_name') or state.model_name is None:
-            print("🔧 DEBUG: State has no model_name, using default")
+            print_to_log("🔧 DEBUG: State has no model_name, using default")
             # OpenAI support removed - always use Qwen models
-            print(f"🔧 DEBUG: Using Qwen models only")
+            print_to_log(f"🔧 DEBUG: Using Qwen models only")
             return ChatOllama(
                 model=default_model,
                 temperature=0
             )
         
         # OpenAI support removed - always use Qwen models
-        print(f"🔧 DEBUG: Using Qwen models only")
+        print_to_log(f"🔧 DEBUG: Using Qwen models only")
         # Use default model if gpt model was requested
         model_to_use = default_model if state.model_name.startswith("gpt-") else state.model_name
-        print(f"🔧 DEBUG: Using ChatOllama with model: {model_to_use}")
+        print_to_log(f"🔧 DEBUG: Using ChatOllama with model: {model_to_use}")
         return ChatOllama(
             model=model_to_use,
             temperature=0
         )
     except Exception as e:
-        print(f"❌ Error creating LLM: {e}")
+        print_to_log(f"❌ Error creating LLM: {e}")
         # Fallback to default model
         default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
-        print(f"🔧 DEBUG: Fallback to default model: {default_model}")
+        print_to_log(f"🔧 DEBUG: Fallback to default model: {default_model}")
         # OpenAI support removed - always use Qwen models
         return ChatOllama(model=default_model, temperature=0)
 
@@ -260,7 +271,7 @@ def analyze_column_comprehensive(series: pd.Series, target: pd.Series = None, co
                         analysis['anova_p_value'] = float(p_value)
                         analysis['significant_relationship'] = p_value < 0.05
         except Exception as e:
-            print(f"Error in target correlation analysis for {column_name}: {e}")
+            print_to_log(f"Error in target correlation analysis for {column_name}: {e}")
     
     return analysis
 
@@ -312,7 +323,7 @@ def analyze_outliers_with_llm(state: SequentialState, progress_callback=None) ->
     chunk_size = 10  # Optimized for open-source models
     
     if total_columns > 100:
-        print(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
+        print_to_log(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
         return analyze_outliers_chunked(state, chunk_size, progress_callback)
     else:
         return analyze_outliers_single_batch(state)
@@ -419,7 +430,7 @@ Consider domain context:
         }
         
     except Exception as e:
-        print(f"Error in LLM outlier analysis: {e}")
+        print_to_log(f"Error in LLM outlier analysis: {e}")
         # Fallback recommendations
         recommendations = {}
         for col_info in numeric_columns:
@@ -464,7 +475,7 @@ def analyze_outliers_chunked(state: SequentialState, chunk_size: int = 10, progr
     # Get all numeric columns with outliers
     numeric_columns_with_outliers = []
     
-    print("🔍 Scanning for columns with outliers...")
+    print_to_log("🔍 Scanning for columns with outliers...")
     for col in df.columns:
         if col != state.target_column and pd.api.types.is_numeric_dtype(df[col]):
             analysis = analyze_column_comprehensive(df[col], target, col)
@@ -480,7 +491,7 @@ def analyze_outliers_chunked(state: SequentialState, chunk_size: int = 10, progr
     if not numeric_columns_with_outliers:
         return {'outlier_columns': [], 'llm_recommendations': {}}
     
-    print(f"📊 Processing {len(numeric_columns_with_outliers)} columns with outliers in chunks of {chunk_size}")
+    print_to_log(f"📊 Processing {len(numeric_columns_with_outliers)} columns with outliers in chunks of {chunk_size}")
     
     # Process in chunks
     all_recommendations = {}
@@ -501,7 +512,7 @@ def analyze_outliers_chunked(state: SequentialState, chunk_size: int = 10, progr
             current_columns = len(all_recommendations) + len(chunk)
             progress_callback("outliers", chunk_num, total_chunks, current_columns, len(numeric_columns_with_outliers), start_time, None, is_initial=False)
         
-        print(f"📊 Processing chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
+        print_to_log(f"📊 Processing chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
         
         try:
             chunk_recommendations = analyze_outlier_chunk(state, chunk)
@@ -512,7 +523,7 @@ def analyze_outliers_chunked(state: SequentialState, chunk_size: int = 10, progr
                 all_analysis_details[col_info['column']] = col_info['analysis']
                 
         except Exception as e:
-            print(f"❌ Error processing chunk {chunk_num}: {e}")
+            print_to_log(f"❌ Error processing chunk {chunk_num}: {e}")
             # Fallback for this chunk
             for col_info in chunk:
                 col = col_info['column']
@@ -537,7 +548,7 @@ def analyze_outliers_chunked(state: SequentialState, chunk_size: int = 10, progr
                 all_analysis_details[col] = analysis
     
     total_time = time.time() - start_time
-    print(f"✅ Completed outlier analysis for {len(all_recommendations)} columns in {total_time:.2f}s")
+    print_to_log(f"✅ Completed outlier analysis for {len(all_recommendations)} columns in {total_time:.2f}s")
     return {
         'outlier_columns': list(all_recommendations.keys()),
         'llm_recommendations': all_recommendations,
@@ -604,7 +615,7 @@ Return JSON: {{"column_name": {{"treatment": "winsorize/keep", "reasoning": "bri
         return recommendations
         
     except Exception as e:
-        print(f"❌ Error in outlier chunk analysis: {e}")
+        print_to_log(f"❌ Error in outlier chunk analysis: {e}")
         # Fallback recommendations
         fallback_recommendations = {}
         for col_info in chunk:
@@ -647,7 +658,7 @@ def analyze_missing_values_with_llm(state: SequentialState, progress_callback=No
     chunk_size = 10  # Optimized for open-source models
     
     if total_columns > 100:
-        print(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
+        print_to_log(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
         return analyze_missing_values_chunked(state, current_df, chunk_size, progress_callback)
     else:
         return analyze_missing_values_single_batch(state, current_df)
@@ -767,7 +778,7 @@ Consider:
         }
         
     except Exception as e:
-        print(f"Error in LLM missing value analysis: {e}")
+        print_to_log(f"Error in LLM missing value analysis: {e}")
         # Fallback recommendations
         recommendations = {}
         for col_info in missing_columns:
@@ -809,7 +820,7 @@ def analyze_missing_values_chunked(state: SequentialState, current_df: pd.DataFr
     # Get all columns with missing values
     missing_columns_list = []
     
-    print("🔍 Scanning for columns with missing values...")
+    print_to_log("🔍 Scanning for columns with missing values...")
     for col in current_df.columns:
         if current_df[col].isnull().sum() > 0:
             analysis = analyze_column_comprehensive(current_df[col], target, col)
@@ -824,7 +835,7 @@ def analyze_missing_values_chunked(state: SequentialState, current_df: pd.DataFr
     if not missing_columns_list:
         return {'missing_columns': [], 'llm_recommendations': {}}
     
-    print(f"📊 Processing {len(missing_columns_list)} columns with missing values in chunks of {chunk_size}")
+    print_to_log(f"📊 Processing {len(missing_columns_list)} columns with missing values in chunks of {chunk_size}")
     
     # Process in chunks
     all_recommendations = {}
@@ -840,7 +851,7 @@ def analyze_missing_values_chunked(state: SequentialState, current_df: pd.DataFr
             current_columns = len(all_recommendations) + len(chunk)
             progress_callback("missing_values", chunk_num, total_chunks, current_columns, len(missing_columns_list))
         
-        print(f"📊 Processing missing values chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
+        print_to_log(f"📊 Processing missing values chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
         
         try:
             chunk_recommendations = analyze_missing_values_chunk(state, chunk, current_df)
@@ -851,7 +862,7 @@ def analyze_missing_values_chunked(state: SequentialState, current_df: pd.DataFr
                 all_analysis_details[col_info['column']] = col_info['analysis']
                 
         except Exception as e:
-            print(f"❌ Error processing missing values chunk {chunk_num}: {e}")
+            print_to_log(f"❌ Error processing missing values chunk {chunk_num}: {e}")
             # Fallback for this chunk
             for col_info in chunk:
                 col = col_info['column']
@@ -874,7 +885,7 @@ def analyze_missing_values_chunked(state: SequentialState, current_df: pd.DataFr
                 }
                 all_analysis_details[col] = analysis
     
-    print(f"✅ Completed missing values analysis for {len(all_recommendations)} columns")
+    print_to_log(f"✅ Completed missing values analysis for {len(all_recommendations)} columns")
     return {
         'missing_columns': list(all_recommendations.keys()),
         'llm_recommendations': all_recommendations,
@@ -932,7 +943,7 @@ Return JSON: {{"column_name": {{"strategy": "strategy_name", "reasoning": "brief
         return recommendations
         
     except Exception as e:
-        print(f"Error in missing values chunk analysis: {e}")
+        print_to_log(f"Error in missing values chunk analysis: {e}")
         # Return empty dict, will be handled by fallback in parent function
         return {}
 
@@ -953,7 +964,7 @@ def analyze_encoding_with_llm(state: SequentialState, progress_callback=None) ->
     chunk_size = 10  # Optimized for open-source models
     
     if total_columns > 100:
-        print(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
+        print_to_log(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
         return analyze_encoding_chunked(state, current_df, chunk_size, progress_callback)
     else:
         return analyze_encoding_single_batch(state, current_df)
@@ -1049,7 +1060,7 @@ Return JSON: {{"column_name": {{"strategy": "strategy_name", "reasoning": "brief
         }
         
     except Exception as e:
-        print(f"❌ Error in encoding analysis: {e}")
+        print_to_log(f"❌ Error in encoding analysis: {e}")
         # Fallback recommendations
         fallback_recommendations = {}
         for col in categorical_columns:
@@ -1094,7 +1105,7 @@ def analyze_transformations_with_llm(state: SequentialState, progress_callback=N
     chunk_size = 10  # Optimized for open-source models
     
     if total_columns > 100:
-        print(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
+        print_to_log(f"📊 Large dataset detected ({total_columns} columns). Using chunked processing...")
         return analyze_transformations_chunked(state, current_df, chunk_size, progress_callback)
     else:
         return analyze_transformations_single_batch(state, current_df)
@@ -1166,7 +1177,7 @@ Return JSON: {{"column_name": {{"transformation": "transformation_name", "reason
         }
         
     except Exception as e:
-        print(f"Error in LLM transformation analysis: {e}")
+        print_to_log(f"Error in LLM transformation analysis: {e}")
         # Fallback transformation recommendations
         recommendations = {}
         for col_info in numeric_columns:
@@ -1227,7 +1238,7 @@ def analyze_transformations_chunked(state: SequentialState, current_df: pd.DataF
     if not numeric_columns:
         return {'transformation_columns': [], 'llm_recommendations': {}}
     
-    print(f"📊 Processing {len(numeric_columns)} transformation columns in chunks of {chunk_size}")
+    print_to_log(f"📊 Processing {len(numeric_columns)} transformation columns in chunks of {chunk_size}")
     
     # Process in chunks
     all_recommendations = {}
@@ -1248,7 +1259,7 @@ def analyze_transformations_chunked(state: SequentialState, current_df: pd.DataF
             current_columns = len(all_recommendations) + len(chunk)
             progress_callback("transformations", chunk_num, total_chunks, current_columns, len(numeric_columns), start_time, None, is_initial=False)
         
-        print(f"📊 Processing transformations chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
+        print_to_log(f"📊 Processing transformations chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
         
         try:
             chunk_recommendations = analyze_transformations_chunk(state, chunk, current_df)
@@ -1259,7 +1270,7 @@ def analyze_transformations_chunked(state: SequentialState, current_df: pd.DataF
                 all_analysis_details[col_info['column']] = col_info['analysis']
                 
         except Exception as e:
-            print(f"❌ Error processing transformations chunk {chunk_num}: {e}")
+            print_to_log(f"❌ Error processing transformations chunk {chunk_num}: {e}")
             # Fallback for this chunk
             for col_info in chunk:
                 col = col_info['column']
@@ -1283,7 +1294,7 @@ def analyze_transformations_chunked(state: SequentialState, current_df: pd.DataF
                 all_analysis_details[col] = analysis
     
     total_time = time.time() - start_time
-    print(f"✅ Completed transformations analysis for {len(all_recommendations)} columns in {total_time:.2f}s")
+    print_to_log(f"✅ Completed transformations analysis for {len(all_recommendations)} columns in {total_time:.2f}s")
     
     return {
         'transformation_columns': list(all_recommendations.keys()),
@@ -1330,7 +1341,7 @@ Return JSON: {{"column_name": {{"transformation": "transformation_name", "reason
         
         # If no recommendations were parsed, use fallback
         if not recommendations:
-            print("⚠️ No valid JSON parsed from LLM response, using fallback")
+            print_to_log("⚠️ No valid JSON parsed from LLM response, using fallback")
             fallback_recommendations = {}
             for col_info in chunk:
                 col = col_info['column']
@@ -1360,7 +1371,7 @@ Return JSON: {{"column_name": {{"transformation": "transformation_name", "reason
         return recommendations
         
     except Exception as e:
-        print(f"Error in transformations chunk analysis: {e}")
+        print_to_log(f"Error in transformations chunk analysis: {e}")
         # Return empty dict, will be handled by fallback in parent function
         return {}
 
@@ -1370,26 +1381,26 @@ def initialize_dataset_analysis(state: SequentialState) -> SequentialState:
     """
     Initial dataset analysis and overview generation
     """
-    print(f"🔍 Initializing dataset analysis for {state.df_path}")
+    print_to_log(f"🔍 Initializing dataset analysis for {state.df_path}")
     
     # Load data if not already loaded
     if state.df is None:
         try:
             state.df = pd.read_csv(state.df_path)
-            print(f"📊 Loaded dataset: {state.df.shape[0]} rows, {state.df.shape[1]} columns")
+            print_to_log(f"📊 Loaded dataset: {state.df.shape[0]} rows, {state.df.shape[1]} columns")
         except Exception as e:
-            print(f"❌ Error loading dataset: {e}")
+            print_to_log(f"❌ Error loading dataset: {e}")
             return state.copy(update={"current_step": "error"})
     
     # Basic dataset validation
-    print(f"🔧 DEBUG: Checking target column '{state.target_column}' in dataset columns: {list(state.df.columns)}")
+    print_to_log(f"🔧 DEBUG: Checking target column '{state.target_column}' in dataset columns: {list(state.df.columns)}")
     if state.target_column not in state.df.columns:
-        print(f"❌ Target column '{state.target_column}' not found in dataset")
-        print(f"🔧 DEBUG: Available columns: {list(state.df.columns)}")
-        print(f"🔧 DEBUG: Target column type: {type(state.target_column)}")
+        print_to_log(f"❌ Target column '{state.target_column}' not found in dataset")
+        print_to_log(f"🔧 DEBUG: Available columns: {list(state.df.columns)}")
+        print_to_log(f"🔧 DEBUG: Target column type: {type(state.target_column)}")
         return state.copy(update={"current_step": "error"})
     else:
-        print(f"✅ Target column '{state.target_column}' found in dataset")
+        print_to_log(f"✅ Target column '{state.target_column}' found in dataset")
     
     # Quick overview analysis
     total_columns = len(state.df.columns) - 1  # Exclude target
@@ -1669,7 +1680,7 @@ Return ONLY this JSON format:
             return {'intent': 'query', 'action': 'show_details', 'response_type': 'answer'}
             
     except Exception as e:
-        print(f"Intent classification error: {e}")
+        print_to_log(f"Intent classification error: {e}")
         return {'intent': 'query', 'action': 'show_details', 'response_type': 'answer'}
 
 def process_user_input_with_llm(state: SequentialState, user_input: str) -> SequentialState:
@@ -1836,12 +1847,12 @@ def create_sequential_preprocessing_agent():
     Returns compiled StateGraph if available, None otherwise
     """
     if not LANGGRAPH_AVAILABLE:
-        print("⚠️ LangGraph not available, cannot create preprocessing agent")
+        print_to_log("⚠️ LangGraph not available, cannot create preprocessing agent")
         return None
     
     def overview_node(state: SequentialState) -> SequentialState:
         """Generate overview and wait for user input"""
-        print("📊 Phase 0: Dataset Overview")
+        print_to_log("📊 Phase 0: Dataset Overview")
         
         if state.current_step != "overview_ready":
             state = initialize_dataset_analysis(state)
@@ -1857,20 +1868,43 @@ def create_sequential_preprocessing_agent():
     
     def outliers_node(state: SequentialState) -> SequentialState:
         """Analyze and present outlier treatment recommendations"""
-        print("⚠️  Phase 1: Outlier Analysis")
+        print_to_log("⚠️  Phase 1: Outlier Analysis")
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            # Extract user_id and thread_id from session_id
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_analysis("outlier_detection", {}, {"status": "starting"})
+        else:
+            thread_logger = None
         
         # Run outlier analysis
         outlier_results = analyze_outliers_with_llm(state)
         
-        if not outlier_results['outlier_columns']:
-            summary = "✅ **No Outliers Detected**\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
-        else:
-            outlier_cols = outlier_results['outlier_columns']
-            recommendations = outlier_results['llm_recommendations']
+        # Log analysis results
+        if thread_logger:
+            thread_logger.log_analysis("outlier_detection", {}, {
+                "success": True,
+                "outlier_columns": len(outlier_results.get('outlier_columns', [])),
+                "processing_time": outlier_results.get('processing_time', 0)
+            })
             
-            # Group by severity
-            severe_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'severe']
-            moderate_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'moderate']
+            if not outlier_results['outlier_columns']:
+                summary = "✅ **No Outliers Detected**\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
+            else:
+                outlier_cols = outlier_results['outlier_columns']
+                recommendations = outlier_results['llm_recommendations']
+                
+                # Group by severity
+                severe_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'severe']
+                moderate_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'moderate']
             mild_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'mild']
             
             summary = f"""⚠️  **Outlier Detection Results ({len(outlier_cols)} columns):**
@@ -1912,13 +1946,36 @@ def create_sequential_preprocessing_agent():
             "current_step": "awaiting_user_input",
             "query_response": summary
         })
-    
+        
     def missing_values_node(state: SequentialState) -> SequentialState:
         """Analyze and present missing value imputation strategies"""
-        print("📈 Phase 2: Missing Values Analysis")
+        print_to_log("📈 Phase 2: Missing Values Analysis")
+        
+        # Get thread logger
+        if hasattr(state, 'chat_session') and state.chat_session:
+            session_id = state.chat_session
+            if '_' in session_id:
+                parts = session_id.split('_')
+                user_id = parts[0] if len(parts) >= 1 else session_id
+                thread_id = '_'.join(parts[1:]) if len(parts) > 1 else session_id
+            else:
+                user_id = session_id
+                thread_id = session_id
+            thread_logger = get_thread_logger(user_id, thread_id)
+            thread_logger.log_analysis("missing_values_analysis", {}, {"status": "starting"})
+        else:
+            thread_logger = None
         
         # Run missing value analysis
         missing_results = analyze_missing_values_with_llm(state)
+        
+        # Log analysis results
+        if thread_logger:
+            thread_logger.log_analysis("missing_values_analysis", {}, {
+                "success": True,
+                "missing_columns": len(missing_results.get('missing_columns', [])),
+                "processing_time": missing_results.get('processing_time', 0)
+            })
         
         if not missing_results['missing_columns']:
             summary = "✅ **No Missing Values Detected**\n\nAll columns are complete. Ready to proceed to Phase 3 (Encoding)?"
@@ -1979,7 +2036,7 @@ Imputation choices based on distribution shape, missing percentage, and target c
     
     def encoding_node(state: SequentialState) -> SequentialState:
         """Analyze and present categorical encoding strategies"""
-        print("🏷️  Phase 3: Categorical Encoding Analysis")
+        print_to_log("🏷️  Phase 3: Categorical Encoding Analysis")
         
         
         # Run encoding analysis
@@ -2057,7 +2114,7 @@ For medium cardinality columns, we keep the most frequent categories and group t
     
     def transformations_node(state: SequentialState) -> SequentialState:
         """Analyze and present distribution transformation strategies"""
-        print("🔄 Phase 4: Distribution Transformations Analysis")
+        print_to_log("🔄 Phase 4: Distribution Transformations Analysis")
         
         # Run transformation analysis
         transformation_results = analyze_transformations_with_llm(state)
@@ -2122,7 +2179,7 @@ For medium cardinality columns, we keep the most frequent categories and group t
     
     def completion_node(state: SequentialState) -> SequentialState:
         """Generate final preprocessing summary and cleaned dataset"""
-        print("✅ Phase 5: Preprocessing Complete")
+        print_to_log("✅ Phase 5: Preprocessing Complete")
         
         completed = state.completed_phases
         total_phases = len([p for p in [PreprocessingPhase.OUTLIERS, PreprocessingPhase.MISSING_VALUES, 
@@ -2346,8 +2403,8 @@ def run_sequential_agent(df_path: str, target_column: str, model_name: str = Non
     """
     Main function to run the sequential preprocessing agent
     """
-    print("🚀 Starting Sequential Preprocessing Agent")
-    print("=" * 50)
+    print_to_log("🚀 Starting Sequential Preprocessing Agent")
+    print_to_log("=" * 50)
     
     # Use provided model_name or get from environment
     if model_name is None:
@@ -2374,14 +2431,14 @@ def run_sequential_agent(df_path: str, target_column: str, model_name: str = Non
             # Check for exit request
             if current_state.current_step == "exit_requested":
                 if current_state.query_response:
-                    print("\n" + current_state.query_response)
-                print("👋 Exiting preprocessing agent.")
+                    print_to_log("\n" + current_state.query_response)
+                print_to_log("👋 Exiting preprocessing agent.")
                 break
             
             # Display response to user
             if current_state.query_response:
-                print("\n" + current_state.query_response)
-                print("\n" + "─" * 50)
+                print_to_log("\n" + current_state.query_response)
+                print_to_log("\n" + "─" * 50)
             
             # If waiting for user input, get it
             if current_state.current_step == "awaiting_user_input":
@@ -2395,15 +2452,15 @@ def run_sequential_agent(df_path: str, target_column: str, model_name: str = Non
                 })
             
         except KeyboardInterrupt:
-            print("\n\n👋 Preprocessing interrupted by user.")
+            print_to_log("\n\n👋 Preprocessing interrupted by user.")
             break
         except Exception as e:
-            print(f"\n❌ Error in agent execution: {e}")
+            print_to_log(f"\n❌ Error in agent execution: {e}")
             import traceback
             traceback.print_exc()
             break
     
-    print("\n🎉 Sequential preprocessing agent session ended.")
+    print_to_log("\n🎉 Sequential preprocessing agent session ended.")
     return current_state
 
 def detect_and_handle_extreme_outliers(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
@@ -2855,7 +2912,7 @@ def analyze_encoding_chunked(state: SequentialState, current_df: pd.DataFrame, c
     if not categorical_columns:
         return {'categorical_columns': [], 'llm_recommendations': {}}
     
-    print(f"📊 Processing {len(categorical_columns)} categorical columns in chunks of {chunk_size}")
+    print_to_log(f"📊 Processing {len(categorical_columns)} categorical columns in chunks of {chunk_size}")
     
     # Process in chunks
     all_recommendations = {}
@@ -2875,14 +2932,14 @@ def analyze_encoding_chunked(state: SequentialState, current_df: pd.DataFrame, c
             current_columns = len(all_recommendations) + len(chunk)
             progress_callback("encoding", chunk_num, total_chunks, current_columns, len(categorical_columns), start_time, None, is_initial=False)
         
-        print(f"📊 Processing encoding chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
+        print_to_log(f"📊 Processing encoding chunk {chunk_num}/{total_chunks} ({len(chunk)} columns)")
         
         try:
             chunk_recommendations = analyze_encoding_chunk(state, chunk, current_df)
             all_recommendations.update(chunk_recommendations)
                 
         except Exception as e:
-            print(f"❌ Error processing encoding chunk {chunk_num}: {e}")
+            print_to_log(f"❌ Error processing encoding chunk {chunk_num}: {e}")
             # Fallback for this chunk
             for col in chunk:
                 unique_count = current_df[col].nunique()
@@ -2904,7 +2961,7 @@ def analyze_encoding_chunked(state: SequentialState, current_df: pd.DataFrame, c
                 }
     
     total_time = time.time() - start_time
-    print(f"✅ Completed encoding analysis for {len(all_recommendations)} columns in {total_time:.2f}s")
+    print_to_log(f"✅ Completed encoding analysis for {len(all_recommendations)} columns in {total_time:.2f}s")
     
     return {
         'categorical_columns': list(all_recommendations.keys()),
@@ -2950,7 +3007,7 @@ Return JSON: {{"column_name": {{"strategy": "strategy_name", "reasoning": "brief
         return recommendations
         
     except Exception as e:
-        print(f"Error in encoding chunk analysis: {e}")
+        print_to_log(f"Error in encoding chunk analysis: {e}")
         return {}
 
 class ConfidenceBasedPreprocessor:
@@ -2975,7 +3032,7 @@ class ConfidenceBasedPreprocessor:
         Main entry point for confidence-based analysis with timeout fallback
         """
         start_time = time.time()
-        print(f"🎯 Starting 2-step confidence analysis for {phase} (timeout: {self.timeout_seconds/60:.0f}min)...")
+        print_to_log(f"🎯 Starting 2-step confidence analysis for {phase} (timeout: {self.timeout_seconds/60:.0f}min)...")
         
         # STEP 1: Rule-based pre-analysis (always fast)
         rule_results = self._analyze_columns_with_rules(state, phase)
@@ -2986,9 +3043,9 @@ class ConfidenceBasedPreprocessor:
         total_cols = len(high_conf_decisions) + len(uncertain_columns)
         high_conf_pct = (len(high_conf_decisions) / total_cols * 100) if total_cols > 0 else 0
         
-        print(f"📊 STEP 1 PRE-DECISION RESULTS:")
-        print(f"   ✅ High Confidence: {len(high_conf_decisions)}/{total_cols} columns ({high_conf_pct:.1f}%)")
-        print(f"   ❓ Uncertain: {len(uncertain_columns)}/{total_cols} columns ({100-high_conf_pct:.1f}%)")
+        print_to_log(f"📊 STEP 1 PRE-DECISION RESULTS:")
+        print_to_log(f"   ✅ High Confidence: {len(high_conf_decisions)}/{total_cols} columns ({high_conf_pct:.1f}%)")
+        print_to_log(f"   ❓ Uncertain: {len(uncertain_columns)}/{total_cols} columns ({100-high_conf_pct:.1f}%)")
         
         # STEP 2: LLM processing with timeout monitoring
         llm_decisions = {}
@@ -3000,13 +3057,13 @@ class ConfidenceBasedPreprocessor:
                 chunk_size = 12  # Optimized for uncertain cases
                 num_chunks = (len(uncertain_columns) + chunk_size - 1) // chunk_size
                 
-                print(f"🤖 STEP 2 LLM PROCESSING:")
-                print(f"   📦 Chunking {len(uncertain_columns)} uncertain columns into {num_chunks} chunks")
-                print(f"   ⏰ Timeout in {remaining_time:.0f}s")
+                print_to_log(f"🤖 STEP 2 LLM PROCESSING:")
+                print_to_log(f"   📦 Chunking {len(uncertain_columns)} uncertain columns into {num_chunks} chunks")
+                print_to_log(f"   ⏰ Timeout in {remaining_time:.0f}s")
                 
                 llm_decisions = self._process_with_timeout(state, phase, uncertain_columns, remaining_time)
             else:
-                print(f"⚠️ Insufficient time remaining ({remaining_time:.0f}s), using fallback strategies...")
+                print_to_log(f"⚠️ Insufficient time remaining ({remaining_time:.0f}s), using fallback strategies...")
                 llm_decisions = self._apply_fallback_strategies(uncertain_columns, phase)
                 self.stats['timeout_fallbacks'] += len(uncertain_columns)
         
@@ -3023,10 +3080,10 @@ class ConfidenceBasedPreprocessor:
         
         # Performance summary
         total_time = time.time() - start_time
-        print(f"⚡ PERFORMANCE SUMMARY:")
-        print(f"   🚀 Rule-based efficiency: {high_conf_pct:.1f}%")
-        print(f"   ⏱️  Total processing time: {total_time:.1f}s")
-        print(f"   🎯 LLM calls saved: ~{(total_cols//10) - (len(uncertain_columns)//12 if uncertain_columns else 0)}")
+        print_to_log(f"⚡ PERFORMANCE SUMMARY:")
+        print_to_log(f"   🚀 Rule-based efficiency: {high_conf_pct:.1f}%")
+        print_to_log(f"   ⏱️  Total processing time: {total_time:.1f}s")
+        print_to_log(f"   🎯 LLM calls saved: ~{(total_cols//10) - (len(uncertain_columns)//12 if uncertain_columns else 0)}")
         
         # Combine results
         all_recommendations = {**high_conf_decisions, **llm_decisions}
@@ -3060,7 +3117,7 @@ class ConfidenceBasedPreprocessor:
         high_confidence = {}
         uncertain_columns = []
         
-        print("🔍 STEP 1: Analyzing outliers with confidence rules...")
+        print_to_log("🔍 STEP 1: Analyzing outliers with confidence rules...")
         
         for col in df.columns:
             if col == state.target_column or not pd.api.types.is_numeric_dtype(df[col]):
@@ -3072,7 +3129,7 @@ class ConfidenceBasedPreprocessor:
             
             # ✅ CRITICAL FIX: Only process columns WITH outliers
             if outlier_pct > 0:
-                print(f"🎯 {col}: {outlier_pct:.1f}% outliers detected - analyzing...")
+                print_to_log(f"🎯 {col}: {outlier_pct:.1f}% outliers detected - analyzing...")
                 confidence_result = self._outlier_confidence_rules(analysis, col)
                 
                 if confidence_result['confidence'] >= self.confidence_threshold:
@@ -3082,7 +3139,7 @@ class ConfidenceBasedPreprocessor:
                         'confidence': confidence_result['confidence'],
                         'rule_based': True
                     }
-                    print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                    print_to_log(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
                 else:
                     uncertain_columns.append({
                         'column': col,
@@ -3090,9 +3147,9 @@ class ConfidenceBasedPreprocessor:
                         'patterns': detect_patterns_llm_ready(df[col], col),
                         'rule_confidence': confidence_result['confidence']
                     })
-                    print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+                    print_to_log(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
             else:
-                print(f"⚪ {col}: No outliers ({outlier_pct:.1f}%) - skipping")
+                print_to_log(f"⚪ {col}: No outliers ({outlier_pct:.1f}%) - skipping")
         
         return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
     
@@ -3156,7 +3213,7 @@ class ConfidenceBasedPreprocessor:
         high_confidence = {}
         uncertain_columns = []
         
-        print("🔍 STEP 1: Analyzing missing values with confidence rules...")
+        print_to_log("🔍 STEP 1: Analyzing missing values with confidence rules...")
         
         for col in current_df.columns:
             if current_df[col].isnull().sum() > 0:  # Process columns WITH missing values
@@ -3170,7 +3227,7 @@ class ConfidenceBasedPreprocessor:
                         'confidence': confidence_result['confidence'],
                         'rule_based': True
                     }
-                    print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                    print_to_log(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
                 else:
                     uncertain_columns.append({
                         'column': col,
@@ -3178,9 +3235,9 @@ class ConfidenceBasedPreprocessor:
                         'patterns': detect_patterns_llm_ready(current_df[col], col),
                         'rule_confidence': confidence_result['confidence']
                     })
-                    print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+                    print_to_log(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
             else:
-                print(f"⚪ {col}: No missing values - skipping")
+                print_to_log(f"⚪ {col}: No missing values - skipping")
         
         return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
     
@@ -3253,15 +3310,31 @@ class ConfidenceBasedPreprocessor:
         # Only use immediate fallback if we have very little time (less than 30 seconds for large datasets)
         min_time_needed = min(30, len(uncertain_columns) * 2)  # 2 seconds per column, max 30s
         if timeout_seconds <= min_time_needed:
-            print(f"⏰ TIMEOUT PREVENTION: Only {timeout_seconds:.0f}s remaining (need {min_time_needed}s) - using fallback strategies...")
-            print(f"🔄 Applying conservative strategies for {len(uncertain_columns)} columns...")
+            print_to_log(f"⏰ TIMEOUT PREVENTION: Only {timeout_seconds:.0f}s remaining (need {min_time_needed}s) - using fallback strategies...")
+            print_to_log(f"🔄 Applying conservative strategies for {len(uncertain_columns)} columns...")
             
             fallback_result = self._apply_fallback_strategies(uncertain_columns, phase)
             self.stats['timeout_fallbacks'] += len(uncertain_columns)
             return fallback_result
         
+        # Capture session context from current thread to pass to worker thread
+        session_context = None
+        try:
+            from session_context import get_session_context, has_session_context
+            if has_session_context():
+                session_context = get_session_context()
+        except ImportError:
+            pass
+        
         def llm_processing_task():
             """The actual LLM processing task with per-chunk timeout checking"""
+            # Set session context in the worker thread
+            if session_context:
+                try:
+                    from session_context import set_session_context
+                    set_session_context(session_context[0], session_context[1])
+                except ImportError:
+                    pass
             return self._process_uncertain_columns_with_llm_safe(state, phase, uncertain_columns, timeout_seconds)
         
         try:
@@ -3269,23 +3342,23 @@ class ConfidenceBasedPreprocessor:
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(llm_processing_task)
                 
-                print(f"🤖 Starting LLM processing with {timeout_seconds:.0f}s timeout...")
+                print_to_log(f"🤖 Starting LLM processing with {timeout_seconds:.0f}s timeout...")
                 result = future.result(timeout=timeout_seconds)
                 
-                print(f"✅ LLM processing completed within timeout")
+                print_to_log(f"✅ LLM processing completed within timeout")
                 return result
                 
         except TimeoutError:
-            print(f"⏰ TIMEOUT: LLM processing exceeded {timeout_seconds:.0f}s limit")
-            print(f"🔄 Falling back to conservative strategies for {len(uncertain_columns)} columns...")
+            print_to_log(f"⏰ TIMEOUT: LLM processing exceeded {timeout_seconds:.0f}s limit")
+            print_to_log(f"🔄 Falling back to conservative strategies for {len(uncertain_columns)} columns...")
             
             fallback_result = self._apply_fallback_strategies(uncertain_columns, phase)
             self.stats['timeout_fallbacks'] += len(uncertain_columns)
             return fallback_result
         
         except Exception as e:
-            print(f"❌ LLM processing failed: {e}")
-            print(f"🔄 Using fallback strategies...")
+            print_to_log(f"❌ LLM processing failed: {e}")
+            print_to_log(f"🔄 Using fallback strategies...")
             return self._apply_fallback_strategies(uncertain_columns, phase)
     
     def _process_uncertain_columns_with_llm(self, state: SequentialState, phase: str, uncertain_columns: List[Dict]) -> Dict[str, Any]:
@@ -3301,8 +3374,8 @@ class ConfidenceBasedPreprocessor:
             chunk_num = (i // chunk_size) + 1
             total_chunks = (len(uncertain_columns) + chunk_size - 1) // chunk_size
             
-            print(f"🔧 Processing chunk {chunk_num}/{total_chunks}: {len(chunk)} columns")
-            print(f"   Columns: {[col_info['column'] for col_info in chunk]}")
+            print_to_log(f"🔧 Processing chunk {chunk_num}/{total_chunks}: {len(chunk)} columns")
+            print_to_log(f"   Columns: {[col_info['column'] for col_info in chunk]}")
             
             start_time = time.time()
             
@@ -3320,7 +3393,7 @@ class ConfidenceBasedPreprocessor:
                     chunk_results = {}
                 
                 processing_time = time.time() - start_time
-                print(f"   ✅ Chunk {chunk_num} completed in {processing_time:.1f}s")
+                print_to_log(f"   ✅ Chunk {chunk_num} completed in {processing_time:.1f}s")
                 
                 # Handle different return formats for different phases
                 if phase == 'missing_values':
@@ -3331,7 +3404,7 @@ class ConfidenceBasedPreprocessor:
                     all_recommendations.update(chunk_results.get('llm_recommendations', {}))
                 
             except Exception as e:
-                print(f"   ❌ Chunk {chunk_num} failed: {e}")
+                print_to_log(f"   ❌ Chunk {chunk_num} failed: {e}")
                 # Apply fallback for this chunk
                 chunk_fallback = self._apply_fallback_strategies(chunk, phase)
                 all_recommendations.update(chunk_fallback)
@@ -3340,6 +3413,30 @@ class ConfidenceBasedPreprocessor:
     
     def _process_uncertain_columns_with_llm_safe(self, state: SequentialState, phase: str, uncertain_columns: List[Dict], total_timeout: float) -> Dict[str, Any]:
         """Process uncertain columns with LLM in optimized chunks - TIMEOUT SAFE VERSION"""
+        # Set session context for proper logging in chunk processing
+        try:
+            from session_context import get_session_context, has_session_context, set_session_context
+            # Try to inherit session context from calling thread
+            if not has_session_context():
+                # Look for session info in the call stack
+                import inspect
+                frame = inspect.currentframe()
+                for _ in range(15):
+                    try:
+                        if frame:
+                            frame = frame.f_back
+                            if frame and frame.f_locals:
+                                locals_dict = frame.f_locals
+                                if "session_id" in locals_dict:
+                                    from session_context import extract_session_from_session_id
+                                    user_id, thread_id = extract_session_from_session_id(locals_dict["session_id"])
+                                    set_session_context(user_id, thread_id)
+                                    break
+                    except:
+                        continue
+        except ImportError:
+            pass
+
         if not uncertain_columns:
             return {}
         
@@ -3354,8 +3451,8 @@ class ConfidenceBasedPreprocessor:
             
             # Need enough time for at least one more chunk (estimate 10s per chunk)
             if remaining_time <= 10:  
-                print(f"⏰ CHUNK TIMEOUT: Only {remaining_time:.1f}s remaining - stopping LLM processing")
-                print(f"🔄 Processed {i}/{len(uncertain_columns)} columns, applying fallback for remaining...")
+                print_to_log(f"⏰ CHUNK TIMEOUT: Only {remaining_time:.1f}s remaining - stopping LLM processing")
+                print_to_log(f"🔄 Processed {i}/{len(uncertain_columns)} columns, applying fallback for remaining...")
                 
                 # Apply fallback for remaining columns
                 remaining_columns = uncertain_columns[i:]
@@ -3369,8 +3466,8 @@ class ConfidenceBasedPreprocessor:
             chunk_num = (i // chunk_size) + 1
             total_chunks = (len(uncertain_columns) + chunk_size - 1) // chunk_size
             
-            print(f"🔧 Processing chunk {chunk_num}/{total_chunks}: {len(chunk)} columns (⏰ {remaining_time:.0f}s left)")
-            print(f"   Columns: {[col_info['column'] for col_info in chunk]}")
+            print_to_log(f"🔧 Processing chunk {chunk_num}/{total_chunks}: {len(chunk)} columns (⏰ {remaining_time:.0f}s left)")
+            print_to_log(f"   Columns: {[col_info['column'] for col_info in chunk]}")
             
             start_time = time.time()
             
@@ -3388,7 +3485,7 @@ class ConfidenceBasedPreprocessor:
                     chunk_results = {}
                 
                 processing_time = time.time() - start_time
-                print(f"   ✅ Chunk {chunk_num} completed in {processing_time:.1f}s")
+                print_to_log(f"   ✅ Chunk {chunk_num} completed in {processing_time:.1f}s")
                 
                 # Handle different return formats for different phases
                 if phase == 'missing_values':
@@ -3399,8 +3496,8 @@ class ConfidenceBasedPreprocessor:
                     all_recommendations.update(chunk_results.get('llm_recommendations', {}))
                 
             except Exception as e:
-                print(f"   ❌ Chunk {chunk_num} failed: {e}")
-                print(f"   🔄 Applying fallback for this chunk...")
+                print_to_log(f"   ❌ Chunk {chunk_num} failed: {e}")
+                print_to_log(f"   🔄 Applying fallback for this chunk...")
                 
                 # Apply fallback for this chunk only
                 chunk_fallback = self._apply_fallback_strategies(chunk, phase)
@@ -3422,7 +3519,7 @@ class ConfidenceBasedPreprocessor:
             return {'llm_recommendations': self._parse_encoding_response(response.content, chunk)}
             
         except Exception as e:
-            print(f"❌ Encoding LLM processing failed: {e}")
+            print_to_log(f"❌ Encoding LLM processing failed: {e}")
             return {'llm_recommendations': self._apply_fallback_strategies(chunk, 'encoding')}
     
     def _process_transformations_chunk_with_llm(self, state: SequentialState, chunk: List[Dict]) -> Dict[str, Any]:
@@ -3437,7 +3534,7 @@ class ConfidenceBasedPreprocessor:
             return {'llm_recommendations': self._parse_transformations_response(response.content, chunk)}
             
         except Exception as e:
-            print(f"❌ Transformations LLM processing failed: {e}")
+            print_to_log(f"❌ Transformations LLM processing failed: {e}")
             return {'llm_recommendations': self._apply_fallback_strategies(chunk, 'transformations')}
     
     def _create_encoding_prompt(self, chunk: List[Dict], target_column: str) -> str:
@@ -3529,7 +3626,7 @@ GUIDELINES:
                 return recommendations
             
         except Exception as e:
-            print(f"❌ Failed to parse encoding response: {e}")
+            print_to_log(f"❌ Failed to parse encoding response: {e}")
         
         # Fallback
         return {col_info['column']: {'strategy': 'onehot_encoding', 'reasoning': 'Parse error fallback'} 
@@ -3548,7 +3645,7 @@ GUIDELINES:
                 return recommendations
             
         except Exception as e:
-            print(f"❌ Failed to parse transformation response: {e}")
+            print_to_log(f"❌ Failed to parse transformation response: {e}")
         
         # Fallback based on skewness
         fallback = {}
@@ -3622,7 +3719,7 @@ GUIDELINES:
         high_confidence = {}
         uncertain_columns = []
         
-        print("🔍 STEP 1: Analyzing encoding with confidence rules...")
+        print_to_log("🔍 STEP 1: Analyzing encoding with confidence rules...")
         
         # Get categorical columns
         for col in current_df.columns:
@@ -3639,7 +3736,7 @@ GUIDELINES:
                         'confidence': confidence_result['confidence'],
                         'rule_based': True
                     }
-                    print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                    print_to_log(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
                 else:
                     uncertain_columns.append({
                         'column': col,
@@ -3647,7 +3744,7 @@ GUIDELINES:
                         'patterns': detect_patterns_llm_ready(current_df[col], col),
                         'rule_confidence': confidence_result['confidence']
                     })
-                    print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+                    print_to_log(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
         
         return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
     
@@ -3737,7 +3834,7 @@ GUIDELINES:
         high_confidence = {}
         uncertain_columns = []
         
-        print("🔍 STEP 1: Analyzing transformations with confidence rules...")
+        print_to_log("🔍 STEP 1: Analyzing transformations with confidence rules...")
         
         for col in current_df.columns:
             if col == state.target_column or not pd.api.types.is_numeric_dtype(current_df[col]):
@@ -3762,14 +3859,14 @@ GUIDELINES:
                     'confidence': confidence_result['confidence'],
                     'rule_based': True
                 }
-                print(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
+                print_to_log(f"✅ {col}: {confidence_result['strategy']} (conf: {confidence_result['confidence']:.2f}) - RULE DECISION")
             else:
                 uncertain_columns.append({
                     'column': col,
                     'analysis': analysis,
                     'rule_confidence': confidence_result['confidence']
                 })
-                print(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
+                print_to_log(f"❓ {col}: uncertain (conf: {confidence_result['confidence']:.2f}) - NEEDS LLM")
         
         return {'high_confidence': high_confidence, 'uncertain_columns': uncertain_columns}
     
@@ -3854,8 +3951,8 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 3:
-        print("Usage: python SequentialPreprocessingAgent.py <csv_path> <target_column> [model_name]")
-        print("Example: python SequentialPreprocessingAgent.py data.csv target gpt-4o")
+        print_to_log("Usage: python SequentialPreprocessingAgent.py <csv_path> <target_column> [model_name]")
+        print_to_log("Example: python SequentialPreprocessingAgent.py data.csv target gpt-4o")
         sys.exit(1)
     
     csv_path = sys.argv[1]

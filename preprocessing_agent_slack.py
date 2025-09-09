@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Import master log handler to capture logger.info calls
+try:
+    import master_log_handler
+except ImportError:
+    pass
+
+
 """
 Slack-Compatible Sequential Preprocessing Agent
 Adapted from preprocessing_agent_impl.py to work with Slack integration
