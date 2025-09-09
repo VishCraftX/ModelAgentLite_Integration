@@ -771,6 +771,14 @@ class PreprocessingAgentWrapper:
                         
                         slack_manager.send_message(state.chat_session, message)
                     
+                    # 🎯 SAVE OUTLIER STRATEGIES TO SESSION STATE
+                    state.save_preprocessing_strategy(
+                        phase="outliers",
+                        phase_results=outlier_results,
+                        target_column=state.target_column,
+                        original_columns=list(state.raw_data.columns) if state.raw_data is not None else []
+                    )
+                    
                     # Update state for next phase
                     state.preprocessing_state.update({
                         "current_phase": "missing_values",
@@ -871,6 +879,19 @@ class PreprocessingAgentWrapper:
 • `summary` - Show current status"""
                             
                             slack_manager.send_message(state.chat_session, message)
+                        
+                        # 🎯 SAVE MISSING VALUES STRATEGIES TO SESSION STATE
+                        state.save_preprocessing_strategy(
+                            phase="missing_values",
+                            phase_results=missing_results,
+                            target_column=state.target_column
+                        )                        
+                        # 🎯 SAVE MISSING VALUES STRATEGIES TO SESSION STATE
+                        state.save_preprocessing_strategy(
+                            phase="missing_values",
+                            phase_results=missing_results,
+                            target_column=state.target_column
+                        )
                         
                         # Update state for next phase
                         state.preprocessing_state.update({
@@ -1157,7 +1178,15 @@ class PreprocessingAgentWrapper:
 • `skip transformations` - Complete preprocessing
 • `summary` - Show current status"""
                             
-                            slack_manager.send_message(state.chat_session, message)
+                        
+                        # 🎯 SAVE ENCODING STRATEGIES TO SESSION STATE
+                        state.save_preprocessing_strategy(
+                            phase="encoding",
+                            phase_results=encoding_results,
+                            target_column=state.target_column
+                        )
+                        
+                        slack_manager.send_message(state.chat_session, message)
                         
                         # Update state for next phase
                         state.preprocessing_state.update({
@@ -1427,7 +1456,13 @@ class PreprocessingAgentWrapper:
 • Transformations applied: {len(applied_treatments)} columns
 
 **🎉 Preprocessing Complete!**
-
+                        
+                        # 🎯 SAVE TRANSFORMATIONS STRATEGIES TO SESSION STATE
+                        state.save_preprocessing_strategy(
+                            phase="transformations",
+                            phase_results=transformation_results,
+                            target_column=state.target_column
+                        )
 **💬 Next Steps:**
 • `summary` - Show complete preprocessing summary
 • `feature_selection` - Move to feature selection phase

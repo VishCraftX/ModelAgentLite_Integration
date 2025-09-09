@@ -45,6 +45,7 @@ class PipelineState(BaseModel):
     
     # Agent-specific state extensions
     preprocessing_state: Optional[Dict] = Field(default_factory=dict)
+    preprocessing_strategies: Optional[Dict] = Field(default_factory=dict)  # Reusable preprocessing strategies
     feature_selection_state: Optional[Dict] = Field(default_factory=dict)
     model_building_state: Optional[Dict] = Field(default_factory=dict)
     
@@ -144,6 +145,350 @@ class PipelineState(BaseModel):
             summary["selected_features"] = self.selected_features
         
         return summary
+    
+    def save_preprocessing_strategy(self, phase: str, phase_results: Dict, target_column: str = None, original_columns: List[str] = None):
+        """Save preprocessing strategy for a completed phase"""
+        from datetime import datetime
+        
+        if not self.preprocessing_strategies:
+            # Initialize strategy structure with metadata
+            self.preprocessing_strategies = {
+                "strategy_metadata": {
+                    "created_date": datetime.now().isoformat(),
+                    "target_column": target_column or self.target_column,
+                    "original_columns": original_columns or [],
+                    "processing_order": [],
+                    "user_overrides": {}
+                },
+                "outlier_strategies": {},
+                "missing_value_strategies": {},
+                "encoding_strategies": {},
+                "transformation_strategies": {}
+            }
+        
+        # Add phase to processing order if not already there
+        if phase not in self.preprocessing_strategies["strategy_metadata"]["processing_order"]:
+            self.preprocessing_strategies["strategy_metadata"]["processing_order"].append(phase)
+        
+        # Save phase-specific strategies
+        if phase == "outliers":
+            self._save_outlier_strategies(phase_results)
+        elif phase == "missing_values":
+            self._save_missing_value_strategies(phase_results)
+        elif phase == "encoding":
+            self._save_encoding_strategies(phase_results)
+        elif phase == "transformations":
+            self._save_transformation_strategies(phase_results)
+        
+        print(f"✅ Saved {phase} strategies to session state")
+    
+    def _save_outlier_strategies(self, phase_results: Dict):
+        """Save outlier treatment strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                self.preprocessing_strategies["outlier_strategies"][col] = {
+                    "treatment": rec.get('treatment', 'keep'),
+                    "method": "iqr",  # Default method used in analysis
+                    "parameters": {
+                        "iqr_multiplier": 1.5,
+                        "lower_percentile": 1,
+                        "upper_percentile": 99
+                    },
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+    
+    def _save_missing_value_strategies(self, phase_results: Dict):
+        """Save missing value treatment strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                strategy = rec.get('strategy', 'median')
+                strategy_data = {
+                    "strategy": strategy,
+                    "parameters": {},
+                    "computed_values": {},
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+                
+                # Store constant value if specified
+                if strategy == 'constant' and 'constant_value' in rec:
+                    strategy_data["parameters"]["constant_value"] = rec['constant_value']
+                
+                # Store computed values for later use (will be computed during application)
+                if hasattr(self, 'cleaned_data') and self.cleaned_data is not None and col in self.cleaned_data.columns:
+                    col_data = self.cleaned_data[col]
+                    if strategy == 'mean':
+                        strategy_data["computed_values"]["mean_value"] = col_data.mean()
+                    elif strategy == 'median':
+                        strategy_data["computed_values"]["median_value"] = col_data.median()
+                    elif strategy == 'mode' and not col_data.mode().empty:
+                        strategy_data["computed_values"]["mode_value"] = col_data.mode().iloc[0]
+                
+                self.preprocessing_strategies["missing_value_strategies"][col] = strategy_data
+    
+    def _save_encoding_strategies(self, phase_results: Dict):
+        """Save encoding strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                strategy = rec.get('strategy', 'label_encoding')
+                strategy_data = {
+                    "strategy": strategy,
+                    "encoders": {},
+                    "parameters": {
+                        "handle_unknown": "ignore"
+                    },
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+                
+                # For label encoding, we'll compute the mapping during application
+                # For now, just store the strategy choice
+                if strategy in ['onehot_encoding', 'onehot']:
+                    strategy_data["parameters"]["drop_first"] = False
+                elif strategy in ['target_encoding', 'target']:
+                    strategy_data["parameters"]["handle_unknown"] = "global_mean"
+                
+                self.preprocessing_strategies["encoding_strategies"][col] = strategy_data
+    
+    def _save_transformation_strategies(self, phase_results: Dict):
+        """Save transformation strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                transformation = rec.get('transformation', 'standardize')
+                strategy_data = {
+                    "transformation": transformation,
+                    "parameters": {},
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+                
+                # Store computed parameters for later use
+                if hasattr(self, 'cleaned_data') and self.cleaned_data is not None and col in self.cleaned_data.columns:
+                    col_data = self.cleaned_data[col]
+                    
+                    if transformation == 'standardize':
+                        strategy_data["parameters"]["mean"] = col_data.mean()
+                        strategy_data["parameters"]["std"] = col_data.std()
+                    elif transformation == 'normalize':
+                        strategy_data["parameters"]["min"] = col_data.min()
+                        strategy_data["parameters"]["max"] = col_data.max()
+                    elif transformation == 'robust_scale':
+                        strategy_data["parameters"]["median"] = col_data.median()
+                        strategy_data["parameters"]["iqr"] = col_data.quantile(0.75) - col_data.quantile(0.25)
+                    elif transformation in ['log1p', 'sqrt']:
+                        strategy_data["parameters"]["offset"] = 1
+                
+                self.preprocessing_strategies["transformation_strategies"][col] = strategy_data
+    
+    def has_preprocessing_strategies(self) -> bool:
+        """Check if preprocessing strategies are saved"""
+        return bool(self.preprocessing_strategies and 
+                   any(self.preprocessing_strategies.get(key, {}) for key in 
+                       ["outlier_strategies", "missing_value_strategies", "encoding_strategies", "transformation_strategies"]))
+    
+    def get_strategy_summary(self) -> str:
+        """Get a human-readable summary of saved strategies"""
+        if not self.has_preprocessing_strategies():
+            return "No preprocessing strategies saved."
+        
+        summary = ["📋 **Saved Preprocessing Strategies:**\n"]
+        
+        metadata = self.preprocessing_strategies.get("strategy_metadata", {})
+        if metadata.get("created_date"):
+            summary.append(f"Created: {metadata['created_date']}")
+        if metadata.get("target_column"):
+            summary.append(f"Target: {metadata['target_column']}")
+        
+        # Count strategies by phase
+        outlier_count = len(self.preprocessing_strategies.get("outlier_strategies", {}))
+        missing_count = len(self.preprocessing_strategies.get("missing_value_strategies", {}))
+        encoding_count = len(self.preprocessing_strategies.get("encoding_strategies", {}))
+        transform_count = len(self.preprocessing_strategies.get("transformation_strategies", {}))
+        
+        summary.append(f"\n**Strategy Counts:**")
+        summary.append(f"• Outlier treatments: {outlier_count} columns")
+        summary.append(f"• Missing value strategies: {missing_count} columns") 
+        summary.append(f"• Encoding strategies: {encoding_count} columns")
+        summary.append(f"• Transformations: {transform_count} columns")
+        
+        return "\n".join(summary)
+    
+    def save_preprocessing_strategy(self, phase: str, phase_results: Dict, target_column: str = None, original_columns: List[str] = None):
+        """Save preprocessing strategy for a completed phase"""
+        from datetime import datetime
+        
+        if not self.preprocessing_strategies:
+            # Initialize strategy structure with metadata
+            self.preprocessing_strategies = {
+                "strategy_metadata": {
+                    "created_date": datetime.now().isoformat(),
+                    "target_column": target_column or self.target_column,
+                    "original_columns": original_columns or [],
+                    "processing_order": [],
+                    "user_overrides": {}
+                },
+                "outlier_strategies": {},
+                "missing_value_strategies": {},
+                "encoding_strategies": {},
+                "transformation_strategies": {}
+            }
+        
+        # Add phase to processing order if not already there
+        if phase not in self.preprocessing_strategies["strategy_metadata"]["processing_order"]:
+            self.preprocessing_strategies["strategy_metadata"]["processing_order"].append(phase)
+        
+        # Save phase-specific strategies
+        if phase == "outliers":
+            self._save_outlier_strategies(phase_results)
+        elif phase == "missing_values":
+            self._save_missing_value_strategies(phase_results)
+        elif phase == "encoding":
+            self._save_encoding_strategies(phase_results)
+        elif phase == "transformations":
+            self._save_transformation_strategies(phase_results)
+        
+        print(f"✅ Saved {phase} strategies to session state")
+    
+    def _save_outlier_strategies(self, phase_results: Dict):
+        """Save outlier treatment strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                self.preprocessing_strategies["outlier_strategies"][col] = {
+                    "treatment": rec.get('treatment', 'keep'),
+                    "method": "iqr",  # Default method used in analysis
+                    "parameters": {
+                        "iqr_multiplier": 1.5,
+                        "lower_percentile": 1,
+                        "upper_percentile": 99
+                    },
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+    
+    def _save_missing_value_strategies(self, phase_results: Dict):
+        """Save missing value treatment strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                strategy = rec.get('strategy', 'median')
+                strategy_data = {
+                    "strategy": strategy,
+                    "parameters": {},
+                    "computed_values": {},
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+                
+                # Store constant value if specified
+                if strategy == 'constant' and 'constant_value' in rec:
+                    strategy_data["parameters"]["constant_value"] = rec['constant_value']
+                
+                # Store computed values for later use (will be computed during application)
+                if hasattr(self, 'cleaned_data') and self.cleaned_data is not None and col in self.cleaned_data.columns:
+                    col_data = self.cleaned_data[col]
+                    if strategy == 'mean':
+                        strategy_data["computed_values"]["mean_value"] = col_data.mean()
+                    elif strategy == 'median':
+                        strategy_data["computed_values"]["median_value"] = col_data.median()
+                    elif strategy == 'mode' and not col_data.mode().empty:
+                        strategy_data["computed_values"]["mode_value"] = col_data.mode().iloc[0]
+                
+                self.preprocessing_strategies["missing_value_strategies"][col] = strategy_data
+    
+    def _save_encoding_strategies(self, phase_results: Dict):
+        """Save encoding strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                strategy = rec.get('strategy', 'label_encoding')
+                strategy_data = {
+                    "strategy": strategy,
+                    "encoders": {},
+                    "parameters": {
+                        "handle_unknown": "ignore"
+                    },
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+                
+                # For label encoding, we'll compute the mapping during application
+                # For now, just store the strategy choice
+                if strategy in ['onehot_encoding', 'onehot']:
+                    strategy_data["parameters"]["drop_first"] = False
+                elif strategy in ['target_encoding', 'target']:
+                    strategy_data["parameters"]["handle_unknown"] = "global_mean"
+                
+                self.preprocessing_strategies["encoding_strategies"][col] = strategy_data
+    
+    def _save_transformation_strategies(self, phase_results: Dict):
+        """Save transformation strategies"""
+        recommendations = phase_results.get('llm_recommendations', {})
+        
+        for col, rec in recommendations.items():
+            if isinstance(rec, dict):
+                transformation = rec.get('transformation', 'standardize')
+                strategy_data = {
+                    "transformation": transformation,
+                    "parameters": {},
+                    "reasoning": rec.get('reasoning', 'No reasoning provided')
+                }
+                
+                # Store computed parameters for later use
+                if hasattr(self, 'cleaned_data') and self.cleaned_data is not None and col in self.cleaned_data.columns:
+                    col_data = self.cleaned_data[col]
+                    
+                    if transformation == 'standardize':
+                        strategy_data["parameters"]["mean"] = col_data.mean()
+                        strategy_data["parameters"]["std"] = col_data.std()
+                    elif transformation == 'normalize':
+                        strategy_data["parameters"]["min"] = col_data.min()
+                        strategy_data["parameters"]["max"] = col_data.max()
+                    elif transformation == 'robust_scale':
+                        strategy_data["parameters"]["median"] = col_data.median()
+                        strategy_data["parameters"]["iqr"] = col_data.quantile(0.75) - col_data.quantile(0.25)
+                    elif transformation in ['log1p', 'sqrt']:
+                        strategy_data["parameters"]["offset"] = 1
+                
+                self.preprocessing_strategies["transformation_strategies"][col] = strategy_data
+    
+    def has_preprocessing_strategies(self) -> bool:
+        """Check if preprocessing strategies are saved"""
+        return bool(self.preprocessing_strategies and 
+                   any(self.preprocessing_strategies.get(key, {}) for key in 
+                       ["outlier_strategies", "missing_value_strategies", "encoding_strategies", "transformation_strategies"]))
+    
+    def get_strategy_summary(self) -> str:
+        """Get a human-readable summary of saved strategies"""
+        if not self.has_preprocessing_strategies():
+            return "No preprocessing strategies saved."
+        
+        summary = ["📋 **Saved Preprocessing Strategies:**\n"]
+        
+        metadata = self.preprocessing_strategies.get("strategy_metadata", {})
+        if metadata.get("created_date"):
+            summary.append(f"Created: {metadata['created_date']}")
+        if metadata.get("target_column"):
+            summary.append(f"Target: {metadata['target_column']}")
+        
+        # Count strategies by phase
+        outlier_count = len(self.preprocessing_strategies.get("outlier_strategies", {}))
+        missing_count = len(self.preprocessing_strategies.get("missing_value_strategies", {}))
+        encoding_count = len(self.preprocessing_strategies.get("encoding_strategies", {}))
+        transform_count = len(self.preprocessing_strategies.get("transformation_strategies", {}))
+        
+        summary.append(f"\n**Strategy Counts:**")
+        summary.append(f"• Outlier treatments: {outlier_count} columns")
+        summary.append(f"• Missing value strategies: {missing_count} columns") 
+        summary.append(f"• Encoding strategies: {encoding_count} columns")
+        summary.append(f"• Transformations: {transform_count} columns")
+        
+        return "\n".join(summary)
 
 
 class StateManager:
