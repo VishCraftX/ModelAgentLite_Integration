@@ -861,8 +861,8 @@ Generate Python code to fulfill this request:"""
         else:
             print_to_log(f"🔧 DEBUG: No previous state found for {session_id}")
         
-        # Update user query
-            state.user_query = query
+        # Update user query (always use the new query, not the saved one)
+        state.user_query = query
         
         # Check if we have an active interactive session that needs to continue
         # BUT only if the query is a continuation command, not a new request
