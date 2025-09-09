@@ -1472,13 +1472,7 @@ class PreprocessingAgentWrapper:
 • Transformations applied: {len(applied_treatments)} columns
 
 **🎉 Preprocessing Complete!**
-                        
-                        # 🎯 SAVE TRANSFORMATIONS STRATEGIES TO SESSION STATE
-                        state.save_preprocessing_strategy(
-                            phase="transformations",
-                            phase_results=transformation_results,
-                            target_column=state.target_column
-                        )
+
 **💬 Next Steps:**
 • `summary` - Show complete preprocessing summary
 • `feature_selection` - Move to feature selection phase
