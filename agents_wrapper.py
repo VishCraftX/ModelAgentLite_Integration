@@ -2962,8 +2962,8 @@ Keep it concise and actionable."""
                         from toolbox import slack_manager as global_slack_manager
                         slack_manager = global_slack_manager
                     
-                    if slack_manager and state.chat_session:
-                        message = """❌ **No Data Available for Feature Selection**
+                    # Set proper error response and clear any cached responses
+                    error_message = """❌ **No Data Available for Feature Selection**
 
 **Please provide data first:**
 • Upload a CSV file to Slack
@@ -2972,7 +2972,13 @@ Keep it concise and actionable."""
 **Example:**
 • Upload `data.csv` file
 • Or say: "preprocess my data" first"""
-                        slack_manager.send_message(state.chat_session, message)
+                    
+                    # Clear any previous responses and set the error message
+                    state.last_response = error_message
+                    state.last_error = "No data available for feature selection"
+                    
+                    if slack_manager and state.chat_session:
+                        slack_manager.send_message(state.chat_session, error_message)
                     
                     return state
                 
