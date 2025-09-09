@@ -2634,17 +2634,18 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         print(f"   🎯 Defaulting to: classification")
         problem_type = "classification"
 
-    # Rank-ordering detection (from text prompt only)
+    # Use original_query if available to avoid false matches in system instructions
+    detection_text = original_query.lower() if original_query else prompt.lower()
+    
+    # Rank-ordering detection (from user query only, not system instructions)
     is_rank_ordering_request = any(
-        k in prompt.lower() for k in ['rank ordering','bucket','decile','segment']
+        k in detection_text for k in ['rank ordering','bucket','decile','segment']
     )
     print(f"🔍 KEYWORD DETECTION:")
     print(f"   📝 User prompt: '{prompt}'")
+    print(f"   📝 Detection text (original_query): '{original_query}'")
     print(f"   🎯 Rank ordering keywords found: {is_rank_ordering_request}")
-    print(f"   🌳 Tree keywords found: {'tree' in prompt.lower()}")
-    
-    # Use original_query if available to avoid false matches in system instructions
-    detection_text = original_query.lower() if original_query else prompt.lower()
+    print(f"   🌳 Tree keywords found: {'tree' in detection_text}")
     
     # 🧠 SEMANTIC + KEYWORD HYBRID APPROACH for Decision Tree Detection
     from toolbox import UniversalPatternClassifier
