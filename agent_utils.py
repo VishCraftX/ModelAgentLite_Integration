@@ -392,6 +392,10 @@ def get_username_for_user_id(user_id: str) -> str:
     Returns:
         str: Username suitable for folder naming
     """
+    # Skip system or invalid user IDs to prevent unnecessary API calls
+    if not user_id or user_id in ["system", "general", "unknown"]:
+        return sanitize_for_folder_name(user_id or "unknown")
+    
     try:
         # Try to get the global slack_manager instance
         from toolbox import slack_manager

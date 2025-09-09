@@ -28,16 +28,16 @@ class MasterLogHandler(logging.Handler):
             message = self.format(record)
             
             # Try to get session context from global context first, then call stack
-            user_id = "system"
-            thread_id = "general"
+            user_id = None
+            thread_id = None
             
             # Try global session context first
             try:
                 from session_context import get_session_context, has_session_context
                 if has_session_context():
                     user_id, thread_id = get_session_context()
-                    # If we got valid context, skip stack inspection
-                    if user_id != "system" or thread_id != "general":
+                    # Only proceed if we have valid user context (not system)
+                    if user_id and user_id != "system":
                         # Get username for directory naming
                         username = get_username_for_user_id(user_id)
                         # Create thread directory and write log

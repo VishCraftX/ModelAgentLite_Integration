@@ -27,16 +27,16 @@ def print_to_log(*args, **kwargs):
         message = ' '.join(str(arg) for arg in args)
         
         # Try to get session context - first from global, then from call stack
-        user_id = "system"
-        thread_id = "general"
+        user_id = None
+        thread_id = None
         
         # Try global session context first
         try:
             from session_context import get_session_context, has_session_context
             if has_session_context():
                 user_id, thread_id = get_session_context()
-                # If we got valid session context, skip stack inspection
-                if user_id != "system" or thread_id != "general":
+                # Only proceed if we have valid user context (not system)
+                if user_id and user_id != "system":
                     # Get username for directory naming
                     username = get_username_for_user_id(user_id)
                     # Create thread directory and log

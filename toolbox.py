@@ -85,6 +85,12 @@ class SlackManager:
         Fetch username from Slack API and cache it for future use.
         Returns a sanitized username suitable for folder names.
         """
+        # Skip system or invalid user IDs
+        if not user_id or user_id in ["system", "general", "unknown"]:
+            sanitized_name = self._sanitize_for_folder_name(user_id or "unknown")
+            self.user_cache[user_id] = sanitized_name
+            return sanitized_name
+        
         # Check cache first
         if user_id in self.user_cache:
             return self.user_cache[user_id]
