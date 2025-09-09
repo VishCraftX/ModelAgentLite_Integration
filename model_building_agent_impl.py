@@ -3018,11 +3018,47 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             return "\n".join(response_parts)
         
         elif routing_decision == "use_existing_model":
-            # Handle rank ordering table (EXACT from original slack_client.py)
+            response_parts = []
+            
+            # Check if there are validation metrics to display
+            if any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score']):
+                response_parts.append("✅ **Existing Model Analysis Completed!**\n")
+                response_parts.append("📊 **Model Performance:**")
+                
+                if 'accuracy' in result:
+                    response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
+                if 'precision' in result:
+                    response_parts.append(f"• Precision: {result['precision']:.4f}")
+                if 'recall' in result:
+                    response_parts.append(f"• Recall: {result['recall']:.4f}")
+                if 'f1_score' in result:
+                    response_parts.append(f"• F1 Score: {result['f1_score']:.4f}")
+                if 'roc_auc' in result:
+                    response_parts.append(f"• ROC AUC: {result['roc_auc']:.4f}")
+                if 'specificity' in result:
+                    response_parts.append(f"• Specificity: {result['specificity']:.4f}")
+                
+                # Add confusion matrix if available
+                if 'confusion_matrix' in result:
+                    cm = result['confusion_matrix']
+                    if isinstance(cm, list) and len(cm) == 2 and len(cm[0]) == 2:
+                        tn, fp = cm[0]
+                        fn, tp = cm[1]
+                        response_parts.append(f"\n📋 Confusion Matrix:")
+                        response_parts.append(f"```")
+                        response_parts.append(f"         Predicted")
+                        response_parts.append(f"Actual   0     1")
+                        response_parts.append(f"   0   {tn:4}  {fp:4}")
+                        response_parts.append(f"   1   {fn:4}  {tp:4}")
+                        response_parts.append(f"```")
+            
+            # Check if there's a rank ordering table to display
             if 'rank_ordering_table' in result:
                 rank_table = result['rank_ordering_table']
                 if isinstance(rank_table, list) and len(rank_table) > 0:
-                    response_parts = ["📊 *Rank Ordering Table:*"]
+                    if response_parts:  # Add spacing if validation metrics were shown above
+                        response_parts.append("\n")
+                    response_parts.append("📊 *Rank Ordering Table:*")
                     
                     # Create header with optimized column widths
                     headers = ["Bucket", "Threshold", "BucketCount", "EventCount", "Event%", "CumEvent%", "Coverage%"]
@@ -3071,31 +3107,11 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     
                     table_lines.append("```")
                     response_parts.extend(table_lines)
-                    
-                    return "\n".join(response_parts)
             
-            # Check if there are any metrics to display
-            elif any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score']):
-                response_parts = ["✅ **Existing Model Analysis Completed!**\n"]
-                response_parts.append("📊 **Model Performance:**")
-                
-                if 'accuracy' in result:
-                    response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
-                if 'precision' in result:
-                    response_parts.append(f"• Precision: {result['precision']:.4f}")
-                if 'recall' in result:
-                    response_parts.append(f"• Recall: {result['recall']:.4f}")
-                if 'f1_score' in result:
-                    response_parts.append(f"• F1 Score: {result['f1_score']:.4f}")
-                if 'roc_auc' in result:
-                    response_parts.append(f"• ROC AUC: {result['roc_auc']:.4f}")
-                if 'specificity' in result:
-                    response_parts.append(f"• Specificity: {result['specificity']:.4f}")
-                
+            # Return combined response or default
+            if response_parts:
                 response_parts.append(f"\n🎯 Model analysis completed successfully!")
                 return "\n".join(response_parts)
-            
-            # Default response for other operations
             else:
                 return "✅ Existing Model Operation Completed!\n\n🎯 Your existing model has been used successfully for the requested operation."
         
