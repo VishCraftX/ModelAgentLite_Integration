@@ -1894,6 +1894,12 @@ DATA REQUIREMENTS:
 - Assume data is preprocessed (no scalers/encoders needed)
 - Use train_test_split with user-specified test_size or default 0.2, random_state=42
 
+🚨 CRITICAL IMPORT FIX: Include roc_curve import to prevent NameError:
+```python
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
+                           roc_auc_score, confusion_matrix, log_loss, roc_curve)
+```
+
 ROBUST LIBRARY HANDLING:
 1. Import libraries with try-except blocks
 2. If a model library is missing, skip that model with warning message
@@ -1909,9 +1915,17 @@ except ImportError:
 
 try:
     from lightgbm import LGBMClassifier
-    models['LightGBM'] = LGBMClassifier()
+    # 🚨 FIX: Use verbosity=-1 to prevent verbose_eval errors
+    models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
 except ImportError:
     print("Warning: LightGBM not available")
+
+try:
+    from xgboost import XGBClassifier
+    # 🚨 FIX: Use verbosity=0 for clean output
+    models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
+except ImportError:
+    print("Warning: XGBoost not available")
 ```
 
 DYNAMIC MODEL DICTIONARY:
@@ -1934,6 +1948,21 @@ MANDATORY CODE STRUCTURE:
 6. Create comparison visualizations
 7. Select best model based on user-specified or default metric
 8. Save all artifacts (models + plots)
+
+🚨 CRITICAL ARRAY HANDLING FIX: For ROC curve generation, convert probabilities to numpy array:
+```python
+# Create comparison visualizations
+plt.figure(figsize=(10, 8))
+for model_name, result in results.items():
+    if result['probabilities'] is not None:
+        # 🚨 FIX: Convert list to numpy array to prevent indexing errors
+        y_proba_array = np.array(result['probabilities'])
+        if y_proba_array.ndim == 2 and y_proba_array.shape[1] >= 2:
+            fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
+        else:
+            fpr, tpr, _ = roc_curve(y_test, y_proba_array)
+        plt.plot(fpr, tpr, label=f'{{model_name}} (AUC = {{result["metrics"]["roc_auc"]:.2f}})')
+```
 
 RESULT DICTIONARY REQUIREMENTS:
 result = {{
