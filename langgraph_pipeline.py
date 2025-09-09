@@ -36,7 +36,7 @@ except ImportError as e:
 from pipeline_state import PipelineState, state_manager
 from orchestrator import orchestrator, AgentType
 from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
-from toolbox import initialize_toolbox, progress_tracker, slack_manager, user_directory_manager
+from toolbox import initialize_toolbox
 
 
 class MultiAgentMLPipeline:
@@ -52,6 +52,12 @@ class MultiAgentMLPipeline:
         
         # Always initialize toolbox (needed for both LangGraph and simplified pipeline)
         initialize_toolbox(slack_token, artifacts_dir, user_data_dir)
+        
+        # Get references to global toolbox components after initialization
+        from toolbox import slack_manager, progress_tracker, user_directory_manager
+        self.slack_manager = slack_manager
+        self.progress_tracker = progress_tracker
+        self.user_directory_manager = user_directory_manager
         
         if not LANGGRAPH_AVAILABLE:
             print_to_log("❌ LangGraph not available, using simplified pipeline")
@@ -73,11 +79,6 @@ class MultiAgentMLPipeline:
         
         # User session management
         self.user_sessions = {}  # Store per-user-thread sessions
-        
-        # Store references to global toolbox components
-        self.slack_manager = slack_manager
-        self.progress_tracker = progress_tracker
-        self.user_directory_manager = user_directory_manager
         
         print_to_log("🚀 Multi-Agent ML Pipeline initialized")
         print_to_log(f"   LangGraph: {'✅ Full Pipeline' if LANGGRAPH_AVAILABLE else '⚠️ Simplified Pipeline'}")
