@@ -18,6 +18,8 @@ import joblib
 import ollama
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+
+# Staged multi-model functions defined below
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import tool
 
@@ -1854,8 +1856,8 @@ else:
             return state
     
     elif routing_decision == "build_multi_model":
-        # NEW: Multi-model comparison workflow
-        print("🔄 Starting multi-model comparison workflow...")
+        # NEW: Staged Multi-model comparison workflow
+        print("🔄 Starting staged multi-model comparison workflow...")
         
         if progress_callback:
             progress_callback("🔄 Processing your request...", "Multi-Model Training")
@@ -1869,317 +1871,8 @@ else:
 Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
-        # Generate multi-model comparison code
-        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
-
-USER REQUEST: {query}
-
-CRITICAL REQUIREMENTS:
-1. Build multiple ML models based on USER'S SPECIFIC REQUEST (minimum 2 models)
-2. Train all models with identical train/test splits 
-3. Generate comprehensive metrics for each model
-4. Create comparison visualizations (ROC curves, metric comparison table)
-5. Automatically select the best model based on USER-SPECIFIED or default metric
-6. Return detailed results for all models + best model selection
-
-DYNAMIC USER INPUT PARSING:
-- MODELS: Extract specific model names from user query. If none specified, use: RandomForest, DecisionTree, LightGBM
-- TEST SIZE: Look for "test", "split", "validation" mentions. Default: 0.2 (20%)
-- BEST MODEL METRIC: Look for "best based on", "select by", "choose using". Default: accuracy for classification, r2 for regression
-- Handle ANY model names user mentions (LogisticRegression, SVM, XGBoost, Neural Network, etc.)
-
-DATA REQUIREMENTS:
-- Use 'sample_data' DataFrame (already loaded)
-- Target column: 'target'
-- Assume data is preprocessed (no scalers/encoders needed)
-- Use train_test_split with user-specified test_size or default 0.2, random_state=42
-
-🚨 CRITICAL IMPORT FIX: Include roc_curve import to prevent NameError:
-```python
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
-                           roc_auc_score, confusion_matrix, log_loss, roc_curve)
-```
-
-ROBUST LIBRARY HANDLING:
-1. Import libraries with try-except blocks
-2. If a model library is missing, skip that model with warning message
-3. Continue with available models (minimum 2 required)
-4. Example:
-```python
-models = {{}}
-try:
-    from sklearn.ensemble import RandomForestClassifier
-    models['Random Forest'] = RandomForestClassifier()
-except ImportError:
-    print("Warning: sklearn RandomForest not available")
-
-try:
-    from lightgbm import LGBMClassifier
-    # 🚨 FIX: Use verbosity=-1 to prevent verbose_eval errors
-    models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
-except ImportError:
-    print("Warning: LightGBM not available")
-
-try:
-    from xgboost import XGBClassifier
-    # 🚨 FIX: Use verbosity=0 for clean output
-    models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
-except ImportError:
-    print("Warning: XGBoost not available")
-```
-
-DYNAMIC MODEL DICTIONARY:
-- Build models dictionary based on user's specific request
-- Handle model aliases (e.g., "rf" = RandomForest, "lgbm" = LightGBM, "xgb" = XGBoost)
-- If user says "3 models" or "5 models", include that many
-- If user lists specific models, use exactly those models
-
-FLEXIBLE BEST MODEL SELECTION:
-- Parse user's preference from query for selection criteria
-- Common metrics: accuracy, precision, recall, f1, roc_auc, r2, mse, mae
-- Default: accuracy (classification) or r2 (regression)
-
-MANDATORY CODE STRUCTURE:
-1. Import libraries with error handling
-2. Parse user requirements (models, test_size, metric)
-3. Data splitting (X/y, train/test with dynamic test_size)
-4. Build dynamic models dictionary based on user input
-5. Train all available models and collect metrics
-6. Create comparison visualizations
-7. Select best model based on user-specified or default metric
-8. Save all artifacts (models + plots)
-
-🚨 CRITICAL ARRAY HANDLING FIX: For ROC curve generation, convert probabilities to numpy array:
-```python
-# Create comparison visualizations
-plt.figure(figsize=(10, 8))
-for model_name, result in results.items():
-    if result['probabilities'] is not None:
-        # 🚨 FIX: Convert list to numpy array to prevent indexing errors
-        y_proba_array = np.array(result['probabilities'])
-        if y_proba_array.ndim == 2 and y_proba_array.shape[1] >= 2:
-            fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
-        else:
-            fpr, tpr, _ = roc_curve(y_test, y_proba_array)
-        plt.plot(fpr, tpr, label=f'{{model_name}} (AUC = {{result["metrics"]["roc_auc"]:.2f}})')
-```
-
-RESULT DICTIONARY REQUIREMENTS:
-result = {{
-    'user_config': {{
-        'models_requested': ['model1', 'model2', ...],
-        'test_size': float,
-        'selection_metric': 'metric_name',
-        'total_models_built': int
-    }},
-    'models': {{model_name: {{
-        'model': model_object,
-        'model_path': saved_path,
-        'metrics': {{accuracy, precision, recall, f1, roc_auc, mse, mae, r2, etc.}},
-        'predictions': y_pred,
-        'probabilities': y_proba_or_none,
-        'training_time': float,
-        'model_type': 'classification_or_regression'
-    }}}},
-    'best_model': {{
-        'name': best_model_name,
-        'model': best_model_object, 
-        'model_path': best_model_path,
-        'metrics': best_model_metrics,
-        'selection_criteria': 'accuracy: 0.XX (user requested)' or 'roc_auc: 0.XX (default)',
-        'improvement_over_worst': 'X% better than worst model'
-    }},
-    'comparison_plots': {{
-        'roc_curves': 'path/to/roc_comparison.png',
-        'metrics_table': 'path/to/metrics_table.png'
-    }},
-    'model_ranking': [{{
-        'rank': 1,
-        'model_name': 'best_model',
-        'score': float,
-        'metric_used': 'metric_name'
-    }}],
-    'summary': {{
-        'total_models': int,
-        'best_model': 'model_name',
-        'best_score': float,
-        'worst_model': 'model_name', 
-        'worst_score': float,
-        'performance_spread': 'X% difference between best and worst',
-        'recommendation': 'Detailed recommendation text'
-    }},
-    'detailed_comparison': 'Comprehensive textual comparison of all models with strengths/weaknesses'
-}}
-
-ENHANCED RESPONSE FORMATTING:
-- Print detailed model performance table to console
-- Show training time for each model
-- Display model ranking with scores
-- Include recommendation for model selection
-- Show performance improvement percentages
-
-Generate complete, executable Python code that implements this dynamic multi-model comparison system."""
-
-        try:
-            print("🤔 Generating multi-model comparison code...")
-            if progress_callback:
-                progress_callback("🤔 Generating code...", "Code Generation")
-            
-            reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id, query)
-            
-            if not code.strip():
-                state["response"] = f"❌ Failed to generate multi-model code: {reply}"
-                return state
-            
-            state["code"] = code
-            print(f"📝 MULTI-MODEL CODE - Generated ({len(code)} chars)")
-            
-            # Execute the multi-model comparison code
-            print("⚙️ Executing multi-model comparison...")
-            
-            # Get artifacts directory
-            artifacts_dir = None
-            try:
-                if "_" in user_id:
-                    user, thread_ts = user_id.split("_", 1)
-                    thread_dir = os.path.join("user_data", user, thread_ts)
-                    artifacts_dir = os.path.join(thread_dir, "artifacts")
-                    if not os.path.exists(artifacts_dir):
-                        os.makedirs(artifacts_dir, exist_ok=True)
-            except Exception as e:
-                print(f"⚠️ Failed to create artifacts directory: {e}")
-            
-            # ExecutionAgent will handle progress
-            
-            result = ExecutionAgent(
-                code, 
-                data, 
-                user_id=user_id,
-                verbose=True,
-                user_query=query,
-                intent=intent,
-                model_states=global_model_states,
-                artifacts_dir=artifacts_dir,
-                progress_callback=progress_callback,
-                original_system_prompt=system_prompt  # Pass original system prompt for error fixing
-            )
-            
-            # Store results and format comprehensive response
-            state["execution_result"] = result
-            
-            if isinstance(result, dict) and 'models' in result:
-                # Format comprehensive multi-model response
-                response_parts = ["✅ 🎯 Multi-Model Comparison Completed Successfully!\n"]
-                
-                # User configuration
-                user_config = result.get('user_config', {})
-                if user_config:
-                    response_parts.append(f"⚙️ **Configuration:**")
-                    response_parts.append(f"   • Models Requested: {', '.join(user_config.get('models_requested', []))}")
-                    response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
-                    response_parts.append(f"   • Selection Metric: {user_config.get('selection_metric', 'accuracy')}")
-                    response_parts.append(f"   • Models Built: {user_config.get('total_models_built', 0)}\n")
-                
-                # Model performance summary
-                models = result.get('models', {})
-                response_parts.append(f"📊 **Model Performance Summary:**")
-                for model_name, model_data in models.items():
-                    metrics = model_data.get('metrics', {})
-                    training_time = model_data.get('training_time', 0)
-                    model_type = model_data.get('model_type', 'unknown')
-                    
-                    # Show relevant metrics based on problem type
-                    if model_type == 'classification':
-                        acc = metrics.get('accuracy', 0)
-                        auc = metrics.get('roc_auc', 0)
-                        f1 = metrics.get('f1_score', 0)
-                        response_parts.append(f"   🤖 **{model_name}**: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
-                    else:  # regression
-                        r2 = metrics.get('r2_score', 0)
-                        mae = metrics.get('mae', 0)
-                        rmse = metrics.get('rmse', 0)
-                        response_parts.append(f"   🤖 **{model_name}**: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
-                
-                # Model ranking
-                ranking = result.get('model_ranking', [])
-                if ranking and len(ranking) > 1:
-                    response_parts.append(f"\n🏅 **Model Ranking:**")
-                    for rank_info in ranking[:3]:  # Show top 3
-                        rank = rank_info.get('rank', 0)
-                        model_name = rank_info.get('model_name', 'Unknown')
-                        score = rank_info.get('score', 0)
-                        metric = rank_info.get('metric_used', 'score')
-                        response_parts.append(f"   #{rank}. **{model_name}**: {metric.upper()} = {score:.3f}")
-                
-                # Best model details
-                best_model = result.get('best_model', {})
-                if best_model:
-                    response_parts.append(f"\n🏆 **Winner: {best_model.get('name', 'Unknown')}**")
-                    response_parts.append(f"   📈 **Selection:** {best_model.get('selection_criteria', 'Not specified')}")
-                    improvement = best_model.get('improvement_over_worst', '')
-                    if improvement:
-                        response_parts.append(f"   📊 **Performance:** {improvement}")
-                
-                # Summary insights
-                summary_data = result.get('summary', {})
-                if isinstance(summary_data, dict):
-                    response_parts.append(f"\n📋 **Analysis:**")
-                    response_parts.append(f"   • Best: **{summary_data.get('best_model', 'Unknown')}** ({summary_data.get('best_score', 0):.3f})")
-                    response_parts.append(f"   • Worst: **{summary_data.get('worst_model', 'Unknown')}** ({summary_data.get('worst_score', 0):.3f})")
-                    spread = summary_data.get('performance_spread', '')
-                    if spread:
-                        response_parts.append(f"   • Performance Spread: {spread}")
-                    
-                    recommendation = summary_data.get('recommendation', '')
-                    if recommendation:
-                        response_parts.append(f"\n💡 **Recommendation:** {recommendation}")
-                elif isinstance(summary_data, str) and summary_data:
-                    response_parts.append(f"\n📋 **Summary:** {summary_data}")
-                
-                # Visualizations
-                plots = result.get('comparison_plots', {})
-                if plots:
-                    response_parts.append(f"\n📊 **Visualizations Generated:**")
-                    if plots.get('roc_curves'):
-                        response_parts.append(f"   • ROC Curves Comparison Plot")
-                    if plots.get('metrics_table'):
-                        response_parts.append(f"   • Metrics Comparison Table")
-                
-                # Detailed comparison
-                detailed_comparison = result.get('detailed_comparison', '')
-                if detailed_comparison:
-                    response_parts.append(f"\n🔍 **Detailed Analysis:**")
-                    response_parts.append(f"{detailed_comparison}")
-                
-                state["response"] = "\n".join(response_parts)
-                
-                # Handle plot uploads for multi-model comparison
-                if plots:
-                    plot_files = []
-                    for plot_type, plot_path in plots.items():
-                        if plot_path and os.path.exists(plot_path):
-                            plot_files.append({
-                                "path": plot_path, 
-                                "title": f"Multi-Model {plot_type.replace('_', ' ').title()}", 
-                                "type": "comparison_plot"
-                            })
-                    
-                    if plot_files:
-                        state["artifacts"] = state.get("artifacts", {})
-                        state["artifacts"]["files"] = plot_files
-                        result["artifacts"] = {"files": plot_files}
-                        print(f"📊 {len(plot_files)} comparison plots ready for upload")
-            else:
-                state["response"] = f"❌ Multi-model comparison failed: {result if isinstance(result, str) else 'Unexpected result format'}"
-            
-            return state
-            
-        except Exception as e:
-            print(f"💥 Multi-model comparison failed: {e}")
-            import traceback
-            print(f"💥 Full traceback: {traceback.format_exc()}")
-            state["response"] = f"❌ Multi-model comparison failed: {str(e)}"
-            return state
+        # Start staged multi-model workflow
+        return _staged_multi_model_workflow(state, query, data, user_id, progress_callback)
         
     else:  # build_new_model
         # Check if data is available for model building
@@ -3131,7 +2824,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     
                     table_lines.append("```")
                     response_parts.extend(table_lines)
-            
+                    
             # Return combined response or default
             if response_parts:
                 response_parts.append(f"\n🎯 Model analysis completed successfully!")
@@ -3425,6 +3118,491 @@ class LangGraphModelAgent:
 # =============================================================================
 # EXAMPLE USAGE
 # =============================================================================
+
+# ==== STAGED MULTI-MODEL FUNCTIONS ====
+
+def _staged_multi_model_workflow(state, query, data, user_id, progress_callback):
+    """
+    Staged multi-model comparison workflow using sequential function calls.
+    Each stage uses LLM + ExecutionAgent pattern for better reliability.
+    """
+    print("🚀 Starting Staged Multi-Model Workflow")
+    
+    # Local results dictionary (not added to state until completion)
+    results = {
+        "stage_status": {"config": "pending", "training": "pending", "visualization": "pending", "selection": "pending"},
+        "partial_results": {},
+        "errors": []
+    }
+    
+    try:
+        # ==== STAGE 1: CONFIG PARSING ====
+        print("\n📋 STAGE 1: Config Parsing")
+        config = _stage_1_parse_config(query, user_id)
+        results["config"] = config
+        results["stage_status"]["config"] = "completed"
+        print(f"✅ Config parsed: {config}")
+        
+        # ==== STAGE 2: MODEL TRAINING ====
+        print("\n🏋️ STAGE 2: Model Training")
+        models_result = _stage_2_train_models(config, data, user_id)
+        results["models"] = models_result
+        results["stage_status"]["training"] = "completed" 
+        print(f"✅ Models trained: {len(models_result)} models")
+        
+        # ==== STAGE 3: VISUALIZATION ====
+        print("\n📊 STAGE 3: Visualization")
+        try:
+            plots_result = _stage_3_generate_plots(results, user_id)
+            results["comparison_plots"] = plots_result
+            results["stage_status"]["visualization"] = "completed"
+            print(f"✅ Plots generated: {list(plots_result.keys())}")
+        except Exception as e:
+            print(f"⚠️ Visualization failed (continuing): {e}")
+            results["errors"].append(f"Visualization stage: {str(e)}")
+            results["stage_status"]["visualization"] = "failed"
+        
+        # ==== STAGE 4: BEST MODEL SELECTION ====
+        print("\n🏆 STAGE 4: Best Model Selection")
+        try:
+            selection_result = _stage_4_select_best_model(results, user_id)
+            results.update(selection_result)  # Add best_model, ranking, summary
+            results["stage_status"]["selection"] = "completed"
+            print(f"✅ Best model selected: {selection_result.get('best_model', {}).get('name', 'Unknown')}")
+        except Exception as e:
+            print(f"⚠️ Best model selection failed (continuing): {e}")
+            results["errors"].append(f"Selection stage: {str(e)}")
+            results["stage_status"]["selection"] = "failed"
+        
+        # ==== STAGE 5: FORMAT RESPONSE ====
+        print("\n📝 STAGE 5: Format Response")
+        response = _stage_5_format_response(results)
+        
+        # SUCCESS: Add results to state
+        state["multi_model_results"] = results
+        state["response"] = response
+        
+        # Handle plot uploads
+        if "comparison_plots" in results:
+            plot_files = []
+            for plot_type, plot_path in results["comparison_plots"].items():
+                if plot_path and os.path.exists(plot_path):
+                    plot_files.append({
+                        "path": plot_path,
+                        "title": f"Multi-Model {plot_type.replace('_', ' ').title()}",
+                        "type": "comparison_plot"
+                    })
+            
+            if plot_files:
+                state["artifacts"] = state.get("artifacts", {})
+                state["artifacts"]["files"] = plot_files
+                print(f"📊 {len(plot_files)} comparison plots ready for upload")
+        
+        print("🎉 Staged Multi-Model Workflow Completed Successfully!")
+        return state
+        
+    except Exception as e:
+        print(f"💥 Multi-model workflow failed: {e}")
+        import traceback
+        print(f"💥 Full traceback: {traceback.format_exc()}")
+        
+        # Format partial results for user
+        error_response = _format_partial_results(results, str(e))
+        state["response"] = error_response
+        state["multi_model_error"] = str(e)
+        return state
+
+
+def _stage_1_parse_config(query: str, user_id: str):
+    """Stage 1: Parse user query to extract models, test_size, selection_metric using LLM + ExecutionAgent"""
+    
+    config_prompt = f"""You are a CONFIG PARSING agent for a multi-model ML system.
+
+USER REQUEST: {query}
+
+TASK: Use semantic understanding to parse the user request and extract configuration.
+
+SEMANTIC MODEL UNDERSTANDING:
+- "lgbm", "light gbm", "lightgbm" → "LightGBM"
+- "xgb", "xgboost", "gradient boosting" → "XGBoost" 
+- "rf", "random forest", "forest" → "RandomForest"
+- "tree", "decision tree", "tree classifier" → "DecisionTree"
+- "svm", "support vector", "support vector machine" → "SVM"
+- "logistic", "logistic regression", "lr" → "LogisticRegression"
+- "neural", "neural network", "mlp", "neural net" → "MLPClassifier"
+- "naive bayes", "nb", "bayes" → "GaussianNB"
+
+EXTRACTION RULES:
+1. models_requested: Extract specific models mentioned, use semantic understanding
+2. test_size: Look for "test", "split", "validation" percentages
+3. selection_metric: Look for "best based on", "select by", "choose using"
+4. problem_type: Determine from context (classification/regression)
+
+DEFAULTS if not specified:
+- models_requested: ["RandomForest", "DecisionTree", "LightGBM"]
+- test_size: 0.2
+- selection_metric: "accuracy" (classification) / "r2" (regression)
+
+OUTPUT: Return ONLY a Python dict named 'config':
+
+config = {{
+    "models_requested": ["RandomForest", "LightGBM"],  # Semantically understood models
+    "test_size": 0.2,
+    "selection_metric": "accuracy", 
+    "problem_type": "classification"
+}}"""
+
+    result = execution_agent.run(
+        code=config_prompt,
+        sample_data=None,  # No data needed for config parsing
+        user_id=user_id,
+        session_id=f"{user_id}_config",
+        context={"intent": "config_parsing", "user_query": query},
+        verbose=True
+    )
+    
+    if isinstance(result, dict) and "config" in result:
+        return result["config"]
+    elif isinstance(result, dict):
+        # Direct config result
+        return result
+    else:
+        # Fallback config
+        print(f"⚠️ Config parsing failed, using defaults: {result}")
+        return {
+            "models_requested": ["RandomForest", "DecisionTree", "LightGBM"],
+            "test_size": 0.2,
+            "selection_metric": "accuracy",
+            "problem_type": "classification"
+        }
+
+
+def _stage_2_train_models(config: dict, sample_data, user_id: str):
+    """Stage 2: Train multiple models using LLM + ExecutionAgent"""
+    
+    import json
+    config_json = json.dumps(config, indent=2)
+    
+    train_prompt = f"""You are a MODEL TRAINING agent for multi-model comparison.
+
+CONFIG:
+{config_json}
+
+DATA:
+- DataFrame: sample_data (already loaded)
+- Target column: "target"
+
+CRITICAL REQUIREMENTS:
+🚨 IMPORT FIXES:
+```python
+import time
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+```
+
+🚨 ROBUST MODEL BUILDING:
+```python
+# Build models based on config
+models = {{}}
+try:
+    if "RandomForest" in config["models_requested"]:
+        from sklearn.ensemble import RandomForestClassifier
+        models["RandomForest"] = RandomForestClassifier(random_state=42)
+except ImportError:
+    print("Warning: RandomForest not available")
+
+try:
+    if "LightGBM" in config["models_requested"]:
+        from lightgbm import LGBMClassifier
+        models["LightGBM"] = LGBMClassifier(verbosity=-1, random_state=42)
+except ImportError:
+    print("Warning: LightGBM not available")
+
+try:
+    if "XGBoost" in config["models_requested"]:
+        from xgboost import XGBClassifier
+        models["XGBoost"] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
+except ImportError:
+    print("Warning: XGBoost not available")
+
+try:
+    if "DecisionTree" in config["models_requested"]:
+        from sklearn.tree import DecisionTreeClassifier
+        models["DecisionTree"] = DecisionTreeClassifier(random_state=42)
+except ImportError:
+    print("Warning: DecisionTree not available")
+```
+
+TASKS:
+1. Split data using config["test_size"]
+2. Train each available model
+3. Calculate metrics for each model
+4. Save each model using safe_joblib_dump()
+5. Measure training time
+
+OUTPUT: Return Python dict named 'models_result':
+
+models_result = {{
+    "RandomForest": {{
+        "metrics": {{"accuracy": 0.85, "precision": 0.84, "recall": 0.86, "f1_score": 0.85, "roc_auc": 0.89}},
+        "predictions": y_pred.tolist(),
+        "probabilities": y_proba.tolist() if y_proba is not None else None,
+        "training_time": 2.3,
+        "model_path": "saved_model_path.joblib",
+        "model_type": "classification"
+    }},
+    # ... other models
+}}"""
+
+    result = execution_agent.run(
+        code=train_prompt,
+        sample_data=sample_data,
+        user_id=user_id,
+        session_id=f"{user_id}_training",
+        context={"intent": "model_training", "user_query": f"Train models: {config}"},
+        verbose=True
+    )
+    
+    if isinstance(result, dict) and "models_result" in result:
+        return result["models_result"]
+    elif isinstance(result, dict):
+        return result
+    else:
+        raise Exception(f"Model training failed: {result}")
+
+
+def _stage_3_generate_plots(results: dict, user_id: str):
+    """Stage 3: Generate comparison plots using LLM + ExecutionAgent"""
+    
+    import json
+    results_json = json.dumps({
+        "config": results.get("config", {}),
+        "models": {k: {
+            "metrics": v.get("metrics", {}),
+            "probabilities": "available" if v.get("probabilities") else None
+        } for k, v in results.get("models", {}).items()}
+    }, indent=2)
+    
+    plot_prompt = f"""You are a VISUALIZATION agent for multi-model comparison.
+
+RESULTS DATA:
+{results_json}
+
+CRITICAL REQUIREMENTS:
+🚨 IMPORT FIXES:
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import roc_curve
+```
+
+🚨 SAFE ARRAY HANDLING:
+```python
+# For ROC curves - handle probabilities safely
+for model_name, model_data in models.items():
+    if model_data.get('probabilities'):
+        # Convert to numpy array to prevent indexing errors
+        y_proba_array = np.array(model_data['probabilities'])
+        if y_proba_array.ndim == 2 and y_proba_array.shape[1] >= 2:
+            fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
+        else:
+            fpr, tpr, _ = roc_curve(y_test, y_proba_array)
+        plt.plot(fpr, tpr, label=f'{{model_name}} (AUC = {{auc:.3f}})')
+```
+
+TASKS:
+1. Generate ROC curves comparison (if classification with probabilities)
+2. Generate metrics comparison bar chart
+3. Save plots using safe_plt_savefig()
+
+OUTPUT: Return Python dict named 'plots_result':
+
+plots_result = {{
+    "roc_curves": "path/to/roc_comparison.png",
+    "metrics_table": "path/to/metrics_comparison.png"
+}}"""
+
+    result = execution_agent.run(
+        code=plot_prompt,
+        sample_data=None,  # Plots don't need raw data, just results
+        user_id=user_id,
+        session_id=f"{user_id}_plots",
+        context={"intent": "visualization", "user_query": "Generate comparison plots"},
+        verbose=True
+    )
+    
+    if isinstance(result, dict) and "plots_result" in result:
+        return result["plots_result"]
+    elif isinstance(result, dict):
+        return result
+    else:
+        print(f"⚠️ Plot generation failed: {result}")
+        return {}
+
+
+def _stage_4_select_best_model(results: dict, user_id: str):
+    """Stage 4: Select best model using LLM + ExecutionAgent"""
+    
+    import json
+    results_json = json.dumps({
+        "config": results.get("config", {}),
+        "models": {k: {"metrics": v.get("metrics", {})} for k, v in results.get("models", {}).items()}
+    }, indent=2)
+    
+    selection_prompt = f"""You are a BEST MODEL SELECTION agent.
+
+RESULTS DATA:
+{results_json}
+
+TASK:
+1. Use config["selection_metric"] to rank models
+2. Identify best and worst performing models
+3. Calculate performance spread
+4. Generate recommendation
+
+OUTPUT: Return Python dict named 'selection_result':
+
+selection_result = {{
+    "best_model": {{
+        "name": "LightGBM",
+        "metrics": {{"accuracy": 0.92, "precision": 0.91}},
+        "selection_criteria": "accuracy: 0.92 (user requested)"
+    }},
+    "model_ranking": [
+        {{"rank": 1, "model_name": "LightGBM", "score": 0.92, "metric_used": "accuracy"}},
+        {{"rank": 2, "model_name": "RandomForest", "score": 0.89, "metric_used": "accuracy"}}
+    ],
+    "summary": {{
+        "total_models": 3,
+        "best_model": "LightGBM",
+        "best_score": 0.92,
+        "worst_model": "DecisionTree",
+        "worst_score": 0.85,
+        "performance_spread": "8.2% difference between best and worst",
+        "recommendation": "LightGBM shows the best performance with 92% accuracy..."
+    }}
+}}"""
+
+    result = execution_agent.run(
+        code=selection_prompt,
+        sample_data=None,
+        user_id=user_id,
+        session_id=f"{user_id}_selection",
+        context={"intent": "model_selection", "user_query": "Select best model"},
+        verbose=True
+    )
+    
+    if isinstance(result, dict) and "selection_result" in result:
+        return result["selection_result"]
+    elif isinstance(result, dict):
+        return result
+    else:
+        print(f"⚠️ Model selection failed: {result}")
+        return {
+            "best_model": {"name": "Unknown", "metrics": {}},
+            "model_ranking": [],
+            "summary": {"total_models": 0, "recommendation": "Model selection failed"}
+        }
+
+
+def _stage_5_format_response(results: dict):
+    """Stage 5: Format response for user (no LLM needed, direct formatting)"""
+    
+    response_parts = ["✅ 🎯 Staged Multi-Model Comparison Completed!\n"]
+    
+    # Show stage status
+    status = results.get("stage_status", {})
+    response_parts.append("📊 **Stage Status:**")
+    response_parts.append(f"• Config Parsing: {'✅' if status.get('config') == 'completed' else '❌'}")
+    response_parts.append(f"• Model Training: {'✅' if status.get('training') == 'completed' else '❌'}")
+    response_parts.append(f"• Visualization: {'✅' if status.get('visualization') == 'completed' else '⚠️'}")
+    response_parts.append(f"• Best Model Selection: {'✅' if status.get('selection') == 'completed' else '⚠️'}")
+    
+    # Configuration
+    config = results.get("config", {})
+    if config:
+        response_parts.append(f"\n📋 **Configuration:**")
+        response_parts.append(f"• Models Requested: {', '.join(config.get('models_requested', []))}")
+        response_parts.append(f"• Test Size: {config.get('test_size', 0.2)*100:.0f}%")
+        response_parts.append(f"• Selection Metric: {config.get('selection_metric', 'accuracy')}")
+    
+    # Model Results
+    models = results.get("models", {})
+    if models:
+        response_parts.append(f"\n📊 **Model Performance:**")
+        response_parts.append("```")
+        response_parts.append(f"{'Model':<15} {'Accuracy':<10} {'F1-Score':<10} {'Training Time':<12}")
+        response_parts.append("-" * 50)
+        
+        for model_name, model_data in models.items():
+            metrics = model_data.get("metrics", {})
+            training_time = model_data.get("training_time", 0)
+            
+            acc = f"{metrics.get('accuracy', 0):.3f}"
+            f1 = f"{metrics.get('f1_score', 0):.3f}"
+            time_str = f"{training_time:.2f}s"
+            
+            response_parts.append(f"{model_name:<15} {acc:<10} {f1:<10} {time_str:<12}")
+        response_parts.append("```")
+    
+    # Best Model
+    best_model = results.get("best_model", {})
+    if best_model and best_model.get("name"):
+        response_parts.append(f"\n🏆 **Best Model: {best_model['name']}**")
+        if best_model.get("selection_criteria"):
+            response_parts.append(f"• {best_model['selection_criteria']}")
+    
+    # Summary
+    summary = results.get("summary", {})
+    if summary and summary.get("recommendation"):
+        response_parts.append(f"\n💡 **Recommendation:**")
+        response_parts.append(f"{summary['recommendation']}")
+    
+    # Errors (if any)
+    errors = results.get("errors", [])
+    if errors:
+        response_parts.append(f"\n⚠️ **Partial Failures:**")
+        for error in errors:
+            response_parts.append(f"• {error}")
+    
+    return "\n".join(response_parts)
+
+
+def _format_partial_results(results: dict, error_msg: str):
+    """Format partial results when workflow fails"""
+    
+    response_parts = [f"❌ Multi-Model Workflow Failed: {error_msg}\n"]
+    
+    # Show what stages completed
+    status = results.get("stage_status", {})
+    response_parts.append("📊 **Completed Stages:**")
+    for stage, stage_status in status.items():
+        emoji = "✅" if stage_status == "completed" else "❌" if stage_status == "failed" else "⏸️"
+        response_parts.append(f"• {stage.title()}: {emoji}")
+    
+    # Show partial results if available
+    if results.get("models"):
+        response_parts.append(f"\n📊 **Partial Results Available:**")
+        response_parts.append(f"• Models trained: {len(results['models'])}")
+        
+        for model_name, model_data in results["models"].items():
+            metrics = model_data.get("metrics", {})
+            if metrics:
+                acc = metrics.get("accuracy", 0)
+                response_parts.append(f"  - {model_name}: {acc:.3f} accuracy")
+    
+    response_parts.append(f"\n💡 **Next Steps:**")
+    response_parts.append(f"• Try with fewer models")
+    response_parts.append(f"• Check data quality")
+    response_parts.append(f"• Review error details above")
+    
+    return "\n".join(response_parts)
+
+
+# ==== TEST CODE ====
 
 if __name__ == "__main__":
     # Create agent
