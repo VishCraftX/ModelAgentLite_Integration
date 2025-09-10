@@ -68,6 +68,7 @@ class PipelineState(BaseModel):
     # File upload management
     pending_file_uploads: Optional[Dict] = None
     
+    
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {
@@ -494,65 +495,68 @@ class PipelineState(BaseModel):
         
         return "\n".join(summary)
     
+    def add_pending_file_upload(self, file_info: Dict[str, Any]):
+        """Add a file to the pending uploads list"""
+        if self.pending_file_uploads is None:
+            self.pending_file_uploads = {"files": []}
+        
+        if "files" not in self.pending_file_uploads:
+            self.pending_file_uploads["files"] = []
+        
+        self.pending_file_uploads["files"].append(file_info)
+        print_to_log(f"📎 Added file to pending uploads: {file_info.get('path', 'unknown')}")
+    
+    def add_pending_plot_upload(self, plot_path: str, title: str = "Generated Plot", comment: str = "Generated plot"):
+        """Add a plot file to pending uploads"""
+        if os.path.exists(plot_path):
+            file_info = {
+                "path": plot_path,
+                "title": title,
+                "comment": comment,
+                "type": "plot",
+                "timestamp": datetime.now().isoformat()
+            }
+            self.add_pending_file_upload(file_info)
+        else:
+            print_to_log(f"⚠️ Plot file not found: {plot_path}")
+    
     def process_pending_file_uploads(self) -> bool:
-        """Process any pending file uploads and return True if uploads were processed"""
-        if not self.pending_file_uploads:
+        """Process all pending file uploads and return True if any uploads were processed"""
+        if not self.pending_file_uploads or not self.pending_file_uploads.get("files"):
             return False
         
         try:
             from toolbox import slack_manager
-            execution_result = self.pending_file_uploads
+            files_to_upload = self.pending_file_uploads["files"]
             
-            print_to_log(f"🔍 UPLOAD DEBUG: Processing pending file uploads...")
-            print_to_log(f"🔍 UPLOAD DEBUG: Execution result keys: {list(execution_result.keys())}")
+            print_to_log(f"🔍 UPLOAD DEBUG: Processing {len(files_to_upload)} pending file uploads...")
             
-            # Check for artifacts structure first
-            if 'artifacts' in execution_result:
-                print_to_log(f"🔍 UPLOAD DEBUG: Found artifacts: {execution_result['artifacts']}")
-                if 'files' in execution_result['artifacts']:
-                    print_to_log(f"🔍 UPLOAD DEBUG: Found files: {execution_result['artifacts']['files']}")
-                    self._upload_files_to_slack(execution_result['artifacts']['files'], self.chat_session)
-                    return True
-                else:
-                    print_to_log(f"🔍 UPLOAD DEBUG: No 'files' key in artifacts")
-            
-            # Check for direct plot_path (decision tree plots)
-            elif 'plot_path' in execution_result and execution_result['plot_path']:
-                plot_path = execution_result['plot_path']
-                print_to_log(f"🔍 UPLOAD DEBUG: Found plot_path: {plot_path}")
-                if os.path.exists(plot_path):
-                    print_to_log(f"📤 Uploading decision tree plot: {plot_path}")
-                    slack_manager.upload_file(
-                        session_id=self.chat_session,
-                        file_path=plot_path,
-                        title="Decision Tree Visualization",
-                        comment="Generated decision tree plot"
-                    )
-                    print_to_log(f"✅ Successfully uploaded plot: {plot_path}")
-                    return True
-                else:
-                    print_to_log(f"⚠️ Plot file not found: {plot_path}")
-            
-            # Check for any other file paths in execution result
-            else:
-                print_to_log(f"🔍 UPLOAD DEBUG: Searching for file paths in execution result...")
-                for key, value in execution_result.items():
-                    if isinstance(value, str) and any(ext in value.lower() for ext in ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xlsx']):
-                        if os.path.exists(value):
-                            print_to_log(f"🔍 UPLOAD DEBUG: Found file via key '{key}': {value}")
-                            title = self._get_title_from_path(value)
-                            print_to_log(f"📤 Uploading {title}: {value}")
-                            slack_manager.upload_file(
-                                session_id=self.chat_session,
-                                file_path=value,
-                                title=title,
-                                comment=f"Generated {title.lower()}"
-                            )
-                            return True
+            uploaded_count = 0
+            for file_info in files_to_upload:
+                try:
+                    file_path = file_info.get("path")
+                    title = file_info.get("title", "Generated File")
+                    comment = file_info.get("comment", "Generated file")
+                    
+                    if file_path and os.path.exists(file_path):
+                        print_to_log(f"📤 Uploading {title}: {file_path}")
+                        slack_manager.upload_file(
+                            session_id=self.chat_session,
+                            file_path=file_path,
+                            title=title,
+                            comment=comment
+                        )
+                        print_to_log(f"✅ Successfully uploaded {title}: {file_path}")
+                        uploaded_count += 1
+                    else:
+                        print_to_log(f"⚠️ File not found: {file_path}")
+                except Exception as e:
+                    print_to_log(f"❌ Failed to upload file {file_info.get('path', 'unknown')}: {e}")
             
             # Clear pending uploads after processing
             self.pending_file_uploads = None
-            return False
+            print_to_log(f"✅ Processed {uploaded_count} file uploads")
+            return uploaded_count > 0
             
         except Exception as e:
             print_to_log(f"❌ Failed to process pending file uploads: {e}")
@@ -560,53 +564,19 @@ class PipelineState(BaseModel):
             print_to_log(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
             return False
     
-    def _upload_files_to_slack(self, files_list, session_id):
-        """Upload a list of files to Slack"""
-        try:
-            from toolbox import slack_manager
-            for file_info in files_list:
-                print_to_log(f"🔍 UPLOAD DEBUG: Processing file_info: {file_info}")
-                if isinstance(file_info, dict):
-                    file_path = file_info.get('path')
-                    title = file_info.get('title', 'Generated File')
-                    comment = file_info.get('comment', 'Generated file')
-                else:
-                    file_path = file_info
-                    title = self._get_title_from_path(file_path)
-                    comment = f"Generated {title.lower()}"
-                
-                if file_path and os.path.exists(file_path):
-                    print_to_log(f"📤 Uploading {title}: {file_path}")
-                    slack_manager.upload_file(
-                        session_id=session_id,
-                        file_path=file_path,
-                        title=title,
-                        comment=comment
-                    )
-                    print_to_log(f"✅ Successfully uploaded {title}: {file_path}")
-                else:
-                    print_to_log(f"⚠️ File not found: {file_path}")
-        except Exception as e:
-            print_to_log(f"❌ Failed to upload files: {e}")
-    
-    def _get_title_from_path(self, file_path: str) -> str:
-        """Extract a title from file path"""
-        filename = os.path.basename(file_path)
-        name, ext = os.path.splitext(filename)
+    def get_pending_upload_summary(self) -> str:
+        """Get a summary of pending file uploads"""
+        if not self.pending_file_uploads or not self.pending_file_uploads.get("files"):
+            return "No pending file uploads"
         
-        # Map common file types to titles
-        if 'decision_tree' in name.lower():
-            return "Decision Tree Plot"
-        elif 'confusion_matrix' in name.lower():
-            return "Confusion Matrix"
-        elif 'roc_curve' in name.lower():
-            return "ROC Curve"
-        elif ext.lower() == '.png':
-            return "Generated Plot"
-        elif ext.lower() == '.csv':
-            return "Generated Data"
-        else:
-            return f"Generated {name.title()}"
+        files = self.pending_file_uploads["files"]
+        file_list = []
+        for file_info in files:
+            file_path = file_info.get("path", "unknown")
+            title = file_info.get("title", "Generated File")
+            file_list.append(f"• {title} ({os.path.basename(file_path)})")
+        
+        return f"Pending uploads ({len(files)} files):\n" + "\n".join(file_list)
 
 
 class StateManager:
@@ -650,7 +620,7 @@ class StateManager:
             os.makedirs(fallback_session_dir, exist_ok=True)
             session_dir = fallback_session_dir
         
-        # Save state metadata (without DataFrames)
+        # Save state metadata (without DataFrames and non-serializable objects)
         state_dict = state.dict()
         
         # Handle DataFrames separately
@@ -670,6 +640,11 @@ class StateManager:
             with open(model_path, 'wb') as f:
                 pickle.dump(state.trained_model, f)
             state_dict["trained_model"] = model_path
+        
+        # Handle pending_file_uploads (ensure it's JSON serializable)
+        if state.pending_file_uploads is not None:
+            # pending_file_uploads should only contain file paths and metadata, no model objects
+            state_dict["pending_file_uploads"] = state.pending_file_uploads
         
         # Save state metadata
         state_file = os.path.join(session_dir, "state.json")

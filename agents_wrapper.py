@@ -3608,15 +3608,51 @@ class ModelBuildingAgentWrapper:
                 # Store execution result for later file uploads (after response processing)
                 execution_result = result.get('execution_result') if isinstance(result, dict) else None
             
-            # Store execution result for later file upload (after response is sent)
-            # This ensures the response text (with training logs) is sent before the plot
+            # Add files to pending uploads for batch processing later
             if execution_result and isinstance(execution_result, dict):
-                print_to_log(f"🔍 UPLOAD DEBUG: Storing execution result for later file upload...")
+                print_to_log(f"🔍 UPLOAD DEBUG: Adding files to pending uploads...")
                 print_to_log(f"🔍 UPLOAD DEBUG: Execution result keys: {list(execution_result.keys())}")
                 
-                # Store the execution result in state for later processing
-                state.pending_file_uploads = execution_result
-                print_to_log(f"🔍 UPLOAD DEBUG: Execution result stored in state.pending_file_uploads")
+                # Check for artifacts structure first
+                if 'artifacts' in execution_result and 'files' in execution_result['artifacts']:
+                    print_to_log(f"🔍 UPLOAD DEBUG: Found artifacts files: {execution_result['artifacts']['files']}")
+                    for file_info in execution_result['artifacts']['files']:
+                        if isinstance(file_info, dict):
+                            state.add_pending_file_upload(file_info)
+                        else:
+                            # Convert string path to file info dict
+                            state.add_pending_file_upload({
+                                "path": file_info,
+                                "title": self._get_title_from_path(file_info),
+                                "comment": "Generated file"
+                            })
+                
+                # Check for direct plot_path (decision tree plots)
+                elif 'plot_path' in execution_result and execution_result['plot_path']:
+                    plot_path = execution_result['plot_path']
+                    print_to_log(f"🔍 UPLOAD DEBUG: Found plot_path: {plot_path}")
+                    state.add_pending_plot_upload(
+                        plot_path, 
+                        title="Decision Tree Visualization", 
+                        comment="Generated decision tree plot"
+                    )
+                
+                # Check for any other file paths in execution result
+                else:
+                    print_to_log(f"🔍 UPLOAD DEBUG: Searching for file paths in execution result...")
+                    for key, value in execution_result.items():
+                        if isinstance(value, str) and any(ext in value.lower() for ext in ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xlsx']):
+                            if os.path.exists(value):
+                                print_to_log(f"🔍 UPLOAD DEBUG: Found file via key '{key}': {value}")
+                                state.add_pending_file_upload({
+                                    "path": value,
+                                    "title": self._get_title_from_path(value),
+                                    "comment": f"Generated {key}"
+                                })
+                
+                # Log pending uploads summary
+                if hasattr(state, 'get_pending_upload_summary'):
+                    print_to_log(f"📎 {state.get_pending_upload_summary()}")
             else:
                 print_to_log(f"🔍 UPLOAD DEBUG: No execution result or not a dict")
             

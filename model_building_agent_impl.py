@@ -1882,7 +1882,9 @@ else:
                 # Extract user and thread from user_id format: user_threadts
                 if "_" in user_id:
                     user, thread_ts = user_id.split("_", 1)
-                    thread_dir = os.path.join("user_data", user, thread_ts)
+                    # Get username for proper directory structure
+                    username = get_username_for_user_id(user)
+                    thread_dir = os.path.join("user_data", username, thread_ts)
                     artifacts_dir = os.path.join(thread_dir, "artifacts")
                     if not os.path.exists(artifacts_dir):
                         os.makedirs(artifacts_dir, exist_ok=True)
@@ -2135,7 +2137,9 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             try:
                 if "_" in user_id:
                     user, thread_ts = user_id.split("_", 1)
-                    thread_dir = os.path.join("user_data", user, thread_ts)
+                    # Get username for proper directory structure
+                    username = get_username_for_user_id(user)
+                    thread_dir = os.path.join("user_data", username, thread_ts)
                     artifacts_dir = os.path.join(thread_dir, "artifacts")
                     if not os.path.exists(artifacts_dir):
                         os.makedirs(artifacts_dir, exist_ok=True)
@@ -2342,7 +2346,9 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
             # Extract user and thread from user_id format: user_threadts
             if "_" in user_id:
                 user, thread_ts = user_id.split("_", 1)
-                thread_dir = os.path.join("user_data", user, thread_ts)
+                # Get username for proper directory structure
+                username = get_username_for_user_id(user)
+                thread_dir = os.path.join("user_data", username, thread_ts)
                 artifacts_dir = os.path.join(thread_dir, "artifacts")
                 if not os.path.exists(artifacts_dir):
                     os.makedirs(artifacts_dir, exist_ok=True)
@@ -3279,7 +3285,9 @@ class LangGraphModelAgent:
     def _get_user_thread_dir(self, user_id: str) -> str:
         """Get directory path for specific user thread"""
         user, thread_ts = self._get_thread_id(user_id)
-        thread_dir = os.path.join(self.base_data_dir, user, thread_ts)
+        # Get username for proper directory structure
+        username = get_username_for_user_id(user)
+        thread_dir = os.path.join(self.base_data_dir, username, thread_ts)
         if not os.path.exists(thread_dir):
             os.makedirs(thread_dir, exist_ok=True)
             print_to_log(f"📁 Created thread directory: {thread_dir}")
