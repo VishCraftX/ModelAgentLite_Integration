@@ -12,8 +12,7 @@ import os
 import argparse
 import logging
 from pathlib import Path
-from logging_config import setup_colored_logging
-# Removed logging_config import - module was deleted
+# Logging is handled by print_to_log() and master_log_handler
 
 # Try to load .env file if it exists
 try:
@@ -367,9 +366,8 @@ def main():
     """Main startup function"""
     args = parse_arguments()
     
-    # Setup instance-specific logging
-    log_file = setup_colored_logging()
-    print(f"📝 Logs will be saved to: {log_file}")
+    # Logging is handled by print_to_log() and master_log_handler
+    # No need for additional logging setup
     
     # Print system status
     if not print_system_status():
