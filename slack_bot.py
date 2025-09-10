@@ -315,16 +315,32 @@ Just upload your data and start asking questions in natural language! 🎉"""
             
             # Process any pending file uploads AFTER the response is sent
             # This ensures the training logs appear before the plot
+            print_to_log(f"🔍 UPLOAD DEBUG: Checking for pending file uploads...")
+            print_to_log(f"🔍 UPLOAD DEBUG: ml_pipeline has state_manager: {hasattr(self.ml_pipeline, 'state_manager')}")
+            
             if hasattr(self.ml_pipeline, 'state_manager'):
+                print_to_log(f"🔍 UPLOAD DEBUG: Loading state for session: {session_id}")
                 # Get the current state from the pipeline
                 current_state = self.ml_pipeline.state_manager.load_state(session_id)
-                if current_state and hasattr(current_state, 'process_pending_file_uploads'):
-                    print_to_log("🔍 UPLOAD DEBUG: Processing pending file uploads after response sent...")
-                    uploads_processed = current_state.process_pending_file_uploads()
-                    if uploads_processed:
-                        print_to_log("✅ Pending file uploads processed successfully")
+                print_to_log(f"🔍 UPLOAD DEBUG: State loaded: {current_state is not None}")
+                
+                if current_state:
+                    print_to_log(f"🔍 UPLOAD DEBUG: State has process_pending_file_uploads: {hasattr(current_state, 'process_pending_file_uploads')}")
+                    print_to_log(f"🔍 UPLOAD DEBUG: State pending_file_uploads: {getattr(current_state, 'pending_file_uploads', None)}")
+                    
+                    if hasattr(current_state, 'process_pending_file_uploads'):
+                        print_to_log("🔍 UPLOAD DEBUG: Processing pending file uploads after response sent...")
+                        uploads_processed = current_state.process_pending_file_uploads()
+                        if uploads_processed:
+                            print_to_log("✅ Pending file uploads processed successfully")
+                        else:
+                            print_to_log("🔍 No pending file uploads to process")
                     else:
-                        print_to_log("🔍 No pending file uploads to process")
+                        print_to_log("⚠️ State does not have process_pending_file_uploads method")
+                else:
+                    print_to_log("⚠️ Could not load state from state_manager")
+            else:
+                print_to_log("⚠️ ml_pipeline does not have state_manager")
             
             # Pipeline summary moved to logs only - user doesn't need technical details
             if result.get("data_summary"):
