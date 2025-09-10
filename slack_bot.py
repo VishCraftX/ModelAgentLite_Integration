@@ -28,6 +28,7 @@ from config import (
     SLACK_BOT_TOKEN, SLACK_APP_TOKEN, 
     SUPPORTED_FILE_TYPES, validate_config, print_config
 )
+from print_to_log import print_to_log
 
 
 class SlackMLBot:
@@ -311,6 +312,19 @@ Just upload your data and start asking questions in natural language! 🎉"""
             # Send main response
             response_text = result["response"]
             say(response_text, thread_ts=thread_ts)
+            
+            # Process any pending file uploads AFTER the response is sent
+            # This ensures the training logs appear before the plot
+            if hasattr(self.ml_pipeline, 'state_manager'):
+                # Get the current state from the pipeline
+                current_state = self.ml_pipeline.state_manager.load_state(session_id)
+                if current_state and hasattr(current_state, 'process_pending_file_uploads'):
+                    print_to_log("🔍 UPLOAD DEBUG: Processing pending file uploads after response sent...")
+                    uploads_processed = current_state.process_pending_file_uploads()
+                    if uploads_processed:
+                        print_to_log("✅ Pending file uploads processed successfully")
+                    else:
+                        print_to_log("🔍 No pending file uploads to process")
             
             # Pipeline summary moved to logs only - user doesn't need technical details
             if result.get("data_summary"):

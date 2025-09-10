@@ -65,6 +65,9 @@ class PipelineState(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
+    # File upload management
+    pending_file_uploads: Optional[Dict] = None
+    
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {
@@ -490,6 +493,120 @@ class PipelineState(BaseModel):
         summary.append(f"• Transformations: {transform_count} columns")
         
         return "\n".join(summary)
+    
+    def process_pending_file_uploads(self) -> bool:
+        """Process any pending file uploads and return True if uploads were processed"""
+        if not self.pending_file_uploads:
+            return False
+        
+        try:
+            from toolbox import slack_manager
+            execution_result = self.pending_file_uploads
+            
+            print_to_log(f"🔍 UPLOAD DEBUG: Processing pending file uploads...")
+            print_to_log(f"🔍 UPLOAD DEBUG: Execution result keys: {list(execution_result.keys())}")
+            
+            # Check for artifacts structure first
+            if 'artifacts' in execution_result:
+                print_to_log(f"🔍 UPLOAD DEBUG: Found artifacts: {execution_result['artifacts']}")
+                if 'files' in execution_result['artifacts']:
+                    print_to_log(f"🔍 UPLOAD DEBUG: Found files: {execution_result['artifacts']['files']}")
+                    self._upload_files_to_slack(execution_result['artifacts']['files'], self.chat_session)
+                    return True
+                else:
+                    print_to_log(f"🔍 UPLOAD DEBUG: No 'files' key in artifacts")
+            
+            # Check for direct plot_path (decision tree plots)
+            elif 'plot_path' in execution_result and execution_result['plot_path']:
+                plot_path = execution_result['plot_path']
+                print_to_log(f"🔍 UPLOAD DEBUG: Found plot_path: {plot_path}")
+                if os.path.exists(plot_path):
+                    print_to_log(f"📤 Uploading decision tree plot: {plot_path}")
+                    slack_manager.upload_file(
+                        session_id=self.chat_session,
+                        file_path=plot_path,
+                        title="Decision Tree Visualization",
+                        comment="Generated decision tree plot"
+                    )
+                    print_to_log(f"✅ Successfully uploaded plot: {plot_path}")
+                    return True
+                else:
+                    print_to_log(f"⚠️ Plot file not found: {plot_path}")
+            
+            # Check for any other file paths in execution result
+            else:
+                print_to_log(f"🔍 UPLOAD DEBUG: Searching for file paths in execution result...")
+                for key, value in execution_result.items():
+                    if isinstance(value, str) and any(ext in value.lower() for ext in ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xlsx']):
+                        if os.path.exists(value):
+                            print_to_log(f"🔍 UPLOAD DEBUG: Found file via key '{key}': {value}")
+                            title = self._get_title_from_path(value)
+                            print_to_log(f"📤 Uploading {title}: {value}")
+                            slack_manager.upload_file(
+                                session_id=self.chat_session,
+                                file_path=value,
+                                title=title,
+                                comment=f"Generated {title.lower()}"
+                            )
+                            return True
+            
+            # Clear pending uploads after processing
+            self.pending_file_uploads = None
+            return False
+            
+        except Exception as e:
+            print_to_log(f"❌ Failed to process pending file uploads: {e}")
+            import traceback
+            print_to_log(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
+            return False
+    
+    def _upload_files_to_slack(self, files_list, session_id):
+        """Upload a list of files to Slack"""
+        try:
+            from toolbox import slack_manager
+            for file_info in files_list:
+                print_to_log(f"🔍 UPLOAD DEBUG: Processing file_info: {file_info}")
+                if isinstance(file_info, dict):
+                    file_path = file_info.get('path')
+                    title = file_info.get('title', 'Generated File')
+                    comment = file_info.get('comment', 'Generated file')
+                else:
+                    file_path = file_info
+                    title = self._get_title_from_path(file_path)
+                    comment = f"Generated {title.lower()}"
+                
+                if file_path and os.path.exists(file_path):
+                    print_to_log(f"📤 Uploading {title}: {file_path}")
+                    slack_manager.upload_file(
+                        session_id=session_id,
+                        file_path=file_path,
+                        title=title,
+                        comment=comment
+                    )
+                    print_to_log(f"✅ Successfully uploaded {title}: {file_path}")
+                else:
+                    print_to_log(f"⚠️ File not found: {file_path}")
+        except Exception as e:
+            print_to_log(f"❌ Failed to upload files: {e}")
+    
+    def _get_title_from_path(self, file_path: str) -> str:
+        """Extract a title from file path"""
+        filename = os.path.basename(file_path)
+        name, ext = os.path.splitext(filename)
+        
+        # Map common file types to titles
+        if 'decision_tree' in name.lower():
+            return "Decision Tree Plot"
+        elif 'confusion_matrix' in name.lower():
+            return "Confusion Matrix"
+        elif 'roc_curve' in name.lower():
+            return "ROC Curve"
+        elif ext.lower() == '.png':
+            return "Generated Plot"
+        elif ext.lower() == '.csv':
+            return "Generated Data"
+        else:
+            return f"Generated {name.title()}"
 
 
 class StateManager:
