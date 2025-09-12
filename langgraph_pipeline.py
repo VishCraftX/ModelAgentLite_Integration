@@ -60,6 +60,9 @@ class MultiAgentMLPipeline:
         self.user_directory_manager = user_directory_manager
         self.execution_agent = execution_agent
         
+        # Add state manager reference
+        self.state_manager = state_manager
+        
         if not LANGGRAPH_AVAILABLE:
             print_to_log("❌ LangGraph not available, using simplified pipeline")
             self.app = None
