@@ -2836,9 +2836,9 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
             print_to_log(f"   📊 Target column found: {y.nunique()} unique values")
             print_to_log(f"   🎯 Detected problem type: {problem_type}")
         else:
-        print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
-        print_to_log(f"   ⚠️ No sample_data or target column found")
-        print_to_log(f"   🎯 Defaulting to: {problem_type}")
+            print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
+            print_to_log(f"   ⚠️ No sample_data or target column found")
+            print_to_log(f"   🎯 Defaulting to: {problem_type}")
     except Exception as e:
         print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
         print_to_log(f"   ❌ Error during detection: {e}")
