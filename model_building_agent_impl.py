@@ -287,13 +287,13 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     if "name 'X_test' is not defined" in error_msg or "name 'y_test' is not defined" in error_msg:
         print_to_log("🔧 Fallback: Adding missing train/test split...")
         # Add train/test split after data splitting
-        if "X = sample_data.drop('target', axis=1)" in code and "train_test_split" not in code:
+        if "X = sample_data.drop(" in code and "train_test_split" not in code:
             # Find the line with X = sample_data.drop and add train/test split after it
             lines = code.split('\n')
             for i, line in enumerate(lines):
-                if "X = sample_data.drop('target', axis=1)" in line:
-                    # Insert train/test split after the next line (y = sample_data['target'])
-                    if i + 1 < len(lines) and "y = sample_data['target']" in lines[i + 1]:
+                if "X = sample_data.drop('TARGET_COLUMN', axis=1)" in line:
+                    # Insert train/test split after the next line (y = sample_data['TARGET_COLUMN'])
+                    if i + 1 < len(lines) and "y = sample_data['TARGET_COLUMN']" in lines[i + 1]:
                         lines.insert(i + 2, "")
                         lines.insert(i + 3, "# Train/test split for validation")
                         lines.insert(i + 4, "X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)")
@@ -360,10 +360,20 @@ def auto_fix_code_errors_fallback(code: str, error_msg: str, error_type: str) ->
     if "name 'X_test' is not defined" in error_msg:
         print_to_log("🔧 Fallback: Fixing undefined X_test error...")
         # Add data preparation code at the beginning
-        data_prep = """
+        # Get target column from pipeline state or use default
+        target_col = 'target'  # Default fallback
+        try:
+            from pipeline_state import state_manager
+            current_state = state_manager.load_state(user_id)
+            if current_state and hasattr(current_state, 'target_column') and current_state.target_column:
+                target_col = current_state.target_column
+        except:
+            pass
+        
+        data_prep = f"""
 # Prepare data for existing model usage
-X = sample_data.drop('target', axis=1)
-y = sample_data['target']
+X = sample_data.drop('{target_col}', axis=1)
+y = sample_data['{target_col}']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 """
         return data_prep + code
@@ -1761,7 +1771,7 @@ REQUIRED - YOU MUST DO THIS:
 - The model is already fitted and ready to use
 
 CRITICAL: If user asks for rank ordering, deciles, or buckets, follow the EXACT process:
-1. Split data: X = sample_data.drop('target', axis=1); y = sample_data['target']
+1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Use current_model.predict_proba(X)[:,1] to get probabilities  
 3. Create test_df with actual and probability columns
 4. Create segments with pd.qcut(probabilities, q=N, duplicates='drop')
@@ -2495,7 +2505,7 @@ The variable `current_model` is ALREADY LOADED (for existing model operations).
 
 MANDATORY STRUCTURE:
 1. Import statements (NO data loading imports!)
-2. Data splitting: X = sample_data.drop('target', axis=1); y = sample_data['target']
+2. Data splitting: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 3. Train/test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 4. Model training: model = [UserRequestedModel](); model.fit(X_train, y_train)
    ✅ FOLLOW USER'S SPECIFIC REQUEST for model type and parameters
@@ -2531,7 +2541,7 @@ REQUIRED:
 Your code MUST follow this exact structure and be COMPLETE:
 
 1. Import statements
-2. Data splitting: X = sample_data.drop('target', axis=1); y = sample_data['target']
+2. Data splitting: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 3. Train/test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 4. Model training: model = [ModelType](...); model.fit(X_train, y_train)
 5. Predictions: y_pred = model.predict(X_test); y_proba = model.predict_proba(X_test)
@@ -2710,6 +2720,79 @@ def detect_problem_type(y: pd.Series) -> str:
         return "classification"
 
 
+def find_target_column(user_specified: str, available_columns: List[str]) -> tuple[str, str]:
+    """
+    Find target column using fuzzy matching.
+    
+    Args:
+        user_specified: Column name specified by user
+        available_columns: List of available column names in data
+        
+    Returns:
+        tuple: (matched_column_name, match_type)
+        match_type: 'exact', 'case_insensitive', 'partial', 'none'
+    """
+    if not user_specified or not available_columns:
+        return None, 'none'
+    
+    user_specified = user_specified.strip()
+    available_columns = [col.strip() for col in available_columns]
+    
+    # 1. Exact match
+    if user_specified in available_columns:
+        return user_specified, 'exact'
+    
+    # 2. Case-insensitive match
+    user_lower = user_specified.lower()
+    for col in available_columns:
+        if col.lower() == user_lower:
+            return col, 'case_insensitive'
+    
+    # 3. Partial match (user input is substring of column name)
+    for col in available_columns:
+        if user_lower in col.lower():
+            return col, 'partial'
+    
+    # 4. Reverse partial match (column name is substring of user input)
+    for col in available_columns:
+        if col.lower() in user_lower:
+            return col, 'partial'
+    
+    return None, 'none'
+
+
+def extract_target_column_from_prompt(prompt: str) -> Optional[str]:
+    """
+    Extract target column name from user prompt.
+    
+    Looks for patterns like:
+    - "target column is X"
+    - "use X as target"
+    - "predict X"
+    - "X as target column"
+    """
+    import re
+    
+    prompt_lower = prompt.lower()
+    
+    # Pattern 1: "target column is X" or "target column X"
+    patterns = [
+        r'target\s+column\s+is\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'target\s+column\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'use\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+target',
+        r'predict\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+target\s+column',
+        r'([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+target',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, prompt_lower)
+        if match:
+            return match.group(1)
+    
+    return None
+
+
 def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> tuple[str, str, str]:
     """Generate model code using modular LLM prompts - returns (reply, code, system_prompt)"""
     
@@ -2753,14 +2836,101 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
             print_to_log(f"   📊 Target column found: {y.nunique()} unique values")
             print_to_log(f"   🎯 Detected problem type: {problem_type}")
         else:
-            print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
-            print_to_log(f"   ⚠️ No sample_data or target column found")
-            print_to_log(f"   🎯 Defaulting to: {problem_type}")
+        print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
+        print_to_log(f"   ⚠️ No sample_data or target column found")
+        print_to_log(f"   🎯 Defaulting to: {problem_type}")
     except Exception as e:
         print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
         print_to_log(f"   ❌ Error during detection: {e}")
         print_to_log(f"   🎯 Defaulting to: classification")
         problem_type = "classification"
+    
+    # =============================================================================
+    # TARGET COLUMN SELECTION LOGIC
+    # =============================================================================
+    target_column = None
+    target_column_source = None
+    
+    # Step 1: Check if target column is specified in pipeline state
+    try:
+        from pipeline_state import state_manager
+        current_state = state_manager.load_state(user_id)
+        if current_state and hasattr(current_state, 'target_column') and current_state.target_column:
+            target_column = current_state.target_column
+            target_column_source = "pipeline_state"
+            print_to_log(f"🎯 TARGET COLUMN: Found in pipeline state: '{target_column}'")
+    except Exception as e:
+        print_to_log(f"🔍 TARGET COLUMN: Could not load pipeline state: {e}")
+    
+    # Step 2: If no target column in state, try to extract from user prompt
+    if not target_column:
+        extracted_target = extract_target_column_from_prompt(original_query or prompt)
+        if extracted_target:
+            print_to_log(f"🎯 TARGET COLUMN: Extracted from prompt: '{extracted_target}'")
+            
+            # Try to match with available columns
+            if sample_data is not None:
+                available_columns = list(sample_data.columns)
+                matched_column, match_type = find_target_column(extracted_target, available_columns)
+                
+                if matched_column:
+                    target_column = matched_column
+                    target_column_source = f"prompt_extracted_{match_type}"
+                    print_to_log(f"🎯 TARGET COLUMN: Matched '{extracted_target}' -> '{matched_column}' ({match_type})")
+                    
+                    # Update pipeline state with the matched target column
+                    try:
+                        if current_state:
+                            current_state.target_column = target_column
+                            state_manager.save_state(current_state)
+                            print_to_log(f"🎯 TARGET COLUMN: Updated pipeline state with '{target_column}'")
+                    except Exception as e:
+                        print_to_log(f"⚠️ TARGET COLUMN: Could not update pipeline state: {e}")
+                else:
+                    # Target column specified but not found in data
+                    available_cols_str = ", ".join(available_columns[:10])  # Show first 10 columns
+                    if len(available_columns) > 10:
+                        available_cols_str += f" ... and {len(available_columns) - 10} more"
+                    
+                    error_msg = f"❌ Target column '{extracted_target}' not found in data. Available columns: {available_cols_str}"
+                    print_to_log(f"🎯 TARGET COLUMN: {error_msg}")
+                    return error_msg, "", ""
+    
+    # Step 3: If still no target column, check if 'target' column exists in data
+    if not target_column and sample_data is not None:
+        if 'target' in sample_data.columns:
+            target_column = 'target'
+            target_column_source = "default_target_column"
+            print_to_log(f"🎯 TARGET COLUMN: Using default 'target' column")
+        else:
+            # No target column found anywhere - ask user to specify
+            available_cols_str = ", ".join(sample_data.columns[:10])  # Show first 10 columns
+            if len(sample_data.columns) > 10:
+                available_cols_str += f" ... and {len(sample_data.columns) - 10} more"
+            
+            error_msg = f"❌ No target column found. Please specify the target column in your request. Available columns: {available_cols_str}"
+            print_to_log(f"🎯 TARGET COLUMN: {error_msg}")
+            return error_msg, "", ""
+    
+    # Final target column validation
+    if target_column and sample_data is not None:
+        if target_column not in sample_data.columns:
+            available_cols_str = ", ".join(sample_data.columns[:10])
+            if len(sample_data.columns) > 10:
+                available_cols_str += f" ... and {len(sample_data.columns) - 10} more"
+            
+            error_msg = f"❌ Target column '{target_column}' not found in data. Available columns: {available_cols_str}"
+            print_to_log(f"🎯 TARGET COLUMN: {error_msg}")
+            return error_msg, "", ""
+        
+        # Update problem type detection with the correct target column
+        y = sample_data[target_column]
+        problem_type = detect_problem_type(y)
+        print_to_log(f"🎯 TARGET COLUMN: Final selection: '{target_column}' (source: {target_column_source})")
+        print_to_log(f"🎯 TARGET COLUMN: Problem type: {problem_type}")
+    else:
+        print_to_log(f"🎯 TARGET COLUMN: No target column determined")
+        return "❌ No target column available for modeling", "", ""
 
     # Use original_query if available to avoid false matches in system instructions
     detection_text = original_query.lower() if original_query else prompt.lower()
@@ -2873,6 +3043,14 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         print_to_log(f"   🚫 Skipping tree plot for non-DecisionTree model (LGBM/XGB/etc.)")
     elif tree_in_prompt:
         print_to_log(f"   🌳 Tree keyword detected but plot not needed (using existing tree for other purposes)")
+    
+    # Replace TARGET_COLUMN placeholder with actual target column in system prompt
+    if target_column:
+        system_prompt = system_prompt.replace("'TARGET_COLUMN'", f"'{target_column}'")
+        system_prompt = system_prompt.replace('"TARGET_COLUMN"', f'"{target_column}"')
+        system_prompt = system_prompt.replace("drop('TARGET_COLUMN'", f"drop('{target_column}'")
+        system_prompt = system_prompt.replace("['TARGET_COLUMN']", f"['{target_column}']")
+        print_to_log(f"🎯 TARGET COLUMN: Updated system prompt to use '{target_column}'")
     
     print_to_log(f"🔍 FINAL PROMPT STATS:")
     print_to_log(f"   📏 Total system prompt length: {len(system_prompt)} characters")
