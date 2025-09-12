@@ -288,6 +288,9 @@ class MultiAgentMLPipeline:
     
     def _model_building_node(self, state: PipelineState) -> PipelineState:
         """Model building node"""
+        # Lazy import to avoid circular dependencies
+        from agents_wrapper import model_building_agent
+        
         print_to_log(f"\n🤖 [Model Building] Starting model building")
         print_to_log(f"🔍 [Model Building] Query: '{state.user_query}'")
         print_to_log(f"🔍 [Model Building] Raw data: {'✅' if state.raw_data is not None else '❌'}")
