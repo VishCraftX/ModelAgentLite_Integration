@@ -105,7 +105,7 @@ class Orchestrator:
         if EMBEDDINGS_AVAILABLE:
             self._initialize_intent_embeddings()
         
-        # Use global universal pattern classifier from toolbox
+        # Use global universal pattern classifier from toolbox (lazy import)
         try:
             from toolbox import pattern_classifier
             if pattern_classifier is None:
@@ -114,6 +114,7 @@ class Orchestrator:
                 self.pattern_classifier = UniversalPatternClassifier()
             else:
                 self.pattern_classifier = pattern_classifier
+                print_to_log("✅ Pattern classifier initialized successfully")
         except ImportError:
             print_to_log("⚠️ Could not import pattern classifier, creating fallback")
             from toolbox import UniversalPatternClassifier

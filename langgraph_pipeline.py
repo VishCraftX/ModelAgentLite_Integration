@@ -34,8 +34,6 @@ except ImportError as e:
 # SQLite checkpointer not needed - we use our own persistence system
 
 from pipeline_state import PipelineState, state_manager
-from orchestrator import orchestrator, AgentType
-from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
 from toolbox import initialize_toolbox
 
 
@@ -94,6 +92,10 @@ class MultiAgentMLPipeline:
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state graph"""
+        # Lazy import to avoid circular dependencies
+        from orchestrator import orchestrator, AgentType
+        from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
+        
         graph = StateGraph(PipelineState)
         
         # Add nodes
@@ -163,6 +165,9 @@ class MultiAgentMLPipeline:
     
     def _orchestrator_node(self, state: PipelineState) -> PipelineState:
         """Orchestrator node - routes queries to appropriate agents"""
+        # Lazy import to avoid circular dependencies
+        from orchestrator import orchestrator
+        
         print_to_log(f"\n🎯 [Orchestrator] Processing query: '{state.user_query}'")
         
         # Get thread logger
@@ -625,6 +630,9 @@ Generate Python code to fulfill this request:"""
     
     def _route_to_agent(self, state: PipelineState) -> str:
         """Conditional edge function for routing from orchestrator"""
+        # Lazy import to avoid circular dependencies
+        from orchestrator import AgentType
+        
         routing_decision = state.artifacts.get("routing_decision", AgentType.END.value)
         print_to_log(f"🔀 Routing to: {routing_decision}")
         return routing_decision
@@ -687,6 +695,9 @@ Generate Python code to fulfill this request:"""
     
     def _run_simplified_pipeline(self, state: PipelineState) -> PipelineState:
         """Run simplified pipeline without LangGraph"""
+        # Lazy import to avoid circular dependencies
+        from orchestrator import orchestrator, AgentType
+        
         print_to_log("🔄 Running simplified pipeline (LangGraph not available)")
         
         # Store the original user intent
@@ -741,6 +752,10 @@ Generate Python code to fulfill this request:"""
     
     def _execute_single_agent(self, state: PipelineState, agent_type: str) -> PipelineState:
         """Execute a single agent"""
+        # Lazy import to avoid circular dependencies
+        from orchestrator import AgentType
+        from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
+        
         if agent_type == AgentType.PREPROCESSING.value:
             return preprocessing_agent.run(state)
         elif agent_type == AgentType.FEATURE_SELECTION.value:
