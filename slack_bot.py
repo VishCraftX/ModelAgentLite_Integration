@@ -314,21 +314,18 @@ Just upload your data and start asking questions in natural language! 🎉"""
             say(response_text, thread_ts=thread_ts)
             
             # Process any pending file uploads AFTER the response is sent
-            # The system already determines if plots are needed - just process if there are pending uploads
+            # The system already has sophisticated plot detection logic - just process if there are pending uploads
             print_to_log(f"🔍 UPLOAD DEBUG: Checking for pending file uploads...")
-            print_to_log(f"🔍 UPLOAD DEBUG: ml_pipeline has state_manager: {hasattr(self.ml_pipeline, 'state_manager')}")
             
             if hasattr(self.ml_pipeline, 'state_manager'):
-                print_to_log(f"🔍 UPLOAD DEBUG: Loading state for session: {session_id}")
                 # Get the current state from the pipeline
                 current_state = self.ml_pipeline.state_manager.load_state(session_id)
-                print_to_log(f"🔍 UPLOAD DEBUG: State loaded: {current_state is not None}")
                 
-                if current_state:
-                    print_to_log(f"🔍 UPLOAD DEBUG: State has process_pending_file_uploads: {hasattr(current_state, 'process_pending_file_uploads')}")
-                    print_to_log(f"🔍 UPLOAD DEBUG: State pending_file_uploads: {getattr(current_state, 'pending_file_uploads', None)}")
-                    
-                    if hasattr(current_state, 'process_pending_file_uploads'):
+                if current_state and hasattr(current_state, 'process_pending_file_uploads'):
+                    # Check if there are actually pending uploads to process
+                    pending_uploads = getattr(current_state, 'pending_file_uploads', None)
+                    if pending_uploads and pending_uploads.get('files'):
+                        print_to_log(f"🔍 UPLOAD DEBUG: Found {len(pending_uploads['files'])} pending file uploads")
                         print_to_log("🔍 UPLOAD DEBUG: Processing pending file uploads after response sent...")
                         uploads_processed = current_state.process_pending_file_uploads()
                         if uploads_processed:
@@ -336,9 +333,9 @@ Just upload your data and start asking questions in natural language! 🎉"""
                         else:
                             print_to_log("🔍 No pending file uploads to process")
                     else:
-                        print_to_log("⚠️ State does not have process_pending_file_uploads method")
+                        print_to_log("🔍 UPLOAD DEBUG: No pending file uploads found")
                 else:
-                    print_to_log("⚠️ Could not load state from state_manager")
+                    print_to_log("⚠️ Could not load state or process_pending_file_uploads method not available")
             else:
                 print_to_log("⚠️ ml_pipeline does not have state_manager")
             
