@@ -987,6 +987,8 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         # Handle skip/bypass requests with semantic classification
         skip_routing = self._classify_skip_patterns(state.user_query)
         if skip_routing:
+            print_to_log(f"[Orchestrator] Skip pattern routing override: {skip_routing}")
+            print_to_log(f"[Orchestrator] Returning early with skip routing: {skip_routing}")
             return skip_routing
         
         if intent == "full_pipeline":

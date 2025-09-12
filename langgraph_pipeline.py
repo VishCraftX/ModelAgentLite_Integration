@@ -264,11 +264,17 @@ class MultiAgentMLPipeline:
     
     def _preprocessing_node(self, state: PipelineState) -> PipelineState:
         """Preprocessing node"""
+        # Lazy import to avoid circular dependencies
+        from agents_wrapper import preprocessing_agent
+        
         print_to_log(f"\n🧹 [Preprocessing] Starting data preprocessing")
         return preprocessing_agent.run(state)
     
     def _feature_selection_node(self, state: PipelineState) -> PipelineState:
         """Feature selection node"""
+        # Lazy import to avoid circular dependencies
+        from agents_wrapper import feature_selection_agent
+        
         print_to_log(f"\n🎯 [Feature Selection] Starting feature selection")
         
         # ✅ USE PIPELINE'S SLACK MANAGER: Use the exact same instance as orchestrator
