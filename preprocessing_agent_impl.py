@@ -2644,17 +2644,82 @@ def apply_preprocessing_pipeline(df: pd.DataFrame, state: SequentialState) -> pd
             if col in df_processed.columns:
                 transformation = rec.get('transformation', 'keep')
                 
-                if transformation == 'log_transform':
-                    # Add small constant to avoid log(0)
+                if transformation == 'log':
+                    # Log transformation for positive values only
+                    if df_processed[col].min() > 0:
+                        df_processed[col] = np.log(df_processed[col])
+                    else:
+                        print_to_log(f"⚠️ Log transformation requires positive values, using log1p for {col}")
+                        df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
+                elif transformation == 'log1p':
+                    # Log1p transformation (handles zeros)
                     df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
                 elif transformation == 'sqrt':
                     df_processed[col] = np.sqrt(df_processed[col] - df_processed[col].min())
+                elif transformation == 'box_cox':
+                    # Box-Cox transformation (requires positive values)
+                    if df_processed[col].min() > 0:
+                        from sklearn.preprocessing import PowerTransformer
+                        pt = PowerTransformer(method='box-cox')
+                        df_processed[col] = pt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                    else:
+                        print_to_log(f"⚠️ Box-Cox requires positive values, using yeo-johnson for {col}")
+                        from sklearn.preprocessing import PowerTransformer
+                        pt = PowerTransformer(method='yeo-johnson')
+                        df_processed[col] = pt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                elif transformation == 'yeo_johnson':
+                    # Yeo-Johnson transformation (handles negative values and zeros)
+                    from sklearn.preprocessing import PowerTransformer
+                    pt = PowerTransformer(method='yeo-johnson')
+                    df_processed[col] = pt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                elif transformation == 'quantile':
+                    # Quantile transformation (uniform distribution)
+                    from sklearn.preprocessing import QuantileTransformer
+                    qt = QuantileTransformer(output_distribution='uniform')
+                    df_processed[col] = qt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                elif transformation == 'none':
+                    # Explicitly no transformation
+                    pass
                 elif transformation == 'standardize':
                     scaler = StandardScaler()
                     df_processed[col] = scaler.fit_transform(df_processed[col].values.reshape(-1, 1))
                 elif transformation == 'robust_scale':
                     scaler = RobustScaler()
                     df_processed[col] = scaler.fit_transform(df_processed[col].values.reshape(-1, 1))
+                elif transformation == 'log':
+                    # Log transformation for positive values only
+                    if df_processed[col].min() > 0:
+                        df_processed[col] = np.log(df_processed[col])
+                    else:
+                        print_to_log(f"⚠️ Log transformation requires positive values, using log1p for {col}")
+                        df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
+                elif transformation == 'log1p':
+                    # Log1p transformation (handles zeros) 
+                    df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
+                elif transformation == 'box_cox':
+                    # Box-Cox transformation (requires positive values)
+                    if df_processed[col].min() > 0:
+                        from sklearn.preprocessing import PowerTransformer
+                        pt = PowerTransformer(method='box-cox')
+                        df_processed[col] = pt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                    else:
+                        print_to_log(f"⚠️ Box-Cox requires positive values, using yeo-johnson for {col}")
+                        from sklearn.preprocessing import PowerTransformer
+                        pt = PowerTransformer(method='yeo-johnson')
+                        df_processed[col] = pt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                elif transformation == 'yeo_johnson':
+                    # Yeo-Johnson transformation (handles negative values and zeros)
+                    from sklearn.preprocessing import PowerTransformer
+                    pt = PowerTransformer(method='yeo-johnson')
+                    df_processed[col] = pt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                elif transformation == 'quantile':
+                    # Quantile transformation (uniform distribution)
+                    from sklearn.preprocessing import QuantileTransformer
+                    qt = QuantileTransformer(output_distribution='uniform')
+                    df_processed[col] = qt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+                elif transformation == 'none':
+                    # Explicitly no transformation
+                    pass
                 
                 # 'keep' means no change
     
@@ -2854,7 +2919,7 @@ def apply_transformations_treatment(df: pd.DataFrame, recommendations: Dict[str,
             
             elif transformation == 'sqrt':
                 # Square root transformation
-                df_processed[col] = np.sqrt(df_processed[col] - df_processed[col].min() + 1)
+                df_processed[col] = np.sqrt(df_processed[col] - df_processed[col].min())
             
             elif transformation == 'square':
                 # Square transformation
@@ -2883,6 +2948,38 @@ def apply_transformations_treatment(df: pd.DataFrame, recommendations: Dict[str,
                 if iqr > 0:
                     df_processed[col] = (df_processed[col] - median_val) / iqr
     
+            
+            elif transformation == 'log':
+                # Log transformation for positive values only
+                if df_processed[col].min() > 0:
+                    df_processed[col] = np.log(df_processed[col])
+                else:
+                    print_to_log(f"⚠️ Log transformation requires positive values, using log1p for {col}")
+                    df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
+            
+            elif transformation == 'box_cox':
+                # Box-Cox transformation (requires positive values)
+                from scipy import stats
+                if df_processed[col].min() > 0:
+                    df_processed[col], _ = stats.boxcox(df_processed[col])
+                else:
+                    print_to_log(f"⚠️ Box-Cox requires positive values, using log1p for {col}")
+                    df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
+            
+            elif transformation == 'yeo_johnson':
+                # Yeo-Johnson transformation (handles negative values)
+                from scipy import stats
+                df_processed[col], _ = stats.yeojohnson(df_processed[col])
+            
+            elif transformation == 'quantile':
+                # Quantile uniform transformation
+                from sklearn.preprocessing import QuantileTransformer
+                qt = QuantileTransformer(output_distribution='uniform', random_state=42)
+                df_processed[col] = qt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
+            
+            elif transformation == 'none':
+                # No transformation - keep original values
+                pass
     return df_processed
 
 def analyze_encoding_chunked(state: SequentialState, current_df: pd.DataFrame, chunk_size: int = 10, progress_callback=None) -> Dict[str, Any]:
