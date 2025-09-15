@@ -1192,7 +1192,7 @@ class PreprocessingAgentWrapper:
 **💬 Next Steps:**
 • `continue` - Start transformations analysis
 • `skip transformations` - Complete preprocessing
-• `summary` - Show current status"""(state.chat_session, message)
+• `summary` - Show current status"""
                         
                         # Update state for next phase
                         state.preprocessing_state.update({
