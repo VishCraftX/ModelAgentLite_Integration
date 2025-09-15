@@ -891,6 +891,11 @@ Generate Python code to fulfill this request:"""
         # Update user query (always use the new query, not the saved one)
         state.user_query = query
         
+        # Clear pending file uploads for new queries - they should only be relevant to current query
+        if state.pending_file_uploads:
+            print_to_log(f"🔍 UPLOAD DEBUG: Clearing {len(state.pending_file_uploads.get('files', []))} pending uploads from previous session")
+            state.pending_file_uploads = None
+        
         # Check if we have an active interactive session that needs to continue
         # BUT only if the query is a continuation command, not a new request
         print_to_log(f"🔍 DEBUG: Checking interactive session:")
