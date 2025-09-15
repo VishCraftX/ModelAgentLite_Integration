@@ -1403,55 +1403,101 @@ class PreprocessingAgentWrapper:
                         
                         if isinstance(transformation_results, dict) and 'llm_recommendations' in transformation_results:
                             for col, recommendation in transformation_results['llm_recommendations'].items():
-                                raw_t = recommendation.get('transformation_type') or recommendation.get('transformation') or 'none'
+                                # DEBUG: Log the recommendation structure
+                                print_to_log(f"🔍 DEBUG TRANSFORMATION: {col} -> {recommendation}")
+                                
+                                # Fix key mismatch: LLM uses 'strategy' key, not 'transformation'
+                                raw_t = recommendation.get('strategy') or recommendation.get('transformation') or recommendation.get('transformation_type') or 'none'
                                 t = str(raw_t).lower().replace('-', '_')
-                                if t in ['log', 'log1p']:
-                                    # Apply log1p for numerical stability
+                                
+                                print_to_log(f"🔍 DEBUG: {col} -> strategy='{raw_t}' -> applying...")
+                                
+                                # Use EXACT strategy names from LLM (no confusing alternatives)
+                                if raw_t == 'log1p':
                                     df[col] = np.log1p(df[col])
                                     applied_treatments.append(f"• {col}: Log1p transformation applied")
-                                elif t == 'sqrt':
-                                    df[col] = np.sqrt(df[col].clip(lower=0))
-                                    applied_treatments.append(f"• {col}: Square root transformation applied")
-                                elif t in ['box_cox', 'boxcox']:
-                                    from scipy.stats import boxcox
-                                    # Shift if needed to ensure positivity
-                                    shift = 0
-                                    if (df[col] <= 0).any():
-                                        shift = abs(df[col].min()) + 1
-                                    df[col], _ = boxcox(df[col] + shift)
-                                    applied_treatments.append(f"• {col}: Box-Cox transformation applied")
-                                elif t in ['yeo_johnson', 'yeojohnson']:
+                                    print_to_log(f"✅ Applied log1p to {col}")
+                                    
+                                elif raw_t == 'yeo_johnson':
                                     from sklearn.preprocessing import PowerTransformer
                                     pt = PowerTransformer(method='yeo-johnson')
                                     df[col] = pt.fit_transform(df[[col]])
                                     applied_treatments.append(f"• {col}: Yeo-Johnson transformation applied")
-                                elif t in ['standardize', 'standard_scaler', 'zscore']:
+                                    print_to_log(f"✅ Applied yeo_johnson to {col}")
+                                    
+                                elif raw_t == 'standardize':
                                     from sklearn.preprocessing import StandardScaler
                                     scaler = StandardScaler()
                                     df[col] = scaler.fit_transform(df[[col]])
                                     applied_treatments.append(f"• {col}: Standardized")
-                                elif t in ['robust_scale', 'robust_scaler']:
+                                    print_to_log(f"✅ Applied standardize to {col}")
+                                    
+                                elif raw_t == 'log':
+                                    if df[col].min() > 0:
+                                        df[col] = np.log(df[col])
+                                    else:
+                                        df[col] = np.log1p(df[col] - df[col].min() + 1)
+                                    applied_treatments.append(f"• {col}: Log transformation applied")
+                                    print_to_log(f"✅ Applied log to {col}")
+                                    
+                                elif raw_t == 'box_cox':
+                                    from scipy.stats import boxcox
+                                    if df[col].min() > 0:
+                                        df[col], _ = boxcox(df[col])
+                                    else:
+                                        df[col] = np.log1p(df[col] - df[col].min() + 1)
+                                    applied_treatments.append(f"• {col}: Box-Cox transformation applied")
+                                    print_to_log(f"✅ Applied box_cox to {col}")
+                                    
+                                elif raw_t == 'sqrt':
+                                    # Square root transformation
+                                    if df[col].min() >= 0:
+                                        df[col] = np.sqrt(df[col])
+                                    else:
+                                        df[col] = np.sqrt(df[col] - df[col].min())
+                                    applied_treatments.append(f"• {col}: Square root transformation applied")
+                                    print_to_log(f"✅ Applied sqrt to {col}")
+                                    
+                                elif raw_t == 'robust_scale':
                                     from sklearn.preprocessing import RobustScaler
                                     scaler = RobustScaler()
                                     df[col] = scaler.fit_transform(df[[col]])
                                     applied_treatments.append(f"• {col}: Robust scaled")
-                                elif t in ['quantile', 'quantile_transform']:
-                                    from sklearn.preprocessing import QuantileTransformer
-                                    qt = QuantileTransformer(output_distribution='normal', random_state=0)
-                                    df[col] = qt.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: Quantile transformed")
-                                elif t in ['normalize', 'minmax', 'minmax_scaler']:
-                                    from sklearn.preprocessing import MinMaxScaler
-                                    scaler = MinMaxScaler()
+                                    print_to_log(f"✅ Applied robust_scale to {col}")
+                                    
+                                elif raw_t == 'robust_scale':
+                                    from sklearn.preprocessing import RobustScaler
+                                    scaler = RobustScaler()
                                     df[col] = scaler.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: MinMax normalized")
-                                elif t in ['none', 'keep', 'no_transform']:
-                                    # Explicit no-op
+                                    applied_treatments.append(f"• {col}: Robust scaled")
+                                    print_to_log(f"✅ Applied robust_scale to {col}")
+                                    
+                                elif raw_t == 'quantile':
+                                    from sklearn.preprocessing import QuantileTransformer
+                                    qt = QuantileTransformer(output_distribution='uniform', random_state=42)
+                                    df[col] = qt.fit_transform(df[[col]])
+                                    applied_treatments.append(f"• {col}: Quantile transformation applied")
+                                    print_to_log(f"✅ Applied quantile to {col}")
+                                    
+                                elif raw_t == 'square':
+                                    # Square transformation (for negative skew)
+                                    df[col] = df[col] ** 2
+                                    applied_treatments.append(f"• {col}: Square transformation applied")
+                                    print_to_log(f"✅ Applied square to {col}")
+                                    
+                                elif raw_t == 'none':
                                     applied_treatments.append(f"• {col}: Kept as-is")
+                                    print_to_log(f"✅ Kept {col} as-is (strategy: none)")
+                                    
+                                else:
+                                    applied_treatments.append(f"• {col}: Kept as-is (unknown strategy: {raw_t})")
+                                    print_to_log(f"⚠️ Unknown strategy '{raw_t}' for {col}, kept as-is")
 
                         # Update state with processed data
                         state.cleaned_data = df
                         print_to_log(f"🔧 DEBUG: Set cleaned_data shape after transformations: {df.shape}")
+                        print_to_log(f"🔧 DEBUG: Applied treatments count: {len(applied_treatments)}")
+                        print_to_log(f"🔧 DEBUG: Applied treatments: {applied_treatments}")
                         
                         # Send confirmation message
                         slack_manager = getattr(state, '_slack_manager', None)
@@ -1624,7 +1670,9 @@ class PreprocessingAgentWrapper:
                                     transformation_groups = {}
                                     for col in numerical_columns:
                                         if col in llm_recommendations:
-                                            raw_t = llm_recommendations[col].get('transformation_type') or llm_recommendations[col].get('transformation') or 'none'
+                                            # Fix key mismatch: LLM uses 'strategy' key
+                                            raw_t = llm_recommendations[col].get('strategy') or llm_recommendations[col].get('transformation') or llm_recommendations[col].get('transformation_type') or 'none'
+                                            print_to_log(f'🔍 DEBUG GROUPING: {col} -> raw_t='{raw_t}'')
                                             t_norm = str(raw_t).lower().replace('-', '_')
                                             # Friendly label mapping
                                             if t_norm in ['log', 'log1p']:
