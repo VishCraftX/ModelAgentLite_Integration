@@ -571,6 +571,8 @@ Generate Python code to fulfill this request:"""
     def _enhance_outlier_strategies(self, outlier_strategies: Dict, current_data) -> Dict:
         """Enhance outlier strategies with computed values for reapplication"""
         import pandas as pd
+        import pandas as pd
+        
         enhanced = {}
         
         for col, strategy in outlier_strategies.items():
@@ -617,7 +619,11 @@ Generate Python code to fulfill this request:"""
     
     def _enhance_missing_value_strategies(self, missing_strategies: Dict, current_data) -> Dict:
         """Enhance missing value strategies with computed values for reapplication"""
+        import pandas as pd
+        
         enhanced = {}
+        
+        import pandas as pd
         
         for col, strategy in missing_strategies.items():
             enhanced_strategy = strategy.copy()
@@ -677,6 +683,8 @@ Generate Python code to fulfill this request:"""
     
     def _enhance_encoding_strategies(self, encoding_strategies: Dict, current_data) -> Dict:
         """Enhance encoding strategies with computed mappings for reapplication"""
+        import pandas as pd
+        
         enhanced = {}
         import pandas as pd        
         for col, strategy in encoding_strategies.items():
@@ -752,6 +760,8 @@ Generate Python code to fulfill this request:"""
     
     def _enhance_transformation_strategies(self, transform_strategies: Dict, current_data) -> Dict:
         """Enhance transformation strategies with computed parameters for reapplication"""
+        import pandas as pd
+        
         enhanced = {}
         
         import pandas as pd
