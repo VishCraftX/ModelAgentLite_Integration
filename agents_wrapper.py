@@ -1526,6 +1526,13 @@ class PreprocessingAgentWrapper:
                             
                             slack_manager.send_message(state.chat_session, message)
                         
+                        # 🎯 SAVE TRANSFORMATION STRATEGIES TO SESSION STATE
+                        state.save_preprocessing_strategy(
+                            phase="transformations",
+                            phase_results=transformation_results,
+                            target_column=state.target_column
+                        )
+                        
                         # ✅ COMPLETE PREPROCESSING - Mark as completed and prompt for feature selection
                         from datetime import datetime
                         state.preprocessing_state.update({
