@@ -1169,16 +1169,16 @@ class PreprocessingAgentWrapper:
                         state.cleaned_data = df
                         print_to_log(f"🔧 DEBUG: Set cleaned_data shape after encoding: {df.shape}")
                         
-                        # Send confirmation message
-                        slack_manager = getattr(state, '_slack_manager', None)
-                        if not slack_manager:
-                            from toolbox import slack_manager as global_slack_manager
-                            slack_manager = global_slack_manager
+                        # 🎯 SAVE ENCODING STRATEGIES TO SESSION STATE
+                        state.save_preprocessing_strategy(
+                            phase="encoding",
+                            phase_results=encoding_results,
+                            target_column=state.target_column
+                        )
                         
-                        if slack_manager and state.chat_session:
-                            treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
-                            
-                            message = f"""✅ **Encoding Treatments Applied!**
+                        # Store success message for later sending (after CSV save)
+                        treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
+                        state.pending_slack_message = f"""✅ **Encoding Treatments Applied!**
 
 **🔧 Applied Treatments:**
 {treatments_text}
@@ -1192,17 +1192,7 @@ class PreprocessingAgentWrapper:
 **💬 Next Steps:**
 • `continue` - Start transformations analysis
 • `skip transformations` - Complete preprocessing
-• `summary` - Show current status"""
-                            
-                        
-                        # 🎯 SAVE ENCODING STRATEGIES TO SESSION STATE
-                        state.save_preprocessing_strategy(
-                            phase="encoding",
-                            phase_results=encoding_results,
-                            target_column=state.target_column
-                        )
-                        
-                        slack_manager.send_message(state.chat_session, message)
+• `summary` - Show current status"""(state.chat_session, message)
                         
                         # Update state for next phase
                         state.preprocessing_state.update({
@@ -1524,7 +1514,8 @@ class PreprocessingAgentWrapper:
 • `feature_selection` - Move to feature selection phase
 • `model_building` - Move to model building phase"""
                             
-                            slack_manager.send_message(state.chat_session, message)
+                            # Store message for sending after CSV save
+                            state.pending_slack_message = message
                         
                         # 🎯 SAVE TRANSFORMATION STRATEGIES TO SESSION STATE
                         state.save_preprocessing_strategy(

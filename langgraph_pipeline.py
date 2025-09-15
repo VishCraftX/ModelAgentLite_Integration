@@ -853,7 +853,12 @@ Generate Python code to fulfill this request:"""
             # Save DataFrames as CSV files and store references
             if 'raw_data' in state_dict and state.raw_data is not None:
                 raw_data_file = os.path.join(user_dir, "raw_data.csv")
-                state.raw_data.to_csv(raw_data_file, index=False)
+                # Only write raw_data if file doesn't exist (raw data is constant)
+                if not os.path.exists(raw_data_file):
+                    print_to_log(f"💾 Writing raw_data for first time: {state.raw_data.shape}")
+                    state.raw_data.to_csv(raw_data_file, index=False)
+                else:
+                    print_to_log(f"⏭️ Skipping raw_data rewrite (file exists): {state.raw_data.shape}")
                 state_dict['raw_data'] = {"type": "dataframe", "file": "raw_data.csv", "shape": list(state.raw_data.shape)}
             else:
                 state_dict['raw_data'] = None
@@ -1638,6 +1643,12 @@ Generate Python code to fulfill this request:"""
         # Save session state and conversation history (single point of truth)
         self._save_session_state(state.session_id, state)
         self._save_conversation_history(state.session_id, state.user_query, response["response"], state)
+        
+        # Send any pending Slack message AFTER CSV files are saved
+        if state.pending_slack_message and self.slack_manager and state.chat_session:
+            print_to_log("📱 Sending pending Slack message after successful CSV save")
+            self.slack_manager.send_message(state.chat_session, state.pending_slack_message)
+            state.pending_slack_message = None  # Clear after sending
         
         return response
     

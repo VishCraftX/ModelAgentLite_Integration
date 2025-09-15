@@ -55,6 +55,7 @@ class PipelineState(BaseModel):
     
     # Slack session management
     slack_session_info: Optional[Dict] = Field(default_factory=dict)
+    pending_slack_message: Optional[str] = None  # Message to send after CSV save
     
     # Execution context
     current_agent: Optional[str] = None
