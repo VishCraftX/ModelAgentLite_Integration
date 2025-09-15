@@ -1672,13 +1672,17 @@ class PreprocessingAgentWrapper:
                                         if col in llm_recommendations:
                                             # Fix key mismatch: LLM uses 'strategy' key
                                             raw_t = llm_recommendations[col].get('strategy') or llm_recommendations[col].get('transformation') or llm_recommendations[col].get('transformation_type') or 'none'
-                                            print_to_log(f'🔍 DEBUG GROUPING: {col} -> raw_t='{raw_t}'')
+                                            print_to_log(f'🔍 DEBUG GROUPING: {col} -> raw_t={raw_t}')
                                             t_norm = str(raw_t).lower().replace('-', '_')
                                             # Friendly label mapping
-                                            if t_norm in ['log', 'log1p']:
+                                            if t_norm in ['log']:
+                                                key = 'Log'
+                                            elif t_norm in ['log1p']:
                                                 key = 'Log1p'
                                             elif t_norm == 'sqrt':
                                                 key = 'Square root'
+                                            elif t_norm == 'square':
+                                                key = 'Square'
                                             elif t_norm in ['box_cox', 'boxcox']:
                                                 key = 'Box-Cox'
                                             elif t_norm in ['yeo_johnson', 'yeojohnson']:
