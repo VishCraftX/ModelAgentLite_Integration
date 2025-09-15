@@ -436,8 +436,8 @@ Generate Python code to fulfill this request:"""
         """Get user session directory for conversation history"""
         return self.user_directory_manager.ensure_user_directory(session_id)
     
-    def _save_conversation_history(self, session_id: str, user_query: str, response: str):
-        """Save conversation history to user directory"""
+    def _save_conversation_history(self, session_id: str, user_query: str, response: str, state: PipelineState = None):
+        """Save conversation history to user directory with comprehensive strategy details"""
         try:
             user_dir = self._get_user_session_dir(session_id)
             history_file = os.path.join(user_dir, "conversation_history.json")
@@ -461,13 +461,23 @@ Generate Python code to fulfill this request:"""
                     print_to_log(f"⚠️ Corrupted conversation history file, starting fresh: {e}")
                     history = []
             
-            # Add new conversation
+            # Prepare comprehensive conversation entry
             conversation = {
                 "timestamp": datetime.now().isoformat(),
                 "user_query": user_query,
                 "response": response,
                 "session_id": session_id
             }
+            
+            # Add comprehensive preprocessing strategies if available
+            if state and hasattr(state, 'preprocessing_strategies') and state.preprocessing_strategies:
+                conversation["preprocessing_pipeline"] = self._extract_comprehensive_strategies(state)
+                print_to_log(f"📊 Added comprehensive preprocessing strategies to conversation history")
+            
+            # Add dataset information if available
+            if state:
+                conversation["dataset_info"] = self._extract_dataset_info(state)
+            
             history.append(conversation)
             
             # Save updated history
@@ -481,6 +491,66 @@ Generate Python code to fulfill this request:"""
             print_to_log(f"⚠️ Failed to save conversation history: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _extract_comprehensive_strategies(self, state: PipelineState) -> Dict:
+        """Extract comprehensive preprocessing strategies with all parameters for reapplication"""
+        try:
+            strategies = state.preprocessing_strategies
+            if not strategies:
+                return {}
+            
+            # Get current data for computing parameters
+            current_data = None
+            if hasattr(state, 'cleaned_data') and state.cleaned_data is not None:
+                current_data = state.cleaned_data
+            elif hasattr(state, 'raw_data') and state.raw_data is not None:
+                current_data = state.raw_data
+            
+            comprehensive_strategies = {
+                "execution_order": strategies.get("strategy_metadata", {}).get("processing_order", []),
+                "total_phases_completed": len(strategies.get("strategy_metadata", {}).get("processing_order", [])),
+                "user_overrides": strategies.get("strategy_metadata", {}).get("user_overrides", {}),
+                "strategies": {
+                    "outlier_strategies": self._enhance_outlier_strategies(strategies.get("outlier_strategies", {}), current_data),
+                    "missing_value_strategies": self._enhance_missing_value_strategies(strategies.get("missing_value_strategies", {}), current_data),
+                    "encoding_strategies": self._enhance_encoding_strategies(strategies.get("encoding_strategies", {}), current_data),
+                    "transformation_strategies": self._enhance_transformation_strategies(strategies.get("transformation_strategies", {}), current_data)
+                }
+            }
+            
+            return comprehensive_strategies
+            
+        except Exception as e:
+            print_to_log(f"⚠️ Error extracting comprehensive strategies: {e}")
+            return {}
+    
+    def _extract_dataset_info(self, state: PipelineState) -> Dict:
+        """Extract dataset information for conversation history"""
+        try:
+            dataset_info = {
+                "target_column": state.target_column,
+                "session_created": state.created_at.isoformat() if state.created_at else None,
+                "last_updated": state.updated_at.isoformat() if state.updated_at else None
+            }
+            
+            # Add data shape information
+            if hasattr(state, 'raw_data') and state.raw_data is not None:
+                dataset_info["original_shape"] = list(state.raw_data.shape)
+                dataset_info["original_columns"] = list(state.raw_data.columns)
+            
+            if hasattr(state, 'cleaned_data') and state.cleaned_data is not None:
+                dataset_info["processed_shape"] = list(state.cleaned_data.shape)
+                dataset_info["final_columns"] = list(state.cleaned_data.columns)
+            
+            if hasattr(state, 'selected_features') and state.selected_features:
+                dataset_info["selected_features"] = state.selected_features
+                dataset_info["selected_feature_count"] = len(state.selected_features)
+            
+            return dataset_info
+            
+        except Exception as e:
+            print_to_log(f"⚠️ Error extracting dataset info: {e}")
+            return {}
     
     def _load_conversation_history(self, session_id: str) -> List[Dict]:
         """Load conversation history from user directory"""
@@ -497,6 +567,253 @@ Generate Python code to fulfill this request:"""
         except Exception as e:
             print_to_log(f"⚠️ Failed to load conversation history: {e}")
             return []
+    
+    def _enhance_outlier_strategies(self, outlier_strategies: Dict, current_data) -> Dict:
+        """Enhance outlier strategies with computed values for reapplication"""
+        import pandas as pd
+        enhanced = {}
+        
+        for col, strategy in outlier_strategies.items():
+            enhanced_strategy = strategy.copy()
+            
+            # Add computed values if data is available
+            if current_data is not None and col in current_data.columns:
+                try:
+                    col_data = current_data[col]
+                    if pd.api.types.is_numeric_dtype(col_data):
+                        treatment = strategy.get('treatment', 'keep')
+                        
+                        # Initialize computed_values if not present
+                        if 'computed_values' not in enhanced_strategy:
+                            enhanced_strategy['computed_values'] = {}
+                        
+                        # Compute percentiles for winsorization
+                        if treatment in ['winsorize', 'winsorize_1st_99th']:
+                            enhanced_strategy['computed_values']['q01'] = float(col_data.quantile(0.01))
+                            enhanced_strategy['computed_values']['q99'] = float(col_data.quantile(0.99))
+                        elif treatment == 'winsorize_5th_95th':
+                            enhanced_strategy['computed_values']['q05'] = float(col_data.quantile(0.05))
+                            enhanced_strategy['computed_values']['q95'] = float(col_data.quantile(0.95))
+                        
+                        # Compute values for imputation strategies
+                        if treatment in ['mean_imputation', 'median_imputation']:
+                            enhanced_strategy['computed_values']['mean_value'] = float(col_data.mean())
+                            enhanced_strategy['computed_values']['median_value'] = float(col_data.median())
+                            # Store outlier bounds for identification
+                            enhanced_strategy['computed_values']['outlier_bounds'] = {
+                                'lower': float(col_data.quantile(0.01)),
+                                'upper': float(col_data.quantile(0.99))
+                            }
+                        
+                        # Add timestamp
+                        enhanced_strategy['applied_at'] = datetime.now().isoformat()
+                        
+                except Exception as e:
+                    print_to_log(f"⚠️ Error computing outlier values for {col}: {e}")
+            
+            enhanced[col] = enhanced_strategy
+        
+        return enhanced
+    
+    def _enhance_missing_value_strategies(self, missing_strategies: Dict, current_data) -> Dict:
+        """Enhance missing value strategies with computed values for reapplication"""
+        enhanced = {}
+        
+        for col, strategy in missing_strategies.items():
+            enhanced_strategy = strategy.copy()
+            
+            # Add computed values if data is available
+            if current_data is not None and col in current_data.columns:
+                try:
+                    col_data = current_data[col]
+                    strategy_type = strategy.get('strategy', 'median')
+                    
+                    # Initialize computed_values if not present
+                    if 'computed_values' not in enhanced_strategy:
+                        enhanced_strategy['computed_values'] = {}
+                    
+                    # Compute statistical values
+                    if strategy_type == 'mean' and pd.api.types.is_numeric_dtype(col_data):
+                        enhanced_strategy['computed_values']['mean_value'] = float(col_data.mean())
+                    elif strategy_type == 'median' and pd.api.types.is_numeric_dtype(col_data):
+                        enhanced_strategy['computed_values']['median_value'] = float(col_data.median())
+                    elif strategy_type == 'mode':
+                        mode_values = col_data.mode()
+                        if not mode_values.empty:
+                            enhanced_strategy['computed_values']['mode_value'] = mode_values.iloc[0]
+                    
+                    # For model-based imputation, store predictor information
+                    if strategy_type == 'model_based':
+                        # Find correlated columns (simplified approach)
+                        numeric_cols = current_data.select_dtypes(include=['number']).columns
+                        correlations = {}
+                        for other_col in numeric_cols:
+                            if other_col != col and not current_data[other_col].isna().all():
+                                try:
+                                    corr = current_data[col].corr(current_data[other_col])
+                                    if abs(corr) > 0.3:  # Threshold for useful correlation
+                                        correlations[other_col] = float(corr)
+                                except:
+                                    continue
+                        
+                        if correlations:
+                            enhanced_strategy['computed_values']['predictor_columns'] = list(correlations.keys())
+                            enhanced_strategy['computed_values']['predictor_means'] = {
+                                pred_col: float(current_data[pred_col].mean()) 
+                                for pred_col in correlations.keys()
+                            }
+                    
+                    # Add missing statistics
+                    enhanced_strategy['computed_values']['missing_count'] = int(col_data.isna().sum())
+                    enhanced_strategy['computed_values']['missing_percentage'] = float(col_data.isna().sum() / len(col_data) * 100)
+                    enhanced_strategy['applied_at'] = datetime.now().isoformat()
+                    
+                except Exception as e:
+                    print_to_log(f"⚠️ Error computing missing value parameters for {col}: {e}")
+            
+            enhanced[col] = enhanced_strategy
+        
+        return enhanced
+    
+    def _enhance_encoding_strategies(self, encoding_strategies: Dict, current_data) -> Dict:
+        """Enhance encoding strategies with computed mappings for reapplication"""
+        enhanced = {}
+        import pandas as pd        
+        for col, strategy in encoding_strategies.items():
+            enhanced_strategy = strategy.copy()
+            
+            # Add computed mappings if data is available
+            if current_data is not None and col in current_data.columns:
+                try:
+                    col_data = current_data[col]
+                    strategy_type = strategy.get('strategy', 'label_encoding')
+                    
+                    # Initialize computed_mappings if not present
+                    if 'computed_mappings' not in enhanced_strategy:
+                        enhanced_strategy['computed_mappings'] = {}
+                    
+                    if strategy_type in ['label_encoding', 'label']:
+                        # Create label mapping
+                        unique_values = col_data.dropna().unique()
+                        label_mapping = {str(val): idx for idx, val in enumerate(sorted(unique_values))}
+                        reverse_mapping = {idx: str(val) for val, idx in label_mapping.items()}
+                        
+                        enhanced_strategy['computed_mappings']['label_mapping'] = label_mapping
+                        enhanced_strategy['computed_mappings']['reverse_mapping'] = reverse_mapping
+                        enhanced_strategy['computed_mappings']['categories_count'] = len(unique_values)
+                    
+                    elif strategy_type in ['onehot_encoding', 'onehot']:
+                        # Store categories for one-hot encoding
+                        unique_values = sorted(col_data.dropna().unique())
+                        enhanced_strategy['computed_mappings']['categories'] = [str(val) for val in unique_values]
+                        enhanced_strategy['computed_mappings']['column_names'] = [f"{col}_{val}" for val in unique_values]
+                        
+                        # Add category counts
+                        category_counts = col_data.value_counts().to_dict()
+                        enhanced_strategy['computed_mappings']['category_counts'] = {
+                            str(k): int(v) for k, v in category_counts.items()
+                        }
+                    
+                    elif strategy_type in ['target_encoding', 'target']:
+                        # Compute target means (requires target column)
+                        target_col = current_data.columns[-1]  # Assume last column is target for now
+                        if target_col in current_data.columns and pd.api.types.is_numeric_dtype(current_data[target_col]):
+                            target_means = current_data.groupby(col)[target_col].mean().to_dict()
+                            global_mean = current_data[target_col].mean()
+                            
+                            enhanced_strategy['computed_mappings']['target_means'] = {
+                                str(k): float(v) for k, v in target_means.items()
+                            }
+                            enhanced_strategy['computed_mappings']['global_mean'] = float(global_mean)
+                            enhanced_strategy['computed_mappings']['smoothing_factor'] = 10  # Default smoothing
+                    
+                    elif strategy_type == 'binary_encoding':
+                        # Compute binary encoding mapping
+                        unique_values = sorted(col_data.dropna().unique())
+                        import math
+                        num_bits = max(1, math.ceil(math.log2(len(unique_values))))
+                        
+                        binary_mapping = {}
+                        for idx, val in enumerate(unique_values):
+                            binary_str = format(idx, f'0{num_bits}b')
+                            binary_mapping[str(val)] = binary_str
+                        
+                        enhanced_strategy['computed_mappings']['binary_mapping'] = binary_mapping
+                        enhanced_strategy['computed_mappings']['num_bits'] = num_bits
+                    
+                    enhanced_strategy['applied_at'] = datetime.now().isoformat()
+                    
+                except Exception as e:
+                    print_to_log(f"⚠️ Error computing encoding parameters for {col}: {e}")
+            
+            enhanced[col] = enhanced_strategy
+        
+        return enhanced
+    
+    def _enhance_transformation_strategies(self, transform_strategies: Dict, current_data) -> Dict:
+        """Enhance transformation strategies with computed parameters for reapplication"""
+        enhanced = {}
+        
+        import pandas as pd
+        
+        for col, strategy in transform_strategies.items():
+            enhanced_strategy = strategy.copy()
+            
+            # Add computed parameters if data is available
+            if current_data is not None and col in current_data.columns:
+                try:
+                    col_data = current_data[col]
+                    if pd.api.types.is_numeric_dtype(col_data):
+                        transformation = strategy.get('transformation', 'standardize')
+                        
+                        # Initialize computed_values if not present
+                        if 'computed_values' not in enhanced_strategy:
+                            enhanced_strategy['computed_values'] = {}
+                        
+                        if transformation == 'standardize':
+                            enhanced_strategy['computed_values']['mean'] = float(col_data.mean())
+                            enhanced_strategy['computed_values']['std'] = float(col_data.std())
+                        
+                        elif transformation == 'normalize':
+                            enhanced_strategy['computed_values']['min'] = float(col_data.min())
+                            enhanced_strategy['computed_values']['max'] = float(col_data.max())
+                        
+                        elif transformation == 'robust_scale':
+                            enhanced_strategy['computed_values']['median'] = float(col_data.median())
+                            enhanced_strategy['computed_values']['q25'] = float(col_data.quantile(0.25))
+                            enhanced_strategy['computed_values']['q75'] = float(col_data.quantile(0.75))
+                            enhanced_strategy['computed_values']['iqr'] = float(col_data.quantile(0.75) - col_data.quantile(0.25))
+                        
+                        elif transformation in ['log1p', 'sqrt']:
+                            enhanced_strategy['computed_values']['min_value'] = float(col_data.min())
+                            enhanced_strategy['computed_values']['offset'] = 1.0
+                            if transformation == 'log1p':
+                                enhanced_strategy['computed_values']['transformation_formula'] = 'log1p(x - min + offset)'
+                            else:
+                                enhanced_strategy['computed_values']['transformation_formula'] = 'sqrt(x - min + offset)'
+                        
+                        elif transformation == 'square':
+                            enhanced_strategy['computed_values']['transformation_formula'] = 'x^2'
+                        
+                        elif transformation == 'quantile':
+                            # Compute quantile transformation parameters
+                            quantiles = [i/100.0 for i in range(101)]  # 0.00 to 1.00 in steps of 0.01
+                            quantile_values = [float(col_data.quantile(q)) for q in quantiles]
+                            
+                            enhanced_strategy['computed_values']['quantiles'] = quantiles
+                            enhanced_strategy['computed_values']['quantile_values'] = quantile_values
+                            enhanced_strategy['computed_values']['n_quantiles'] = 100
+                        
+                        # Add distribution statistics
+                        enhanced_strategy['computed_values']['original_skewness'] = float(col_data.skew())
+                        enhanced_strategy['applied_at'] = datetime.now().isoformat()
+                    
+                except Exception as e:
+                    print_to_log(f"⚠️ Error computing transformation parameters for {col}: {e}")
+            
+            enhanced[col] = enhanced_strategy
+        
+        return enhanced
     
     def _save_session_state(self, session_id: str, state: PipelineState):
         """Save session state to user directory including DataFrames"""
@@ -1289,7 +1606,7 @@ Generate Python code to fulfill this request:"""
             
             # Save session state and conversation history for errors (single point)
             self._save_session_state(session_id, state)
-            self._save_conversation_history(session_id, state.user_query, error_response["response"])
+            self._save_conversation_history(session_id, state.user_query, error_response["response"], state)
             
             return error_response
     
@@ -1310,7 +1627,7 @@ Generate Python code to fulfill this request:"""
         
         # Save session state and conversation history (single point of truth)
         self._save_session_state(state.session_id, state)
-        self._save_conversation_history(state.session_id, state.user_query, response["response"])
+        self._save_conversation_history(state.session_id, state.user_query, response["response"], state)
         
         return response
     
