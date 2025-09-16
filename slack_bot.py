@@ -128,7 +128,7 @@ class SlackMLBot:
                         f"💾 All artifacts, models, and debug logs for this conversation will be stored here.\n"
                         f"🔧 This information is provided for reference and debugging purposes if needed."
                     )
-                    say(session_info_message, thread_ts=thread_ts)
+                    say(session_info_message, thread_ts=session_thread_ts)
                     print(f"📁 Sent session directory info: {user_data_dir_path}")
                 except Exception as e:
                     print(f"⚠️ Could not send session directory info: {e}")
