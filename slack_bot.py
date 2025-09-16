@@ -139,15 +139,15 @@ class SlackMLBot:
             
             # Handle file attachments first
             if files:
-                self._handle_file_attachments(files, session_id, say, thread_ts)
+                self._handle_file_attachments(files, session_id, say, session_thread_ts)
             
             # Handle text query if present
             if text.strip():
-                self._handle_text_query(text, session_id, say, thread_ts)
+                self._handle_text_query(text, session_id, say, session_thread_ts)
             elif not files:
                 # No text and no files
                 say("👋 Hi! I'm your AI ML pipeline assistant. Upload a data file and ask me to build models, preprocess data, or analyze your data!", 
-                    thread_ts=thread_ts)
+                    thread_ts=session_thread_ts)
         
         @self.app.command("/pipeline_status")
         def pipeline_status_command(ack, respond, command):
