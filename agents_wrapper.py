@@ -786,6 +786,7 @@ class PreprocessingAgentWrapper:
 • `summary` - Show current status"""
                         
                         # Store message for sending after CSV save
+                        print_to_log("📝 OUTLIERS: Setting pending_slack_message for after CSV save")
                         state.pending_slack_message = message
                     
                     # 🎯 SAVE OUTLIER STRATEGIES TO SESSION STATE
@@ -896,6 +897,7 @@ class PreprocessingAgentWrapper:
 • `summary` - Show current status"""
                             
                             # Store message for sending after CSV save
+                            print_to_log("📝 MISSING VALUES: Setting pending_slack_message for after CSV save")
                             state.pending_slack_message = message
                         
                         # 🎯 SAVE MISSING VALUES STRATEGIES TO SESSION STATE
@@ -1517,6 +1519,7 @@ class PreprocessingAgentWrapper:
 • `model_building` - Move to model building phase"""
                             
                             # Store message for sending after CSV save
+                            print_to_log("📝 TRANSFORMATIONS: Setting pending_slack_message for after CSV save")
                             state.pending_slack_message = message
                         
                         # 🎯 SAVE TRANSFORMATION STRATEGIES TO SESSION STATE

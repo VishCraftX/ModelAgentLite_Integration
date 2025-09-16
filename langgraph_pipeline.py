@@ -1646,9 +1646,12 @@ Generate Python code to fulfill this request:"""
         
         # Send any pending Slack message AFTER CSV files are saved
         if state.pending_slack_message and self.slack_manager and state.chat_session:
+            print_to_log(f"📱 _prepare_response: Found pending message, sending after CSV save")
             print_to_log("📱 Sending pending Slack message after successful CSV save")
             self.slack_manager.send_message(state.chat_session, state.pending_slack_message)
             state.pending_slack_message = None  # Clear after sending
+        else:
+            print_to_log(f"📱 _prepare_response: No pending message to send (message={state.pending_slack_message is not None}, slack={self.slack_manager is not None}, session={state.chat_session is not None})")
         
         return response
     
