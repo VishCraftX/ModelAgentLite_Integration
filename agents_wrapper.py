@@ -785,7 +785,8 @@ class PreprocessingAgentWrapper:
 • `skip missing` - Move to encoding phase
 • `summary` - Show current status"""
                         
-                        slack_manager.send_message(state.chat_session, message)
+                        # Store message for sending after CSV save
+                        state.pending_slack_message = message
                     
                     # 🎯 SAVE OUTLIER STRATEGIES TO SESSION STATE
                     state.save_preprocessing_strategy(
@@ -894,7 +895,8 @@ class PreprocessingAgentWrapper:
 • `skip encoding` - Move to transformations phase
 • `summary` - Show current status"""
                             
-                            slack_manager.send_message(state.chat_session, message)
+                            # Store message for sending after CSV save
+                            state.pending_slack_message = message
                         
                         # 🎯 SAVE MISSING VALUES STRATEGIES TO SESSION STATE
                         state.save_preprocessing_strategy(
