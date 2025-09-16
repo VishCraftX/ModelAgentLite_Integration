@@ -115,6 +115,20 @@ class SlackMLBot:
             print(f"🔍 DEBUG: Session registered. Current sessions: {self.ml_pipeline.slack_manager.session_channels}")
             print(f"🔍 DEBUG: Session threads: {self.ml_pipeline.slack_manager.session_threads}")
             
+            # Send session directory path message for new sessions (not thread replies)
+            if not event.get('thread_ts'):  # This is a new message, not a thread reply
+                try:
+                    session_dir_path = self.ml_pipeline.state_manager.get_session_directory_path(session_id)
+                    session_info_message = (
+                        f"📁 **Session Directory:** `{session_dir_path}`\n"
+                        f"💾 All artifacts, models, and debug logs for this conversation will be stored here.\n"
+                        f"🔧 This information is provided for reference and debugging purposes if needed."
+                    )
+                    say(session_info_message, thread_ts=thread_ts)
+                    print(f"📁 Sent session directory info: {session_dir_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not send session directory info: {e}")
+            
             # Clean the message text (remove bot mention)
             if f"<@{bot_user_id}>" in text:
                 text = text.replace(f"<@{bot_user_id}>", "").strip()

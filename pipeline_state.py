@@ -799,6 +799,10 @@ class StateManager:
                 return False
         return False
     
+    def get_session_directory_path(self, session_id: str) -> str:
+        """Get the directory path for a session"""
+        return os.path.join(self.base_dir, session_id)
+    
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up sessions older than specified hours"""
         
