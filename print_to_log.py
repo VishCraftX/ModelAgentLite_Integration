@@ -94,6 +94,12 @@ def print_to_log(*args, **kwargs):
                 continue
         
         # Get username for directory naming
+        # Extract user_id from session_id if needed
+        if user_id and '_' in user_id:
+            # This might be a session_id like "U07DKDHFRK9_1758010484"
+            # Extract just the user_id part
+            user_id = user_id.split('_')[0]
+        
         username = get_username_for_user_id(user_id)
         # Create thread directory
         thread_dir = os.path.join("user_data", username, str(thread_id))

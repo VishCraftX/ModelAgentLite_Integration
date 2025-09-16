@@ -610,17 +610,24 @@ class PipelineState(BaseModel):
             probabilities_array = np.array(probabilities)
             
             if probabilities_array.ndim == 2:  # Multi-class probabilities
-                # For multi-class, use the probability of the predicted class (positive class)
                 n_classes = probabilities_array.shape[1]
-                predicted_probs = []
-                for i, pred in enumerate(predictions):
-                    pred_idx = int(pred) if pred < n_classes else 0
-                    predicted_probs.append(probabilities_array[i, pred_idx])
                 
-                prob_column_name = f"{prediction_column_name}_probability"
-                self.predictions_dataset[prob_column_name] = predicted_probs
-                print_to_log(f"✅ Added positive class probability column '{prob_column_name}' to dataset")
-            else:  # Binary classification or single probability
+                if n_classes == 2:  # Binary classification
+                    # For binary classification, use probability of class 1 (positive class)
+                    prob_column_name = f"{prediction_column_name}_probability"
+                    self.predictions_dataset[prob_column_name] = probabilities_array[:, 1]
+                    print_to_log(f"✅ Added positive class (class 1) probability column '{prob_column_name}' to dataset")
+                else:  # Multi-class classification
+                    # For multi-class, use the probability of the predicted class
+                    predicted_probs = []
+                    for i, pred in enumerate(predictions):
+                        pred_idx = int(pred) if pred < n_classes else 0
+                        predicted_probs.append(probabilities_array[i, pred_idx])
+                    
+                    prob_column_name = f"{prediction_column_name}_probability"
+                    self.predictions_dataset[prob_column_name] = predicted_probs
+                    print_to_log(f"✅ Added predicted class probability column '{prob_column_name}' to dataset")
+            else:  # Single probability array
                 prob_column_name = f"{prediction_column_name}_probability"
                 self.predictions_dataset[prob_column_name] = probabilities_array
                 print_to_log(f"✅ Added probability column '{prob_column_name}' to dataset")
