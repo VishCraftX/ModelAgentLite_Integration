@@ -2471,8 +2471,35 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     if full_probabilities is not None:
                         print_to_log(f"🔍 Full probabilities received: {len(full_probabilities)} probability arrays")
                     
-                    # Note: Predictions and probabilities are handled in agents_wrapper.py
-                    # where the PipelineState object is accessible
+                    # Add predictions and probabilities to pipeline state
+                    if hasattr(state, 'add_predictions_to_dataset'):
+                        success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
+                        if success:
+                            print_to_log(f"✅ Added predictions and probabilities to dataset")
+                            
+                            # Save predictions dataset to artifacts
+                            artifacts_dir = os.path.join(os.path.dirname(result.get('model_path', '')), '..')
+                            if os.path.exists(artifacts_dir):
+                                # Extract model name from result
+                                model_name = "unknown_model"
+                                if 'model' in result:
+                                    model = result['model']
+                                    if hasattr(model, '__class__'):
+                                        model_name = model.__class__.__name__.lower()
+                                    elif hasattr(model, 'name'):
+                                        model_name = model.name.lower()
+                                
+                                # Create filename with model name
+                                timestamp = int(time.time())
+                                predictions_file = state.save_predictions_dataset(
+                                    os.path.join(artifacts_dir, f"predictions_dataset_{model_name}_{timestamp}.csv")
+                                )
+                                if predictions_file:
+                                    print_to_log(f"✅ Predictions dataset saved to: {predictions_file}")
+                        else:
+                            print_to_log(f"⚠️ Failed to add predictions to dataset")
+                    else:
+                        print_to_log(f"⚠️ PipelineState does not have add_predictions_to_dataset method")
                 else:
                     print_to_log(f"⚠️ No full_predictions found in result")
             else:

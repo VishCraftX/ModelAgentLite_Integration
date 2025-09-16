@@ -397,6 +397,12 @@ def get_username_for_user_id(user_id: str) -> str:
         return sanitize_for_folder_name(user_id or "unknown")
     
     try:
+        # Extract user_id from session_id if needed
+        if user_id and '_' in user_id:
+            # This might be a session_id like "U07DKDHFRK9_1758010484"
+            # Extract just the user_id part
+            user_id = user_id.split('_')[0]
+        
         # Try to get the global slack_manager instance
         from toolbox import slack_manager
         if slack_manager and hasattr(slack_manager, 'get_username_from_user_id'):
