@@ -2463,16 +2463,19 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                 state["has_existing_model"] = True
                 print_to_log(f"🔍 Set has_existing_model = True")
                 
-                # Handle full dataset predictions
+                # Handle full dataset predictions and probabilities
                 if 'full_predictions' in result:
                     full_predictions = result['full_predictions']
+                    full_probabilities = result.get('full_probabilities', None)
                     print_to_log(f"🔍 Full predictions received: {len(full_predictions)} predictions")
+                    if full_probabilities is not None:
+                        print_to_log(f"🔍 Full probabilities received: {len(full_probabilities)} probability arrays")
                     
-                    # Add predictions to pipeline state
+                    # Add predictions and probabilities to pipeline state
                     if hasattr(state, 'add_predictions_to_dataset'):
-                        success = state.add_predictions_to_dataset(full_predictions, "predictions")
+                        success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
                         if success:
-                            print_to_log(f"✅ Added predictions column to dataset")
+                            print_to_log(f"✅ Added predictions and probabilities to dataset")
                             
                             # Save predictions dataset to artifacts
                             artifacts_dir = os.path.join(os.path.dirname(result.get('model_path', '')), '..')
@@ -2588,11 +2591,11 @@ Your code MUST follow this exact structure and be COMPLETE:
 3. Train/test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 4. Model training: model = [ModelType](...); model.fit(X_train, y_train)
 5. Test predictions: y_pred = model.predict(X_test); y_proba = model.predict_proba(X_test)
-6. Full dataset predictions: full_predictions = model.predict(X)
+6. Full dataset predictions: full_predictions = model.predict(X); full_probabilities = model.predict_proba(X)
 7. Metrics calculation: accuracy, precision, recall, f1, etc.
 8. Model saving: model_path = safe_joblib_dump(model, 'model_name.joblib')
 9. Plot generation (if applicable): safe_plt_savefig('plot_name.png')
-10. Result dictionary: result = {'model': model, 'model_path': model_path, 'accuracy': accuracy, 'full_predictions': full_predictions, ...}
+10. Result dictionary: result = {'model': model, 'model_path': model_path, 'accuracy': accuracy, 'full_predictions': full_predictions, 'full_probabilities': full_probabilities, ...}
 
 DO NOT STOP EARLY! Complete ALL 10 steps!
 """
@@ -2606,6 +2609,7 @@ CLASSIFICATION_METRICS_PROMPT = """
    
 # Step 1.5: Make predictions on full dataset
    full_predictions = model.predict(X)
+   full_probabilities = model.predict_proba(X)
 
 # Step 2: Calculate all classification metrics
    cm = confusion_matrix(y_test, y_pred)
@@ -2636,6 +2640,7 @@ model_path = safe_joblib_dump(model, 'decision_tree_model.joblib')
     'model': model,
     'model_path': model_path,
     'full_predictions': full_predictions.tolist(),
+    'full_probabilities': full_probabilities.tolist(),
     'metrics_averaging': avg_method
 }
 

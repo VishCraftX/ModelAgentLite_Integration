@@ -3641,12 +3641,15 @@ class ModelBuildingAgentWrapper:
                 # Check for predictions dataset
                 if 'full_predictions' in execution_result:
                     full_predictions = execution_result['full_predictions']
+                    full_probabilities = execution_result.get('full_probabilities', None)
                     print_to_log(f"🔍 UPLOAD DEBUG: Found full_predictions: {len(full_predictions)} predictions")
+                    if full_probabilities is not None:
+                        print_to_log(f"🔍 UPLOAD DEBUG: Found full_probabilities: {len(full_probabilities)} probability arrays")
                     
-                    # Add predictions to pipeline state
-                    success = state.add_predictions_to_dataset(full_predictions, "predictions")
+                    # Add predictions and probabilities to pipeline state
+                    success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
                     if success:
-                        print_to_log(f"✅ Added predictions column to dataset")
+                        print_to_log(f"✅ Added predictions and probabilities to dataset")
                         
                         # Save predictions dataset to artifacts
                         if 'model_path' in execution_result:
@@ -3672,8 +3675,8 @@ class ModelBuildingAgentWrapper:
                                 # Add predictions dataset to pending uploads
                                 state.add_pending_file_upload({
                                     "path": predictions_file,
-                                    "title": f"Dataset with {model_name.title()} Predictions",
-                                    "comment": f"Complete dataset with {model_name} model predictions added as new column"
+                                    "title": f"Dataset with {model_name.title()} Predictions & Scores",
+                                    "comment": f"Complete dataset with {model_name} model predictions and probability scores"
                                 })
                     else:
                         print_to_log(f"⚠️ Failed to add predictions to dataset")

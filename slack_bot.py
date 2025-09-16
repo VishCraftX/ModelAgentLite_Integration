@@ -118,14 +118,18 @@ class SlackMLBot:
             # Send session directory path message for new sessions (not thread replies)
             if not event.get('thread_ts'):  # This is a new message, not a thread reply
                 try:
-                    session_dir_path = self.ml_pipeline.state_manager.get_session_directory_path(session_id)
+                    # Get the actual user data directory path (user_data/username/thread_id)
+                    from agent_utils import get_username_user_data_dir
+                    user_id_part, thread_ts = session_id.split('_', 1) if '_' in session_id else (session_id, 'main')
+                    user_data_dir_path = get_username_user_data_dir(user_id_part, thread_ts)
+                    
                     session_info_message = (
-                        f"📁 **Session Directory:** `{session_dir_path}`\n"
+                        f"📁 **Session Directory:** `{user_data_dir_path}/`\n"
                         f"💾 All artifacts, models, and debug logs for this conversation will be stored here.\n"
                         f"🔧 This information is provided for reference and debugging purposes if needed."
                     )
                     say(session_info_message, thread_ts=thread_ts)
-                    print(f"📁 Sent session directory info: {session_dir_path}")
+                    print(f"📁 Sent session directory info: {user_data_dir_path}")
                 except Exception as e:
                     print(f"⚠️ Could not send session directory info: {e}")
             

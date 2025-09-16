@@ -581,13 +581,14 @@ class PipelineState(BaseModel):
         
         return f"Pending uploads ({len(files)} files):\n" + "\n".join(file_list)
     
-    def add_predictions_to_dataset(self, predictions: List, prediction_column_name: str = "predictions"):
+    def add_predictions_to_dataset(self, predictions: List, prediction_column_name: str = "predictions", probabilities: List = None):
         """
-        Add predictions as a new column to the dataset
+        Add predictions and probabilities as new columns to the dataset
         
         Args:
-            predictions: List or array of predictions
+            predictions: List or array of predictions (classes)
             prediction_column_name: Name for the predictions column
+            probabilities: Optional list or array of prediction probabilities
         """
         if self.cleaned_data is not None:
             # Use cleaned data if available
@@ -602,6 +603,28 @@ class PipelineState(BaseModel):
         # Add predictions column
         self.predictions_dataset[prediction_column_name] = predictions
         print_to_log(f"✅ Added predictions column '{prediction_column_name}' to dataset")
+        
+        # Add probabilities columns if provided
+        if probabilities is not None:
+            import numpy as np
+            probabilities_array = np.array(probabilities)
+            
+            if probabilities_array.ndim == 2:  # Multi-class probabilities
+                # For multi-class, use the probability of the predicted class (positive class)
+                n_classes = probabilities_array.shape[1]
+                predicted_probs = []
+                for i, pred in enumerate(predictions):
+                    pred_idx = int(pred) if pred < n_classes else 0
+                    predicted_probs.append(probabilities_array[i, pred_idx])
+                
+                prob_column_name = f"{prediction_column_name}_probability"
+                self.predictions_dataset[prob_column_name] = predicted_probs
+                print_to_log(f"✅ Added positive class probability column '{prob_column_name}' to dataset")
+            else:  # Binary classification or single probability
+                prob_column_name = f"{prediction_column_name}_probability"
+                self.predictions_dataset[prob_column_name] = probabilities_array
+                print_to_log(f"✅ Added probability column '{prob_column_name}' to dataset")
+        
         return True
     
     def save_predictions_dataset(self, file_path: str = None, model_name: str = None) -> str:
