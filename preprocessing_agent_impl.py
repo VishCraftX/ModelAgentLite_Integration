@@ -3876,17 +3876,6 @@ GUIDELINES:
         unique_count = analysis.get('unique_count', 0)
         unique_ratio = analysis.get('unique_ratio', 0)
         
-        # Rule 1: Binary categorical (2 unique values) → Label encoding (Very High Confidence)
-        if unique_count == 2:
-            return {
-                'strategy': 'label_encoding',
-                'confidence': 0.95,
-                'reasoning': f'Binary categorical with {unique_count} unique values'
-            }
-        
-        
-        
-        
         # Rule 1: Skip high cardinality columns (>25% unique ratio)
         if unique_ratio > 0.25:
             return {
@@ -3910,6 +3899,7 @@ GUIDELINES:
                 'confidence': 0.90,
                 'reasoning': f'Low cardinality with {unique_count} unique values'
             }
+
         
         # Rule 4: Geographic columns → Target encoding (Medium-High Confidence)
         if any(keyword in column.lower() for keyword in ['city', 'state', 'country', 'region', 'location', 'zip', 'postal']):
