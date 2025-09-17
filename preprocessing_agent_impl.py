@@ -998,7 +998,7 @@ def analyze_encoding_single_batch(state: SequentialState, current_df: pd.DataFra
     # Create optimized prompt for encoding analysis
     prompt = f"""Analyze encoding for {len(categorical_columns)} categorical columns. Target: {state.target_column}
 
-STRATEGIES: label_encoding, onehot_encoding, target_encoding, binary_encoding, skip, drop_column
+STRATEGIES: label_encoding, onehot_encoding, target_encoding, skip, drop_column
 
 COLUMNS:"""
     
@@ -2604,8 +2604,7 @@ def apply_preprocessing_pipeline(df: pd.DataFrame, state: SequentialState) -> pd
                     encoding = 'label'
                 elif encoding == 'target_encoding':
                     encoding = 'target'
-                elif encoding == 'binary_encoding':
-                    encoding = 'label'  # Fallback to label encoding
+
                 elif encoding == 'drop_column':
                     encoding = 'drop'
                 
@@ -2881,10 +2880,33 @@ def apply_encoding_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) 
             
             # Map strategy values to encoding types
             if strategy == 'onehot_encoding' or strategy == 'onehot':
-                # One-hot encoding
-                dummies = pd.get_dummies(df_processed[col], prefix=col)
-                df_processed = pd.concat([df_processed, dummies], axis=1)
-                df_processed.drop(columns=[col], inplace=True)
+                # Smart one-hot encoding: Top-10 + Other for medium cardinality
+                unique_count = df_processed[col].nunique()
+                if unique_count > 15:  # Use top-10 for medium/high cardinality
+                    try:
+                        # Inline top-10 one-hot encoding
+                        value_counts = df_processed[col].value_counts()
+                        top_10_categories = value_counts.head(10).index.tolist()
+                        
+                        # Replace non-top-10 categories with 'Other'
+                        encoded_col = df_processed[col].apply(
+                            lambda x: x if x in top_10_categories else 'Other'
+                        )
+                        
+                        # Apply one-hot encoding
+                        dummies = pd.get_dummies(encoded_col, prefix=col)
+                        df_processed = pd.concat([df_processed, dummies], axis=1)
+                        df_processed.drop(columns=[col], inplace=True)
+                    except Exception:
+                        # Fallback to regular one-hot
+                        dummies = pd.get_dummies(df_processed[col], prefix=col)
+                        df_processed = pd.concat([df_processed, dummies], axis=1)
+                        df_processed.drop(columns=[col], inplace=True)
+                else:
+                    # Regular one-hot for low cardinality
+                    dummies = pd.get_dummies(df_processed[col], prefix=col)
+                    df_processed = pd.concat([df_processed, dummies], axis=1)
+                    df_processed.drop(columns=[col], inplace=True)
             
             elif strategy == 'label_encoding' or strategy == 'label':
                 # Label encoding
@@ -3077,7 +3099,7 @@ def analyze_encoding_chunk(state: SequentialState, chunk: list, current_df: pd.D
     # Create optimized prompt for this chunk
     prompt = f"""Analyze encoding for {len(chunk)} categorical columns. Target: {state.target_column}
 
-STRATEGIES: label_encoding, onehot_encoding, target_encoding, binary_encoding, skip, drop_column
+STRATEGIES: label_encoding, onehot_encoding, target_encoding, skip, drop_column
 
 COLUMNS:"""
     
@@ -3793,8 +3815,8 @@ GUIDELINES:
                 
             elif phase == 'encoding':
                 unique_count = analysis.get('unique_count', 0)
-                if unique_count <= 10:
-                    strategy = 'onehot_encoding'
+                if unique_count <= 15:
+                    strategy = 'onehot_encoding'  # Will use top-10 if > 15 categories
                     reasoning = f'Timeout fallback: {unique_count} categories → one-hot encoding (safe)'
                 else:
                     strategy = 'target_encoding'

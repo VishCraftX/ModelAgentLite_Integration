@@ -79,6 +79,36 @@ class PreprocessingAgentWrapper:
                 print_to_log(f"❌ Failed to initialize Slack preprocessing bot: {e}")
                 self.available = False
         
+
+    def _apply_top10_onehot_encoding(self, df, column):
+        """
+        Apply one-hot encoding to top 10 most frequent categories.
+        Other categories are grouped into 'Other' category.
+        Max 11 columns created (top 10 + Other).
+        """
+        import pandas as pd
+        
+        # Get value counts and select top 10
+        value_counts = df[column].value_counts()
+        top_10_categories = value_counts.head(10).index.tolist()
+        
+        # Create a copy of the column
+        encoded_col = df[column].copy()
+        
+        # Replace non-top-10 categories with 'Other'
+        encoded_col = encoded_col.apply(
+            lambda x: x if x in top_10_categories else 'Other'
+        )
+        
+        # Apply one-hot encoding
+        dummies = pd.get_dummies(encoded_col, prefix=column)
+        
+        # Concatenate with original dataframe and drop original column
+        df_result = pd.concat([df, dummies], axis=1)
+        df_result = df_result.drop(columns=[column])
+        
+        return df_result
+
     def run(self, state: PipelineState) -> PipelineState:
         """Route to interactive preprocessing via main Slack bot"""
         if not self.available:
@@ -1127,10 +1157,6 @@ class PreprocessingAgentWrapper:
                                     le = LabelEncoder()
                                     df[col] = le.fit_transform(df[col].astype(str))
                                     applied_treatments.append(f"• {col}: Label encoded")
-                                elif enc_choice == 'onehot':
-                                    # Apply one-hot encoding
-                                    df = pd.get_dummies(df, columns=[col], prefix=col)
-                                    applied_treatments.append(f"• {col}: One-hot encoded")
                                 elif enc_choice == 'ordinal':
                                     # Apply ordinal encoding
                                     unique_values = df[col].astype(str).unique()
@@ -1156,10 +1182,21 @@ class PreprocessingAgentWrapper:
                                         le = LabelEncoder()
                                         df[col] = le.fit_transform(df[col].astype(str))
                                         applied_treatments.append(f"• {col}: Label encoded (fallback)")
-                                elif enc_choice == 'binary':
-                                    # Fallback: treat as one-hot
-                                    df = pd.get_dummies(df, columns=[col], prefix=col)
-                                    applied_treatments.append(f"• {col}: One-hot encoded (binary fallback)")
+                                elif enc_choice == 'onehot' or enc_choice == 'onehot_encoding':
+                                    # Smart one-hot encoding: Top-10 + Other for medium cardinality
+                                    unique_count = df[col].nunique()
+                                    if unique_count > 10:  # Use top-10 for medium/high cardinality
+                                        try:
+                                            df = self._apply_top10_onehot_encoding(df, col)
+                                            applied_treatments.append(f"• {col}: Top-10 one-hot encoded (11 max columns)")
+                                        except Exception:
+                                            # Fallback to regular one-hot
+                                            df = pd.get_dummies(df, columns=[col], prefix=col)
+                                            applied_treatments.append(f"• {col}: One-hot encoded")
+                                    else:
+                                        # Regular one-hot for low cardinality
+                                        df = pd.get_dummies(df, columns=[col], prefix=col)
+                                        applied_treatments.append(f"• {col}: One-hot encoded")
                                 elif enc_choice == 'skip':
                                     # Skip encoding - leave column as-is
                                     applied_treatments.append(f"• {col}: Skipped (high cardinality/date column)")
