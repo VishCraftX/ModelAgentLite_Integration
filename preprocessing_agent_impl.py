@@ -2480,13 +2480,20 @@ def detect_and_handle_extreme_outliers(df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     
     for col in df.columns:
         if pd.api.types.is_numeric_dtype(df[col]):
-            # Detect extreme outliers
+            # Detect extreme outliers - Enhanced pattern detection
             extreme_patterns = [
                 np.isinf(df[col]),                    # ±infinity
                 np.abs(df[col]) > 1e300,              # Default double values
-                df[col] == -1.7e308,                  # Common default
-                df[col] < -1e100,                     # Extreme negative
-                df[col] > 1e100                       # Extreme positive
+                df[col] == -1.7e308,                  # Common default double
+                np.abs(df[col]) > 1e14,               # Default int64 values (10^14)
+                df[col] < -1e12,                      # Extreme negative (10^12)
+                df[col] > 1e12,                       # Extreme positive (10^12)
+                df[col] == -999999,                   # Common missing value indicator
+                df[col] == 999999,                    # Common missing value indicator
+                df[col] == -9999,                     # Another common missing indicator
+                df[col] == 9999,                      # Another common missing indicator
+                np.abs(df[col]) == 1.79769313486e+308, # Max float64
+                np.abs(df[col]) == 2.22507385851e-308  # Min float64
             ]
             
             extreme_mask = np.any(extreme_patterns, axis=0)
