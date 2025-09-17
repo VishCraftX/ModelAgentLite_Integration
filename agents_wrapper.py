@@ -1160,6 +1160,9 @@ class PreprocessingAgentWrapper:
                                     # Fallback: treat as one-hot
                                     df = pd.get_dummies(df, columns=[col], prefix=col)
                                     applied_treatments.append(f"• {col}: One-hot encoded (binary fallback)")
+                                elif enc_choice == 'skip':
+                                    # Skip encoding - leave column as-is
+                                    applied_treatments.append(f"• {col}: Skipped (high cardinality/date column)")
                                 elif enc_choice == 'drop_column':
                                     if col in df.columns:
                                         df = df.drop(columns=[col])

@@ -998,7 +998,7 @@ def analyze_encoding_single_batch(state: SequentialState, current_df: pd.DataFra
     # Create optimized prompt for encoding analysis
     prompt = f"""Analyze encoding for {len(categorical_columns)} categorical columns. Target: {state.target_column}
 
-STRATEGIES: label_encoding, onehot_encoding, target_encoding, binary_encoding, drop_column
+STRATEGIES: label_encoding, onehot_encoding, target_encoding, binary_encoding, skip, drop_column
 
 COLUMNS:"""
     
@@ -2899,6 +2899,10 @@ def apply_encoding_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) 
                     target_means = df_processed.groupby(col)[target_col].mean()
                     df_processed[col] = df_processed[col].map(target_means)
             
+            elif strategy == 'skip':
+                # Skip encoding - leave column as-is
+                pass
+            
             elif strategy == 'drop_column' or strategy == 'drop':
                 df_processed.drop(columns=[col], inplace=True)
     
@@ -3073,7 +3077,7 @@ def analyze_encoding_chunk(state: SequentialState, chunk: list, current_df: pd.D
     # Create optimized prompt for this chunk
     prompt = f"""Analyze encoding for {len(chunk)} categorical columns. Target: {state.target_column}
 
-STRATEGIES: label_encoding, onehot_encoding, target_encoding, binary_encoding, drop_column
+STRATEGIES: label_encoding, onehot_encoding, target_encoding, binary_encoding, skip, drop_column
 
 COLUMNS:"""
     
@@ -3866,12 +3870,21 @@ GUIDELINES:
                 'reasoning': f'Low cardinality with {unique_count} unique values'
             }
         
-        # Rule 3: Very high cardinality (>50% unique) → Target encoding (High Confidence)
-        if unique_ratio > 0.5:
+        # Rule 1: Skip high cardinality columns (>25% unique ratio)
+        if unique_ratio > 0.25:
             return {
-                'strategy': 'target_encoding',
-                'confidence': 0.85,
-                'reasoning': f'High cardinality ({unique_count} unique, {unique_ratio:.2f} ratio)'
+                'strategy': 'skip',
+                'confidence': 0.95,
+                'reasoning': f'High cardinality ({unique_count} unique, {unique_ratio:.2f} ratio) - skip encoding'
+            }
+        
+        # Rule 2: Skip date/datetime columns
+        date_keywords = ['date', 'time', 'timestamp', 'created', 'updated', 'birth', 'till', 'year', 'month', 'day']
+        if any(keyword in column.lower() for keyword in date_keywords):
+            return {
+                'strategy': 'skip',
+                'confidence': 0.90,
+                'reasoning': 'Date/datetime column - skip encoding'
             }
         
         # Rule 4: Geographic columns → Target encoding (Medium-High Confidence)
