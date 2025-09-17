@@ -1149,6 +1149,8 @@ class PreprocessingAgentWrapper:
                                     enc_choice = 'binary'
                                 elif enc_norm in ['drop_column', 'drop']:
                                     enc_choice = 'drop_column'
+                                elif enc_norm in ['skip']:
+                                    enc_choice = 'skip'
                                 else:
                                     enc_choice = 'label'
                                 

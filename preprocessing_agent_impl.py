@@ -3884,13 +3884,8 @@ GUIDELINES:
                 'reasoning': f'Binary categorical with {unique_count} unique values'
             }
         
-        # Rule 2: Very low cardinality (≤3 unique values) → Label encoding (High Confidence)
-        if unique_count <= 3:
-            return {
-                'strategy': 'label_encoding',
-                'confidence': 0.90,
-                'reasoning': f'Low cardinality with {unique_count} unique values'
-            }
+        
+        
         
         # Rule 1: Skip high cardinality columns (>25% unique ratio)
         if unique_ratio > 0.25:
@@ -3907,6 +3902,13 @@ GUIDELINES:
                 'strategy': 'skip',
                 'confidence': 0.90,
                 'reasoning': 'Date/datetime column - skip encoding'
+            }
+        # Rule 3: Very low cardinality (≤3 unique values) → Label encoding (High Confidence)
+        if unique_count <= 3:
+            return {
+                'strategy': 'label_encoding',
+                'confidence': 0.90,
+                'reasoning': f'Low cardinality with {unique_count} unique values'
             }
         
         # Rule 4: Geographic columns → Target encoding (Medium-High Confidence)
