@@ -636,8 +636,7 @@ class PreprocessingAgentWrapper:
                             initialize_dataset_analysis,
                             analyze_outliers_with_confidence,
                             get_llm_from_state,
-                            SequentialState,
-                            detect_and_handle_extreme_outliers
+                            SequentialState
                         )
                         
                         # Create a proper SequentialState for the preprocessing functions
@@ -749,7 +748,8 @@ class PreprocessingAgentWrapper:
                     
                     # 🚨 STEP 1: Always handle extreme outliers first (data quality)
                     print_to_log("🚨 Handling extreme outliers during outlier treatment...")
-                    df, extreme_report = detect_and_handle_extreme_outliers(df)
+                    import preprocessing_agent_impl
+                    df, extreme_report = preprocessing_agent_impl.detect_and_handle_extreme_outliers(df)
                     
                     if extreme_report['total_extreme_outliers'] > 0:
                         print_to_log(f"🚨 Handled {extreme_report['total_extreme_outliers']} extreme outliers during treatment:")
