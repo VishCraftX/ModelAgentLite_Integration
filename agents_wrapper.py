@@ -651,41 +651,8 @@ class PreprocessingAgentWrapper:
                         print_to_log("📊 Initializing dataset analysis...")
                         sequential_state = initialize_dataset_analysis(sequential_state)
                         
-                        # 🚨 STEP 1: Handle extreme outliers BEFORE rule-based/LLM analysis
-                        print_to_log("🚨 Pre-processing extreme outliers (inf, 10^308, 10^14, etc.)...")
-                        cleaned_df, extreme_report = detect_and_handle_extreme_outliers(sequential_state.df)
-                        
-                        if extreme_report['total_extreme_outliers'] > 0:
-                            print_to_log(f"🚨 Found and handled {extreme_report['total_extreme_outliers']} extreme outliers:")
-                            for col, details in extreme_report['extreme_outliers_found'].items():
-                                print_to_log(f"   • {col}: {details['count']} extreme values ({details['percentage']:.2f}%)")
-                                patterns = details['patterns']
-                                if patterns['infinity'] > 0:
-                                    print_to_log(f"     - Infinity values: {patterns['infinity']}")
-                                if patterns['extreme_negative'] > 0:
-                                    print_to_log(f"     - Extreme negative: {patterns['extreme_negative']}")
-                                if patterns['extreme_positive'] > 0:
-                                    print_to_log(f"     - Extreme positive: {patterns['extreme_positive']}")
-                                if patterns['default_double'] > 0:
-                                    print_to_log(f"     - Default doubles: {patterns['default_double']}")
-                            
-                            # Update the sequential state with cleaned data
-                            sequential_state.df = cleaned_df
-                            state.cleaned_data = cleaned_df  # Also update the main state
-                            state.raw_data = cleaned_df      # 🔧 FIX: Ensure downstream sees cleaned data
-                            print_to_log(f"✅ Extreme outlier preprocessing complete. Shape: {cleaned_df.shape}")
-                            print_to_log(f"🔧 Updated all state references to use cleaned data")
-                        else:
-                            print_to_log("✅ No extreme outliers detected - data is clean")
-                            # Still update state references for consistency
-                            state.cleaned_data = cleaned_df
-                            state.raw_data = cleaned_df
-                            # Still update state references for consistency
-                            state.cleaned_data = cleaned_df
-                            state.raw_data = cleaned_df
-                        
-                        # 🎯 STEP 2: Run regular outlier analysis with confidence-based approach
-                        print_to_log("🔍 Running confidence-based outlier detection on cleaned data...")
+                        # Run outlier analysis with confidence-based approach
+                        print_to_log("🔍 Running confidence-based outlier detection...")
                         outlier_results = analyze_outliers_with_confidence(sequential_state)
                         
                         print_to_log(f"🔍 DEBUG: outlier_results type: {type(outlier_results)}")
@@ -778,6 +745,21 @@ class PreprocessingAgentWrapper:
                     
                     # Apply treatments based on LLM recommendations
                     df = state.raw_data.copy()
+                    
+                    # 🚨 STEP 1: Always handle extreme outliers first (data quality)
+                    print_to_log("🚨 Handling extreme outliers during outlier treatment...")
+                    from .preprocessing_agent_impl import detect_and_handle_extreme_outliers
+                    df, extreme_report = detect_and_handle_extreme_outliers(df)
+                    
+                    if extreme_report['total_extreme_outliers'] > 0:
+                        print_to_log(f"🚨 Handled {extreme_report['total_extreme_outliers']} extreme outliers during treatment:")
+                        for col, details in extreme_report['extreme_outliers_found'].items():
+                            print_to_log(f"   • {col}: {details['count']} extreme values ({details['percentage']:.2f}%) → NaN")
+                    else:
+                        print_to_log("✅ No extreme outliers found - data quality is good")
+                    
+                    # 🎯 STEP 2: Apply LLM/rule recommendations on cleaned data
+                    print_to_log("🔧 Applying outlier treatment recommendations...")
                     treatment_counts = {}
                     
                     if isinstance(outlier_results, dict) and 'llm_recommendations' in outlier_results:

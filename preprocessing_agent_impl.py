@@ -2839,12 +2839,14 @@ def apply_outliers_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) 
                 q05 = df_processed[col].quantile(0.05)
                 q95 = df_processed[col].quantile(0.95)
                 df_processed[col] = df_processed[col].clip(lower=q05, upper=q95)
+                print_to_log(f"   • {col}: Winsorized at 5th-95th percentiles")
             
             elif treatment == 'clip':
                 # Clip at reasonable bounds based on data
                 q01 = df_processed[col].quantile(0.01)
                 q99 = df_processed[col].quantile(0.99)
                 df_processed[col] = df_processed[col].clip(lower=q01, upper=q99)
+                print_to_log(f"   • {col}: Clipped at 1st-99th percentiles")
             
             elif treatment == 'mark_missing':
                 # Convert outliers to NaN
@@ -2852,8 +2854,14 @@ def apply_outliers_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) 
                 q99 = df_processed[col].quantile(0.99)
                 # Fix: Use np.logical_or instead of | for boolean arrays
                 outlier_mask = np.logical_or(df_processed[col] < q01, df_processed[col] > q99)
+                outlier_count = outlier_mask.sum()
                 df_processed.loc[outlier_mask, col] = np.nan
+                print_to_log(f"   • {col}: Marked {outlier_count} outliers as missing")
+            
+            elif treatment == 'keep':
+                print_to_log(f"   • {col}: Kept as-is")
     
+    print_to_log(f"✅ Outlier treatment complete. Final shape: {df_processed.shape}")
     return df_processed
 
 def apply_missing_values_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) -> pd.DataFrame:
@@ -3243,6 +3251,8 @@ class ConfidenceBasedPreprocessor:
         """Rule-based confidence analysis for outliers"""
         df = state.df
         target = df[state.target_column] if state.target_column in df.columns else None
+        
+
         
         high_confidence = {}
         uncertain_columns = []
