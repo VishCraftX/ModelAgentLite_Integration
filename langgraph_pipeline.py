@@ -1885,26 +1885,12 @@ What would you like to do?"""
         
         state.raw_data = data
         
-        # Auto-detect target column if not set
+        # Target column will be set interactively during preprocessing
         target_was_auto_detected = False
         if state.target_column is None and hasattr(data, 'columns'):
-            print_to_log(f"🔧 DEBUG: Auto-detecting target column from columns: {list(data.columns)}")
-            
-            # Common target column names
-            common_target_names = ['target', 'label', 'class', 'y', 'outcome', 'result', 'prediction', 'is_fraud', 'default_risk', 'churn', 'conversion']
-            
-            for col in data.columns:
-                if col.lower() in common_target_names:
-                    state.target_column = col
-                    print_to_log(f"🎯 Auto-detected target column: {col}")
-                    target_was_auto_detected = True
-                    break
-            
-            # If no common name found, use the last column as target
-            if state.target_column is None:
-                state.target_column = data.columns[-1]
-                print_to_log(f"🎯 Using last column as target: {state.target_column}")
-                target_was_auto_detected = True
+            print_to_log(f"🎯 Target column not set - will prompt user during preprocessing")
+            print_to_log(f"📊 Available columns: {list(data.columns)}")
+            # Note: Target selection now happens interactively in agents_wrapper.py
         
         state_manager.save_state(state)
         

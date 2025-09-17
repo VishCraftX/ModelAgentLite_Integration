@@ -269,6 +269,10 @@ class PreprocessingAgentWrapper:
             current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
             print_to_log(f"🔧 DEBUG: Current phase: {current_phase}, Command: {command}")
             
+            # 🎯 TARGET SELECTION PHASE - Handle target column selection at the start
+            if not state.target_column and state.raw_data is not None and hasattr(state.raw_data, 'columns'):
+                return self._handle_target_selection(state, command)
+            
             # Log phase transition
             if thread_logger:
                 thread_logger.debug(f"Preprocessing phase: {current_phase}", {"command": command})
@@ -559,6 +563,7 @@ class PreprocessingAgentWrapper:
                         slack_manager.send_message(state.chat_session, message)
                     
                     # Update state
+                    from datetime import datetime
                     state.preprocessing_state = {
                         "completed": False,
                         "timestamp": datetime.now().isoformat(),
@@ -2802,6 +2807,116 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
         except Exception as e:
             print_to_log(f"⚠️ DEBUG: [_get_full_analysis_context] Error getting full context: {e}")
             return "Unable to retrieve complete analysis context"
+
+    def _handle_target_selection(self, state: PipelineState, command: str) -> PipelineState:
+        """Handle interactive target column selection at the start of preprocessing"""
+        print_to_log("🎯 Starting interactive target column selection...")
+        
+        # Get available columns
+        available_columns = list(state.raw_data.columns)
+        print_to_log(f"📊 Available columns: {available_columns}")
+        
+        # Check if user is specifying a target column
+        command_lower = command.lower().strip()
+        
+        # Handle various target selection formats
+        target_column = None
+        if command_lower.startswith('target '):
+            # Format: "target column_name"
+            target_column = command[7:].strip()
+        elif command_lower.startswith('set target '):
+            # Format: "set target column_name"
+            target_column = command[11:].strip()
+        elif command_lower.startswith('use ') and ' as target' in command_lower:
+            # Format: "use column_name as target"
+            target_column = command_lower.replace('use ', '').replace(' as target', '').strip()
+        elif command.strip() in available_columns:
+            # Direct column name
+            target_column = command.strip()
+        elif len(available_columns) == 1:
+            # Only one column available, ask for confirmation
+            target_column = available_columns[0]
+            
+        # Validate target column
+        if target_column and target_column in available_columns:
+            # Set target column and continue preprocessing
+            state.target_column = target_column
+            print_to_log(f"✅ Target column set: {target_column}")
+            
+            # Send confirmation message
+            slack_manager = getattr(state, '_slack_manager', None)
+            if not slack_manager:
+                from toolbox import slack_manager as global_slack_manager
+                slack_manager = global_slack_manager
+            
+            if slack_manager and state.chat_session:
+                confirmation_msg = f"""✅ **Target column set:** `{target_column}`
+
+🧹 **Sequential Preprocessing Agent**
+
+📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target Column:** {target_column}
+
+**🔄 Preprocessing Phases:**
+• `Overview` - Dataset analysis and summary
+• `Outliers` - Detect and handle outliers  
+• `Missing Values` - Handle missing data
+• `Encoding` - Categorical variable encoding
+• `Transformations` - Feature transformations
+
+**💬 Your Options:**
+• `proceed` - Start preprocessing workflow
+• `skip overview` - Skip to outlier detection
+• `explain outliers` - Learn about outlier handling
+• `summary` - Show current status
+
+💬 **What would you like to do?**"""
+                
+                slack_manager.send_message(state.chat_session, confirmation_msg)
+            
+            # Initialize preprocessing state
+            if not state.preprocessing_state:
+                state.preprocessing_state = {}
+            state.preprocessing_state['current_phase'] = 'overview'
+            
+            return state
+            
+        else:
+            # Show target selection prompt
+            slack_manager = getattr(state, '_slack_manager', None)
+            if not slack_manager:
+                from toolbox import slack_manager as global_slack_manager
+                slack_manager = global_slack_manager
+            
+            if slack_manager and state.chat_session:
+                # Create column list with numbering for easy selection
+                column_list = []
+                for i, col in enumerate(available_columns, 1):
+                    column_list.append(f"**{i}.** `{col}`")
+                
+                columns_text = "\n".join(column_list)
+                
+                selection_msg = f"""🎯 **Target Column Selection Required**
+
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+
+**📋 Available Columns:**
+{columns_text}
+
+**💬 How to select:**
+• Type: `target column_name` (e.g., `target price`)
+• Type: `use column_name as target` (e.g., `use price as target`)
+• Or just type the column name directly
+
+❓ **Which column should be used as the target variable for prediction?**"""
+                
+                if target_column and target_column not in available_columns:
+                    error_msg = f"\n❌ **Column '{target_column}' not found.** Please choose from the list above."
+                    selection_msg += error_msg
+                
+                slack_manager.send_message(state.chat_session, selection_msg)
+            
+            return state
 
 
 class FeatureSelectionAgentWrapper:
