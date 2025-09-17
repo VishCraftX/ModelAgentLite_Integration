@@ -672,9 +672,17 @@ class PreprocessingAgentWrapper:
                             # Update the sequential state with cleaned data
                             sequential_state.df = cleaned_df
                             state.cleaned_data = cleaned_df  # Also update the main state
+                            state.raw_data = cleaned_df      # 🔧 FIX: Ensure downstream sees cleaned data
                             print_to_log(f"✅ Extreme outlier preprocessing complete. Shape: {cleaned_df.shape}")
+                            print_to_log(f"🔧 Updated all state references to use cleaned data")
                         else:
                             print_to_log("✅ No extreme outliers detected - data is clean")
+                            # Still update state references for consistency
+                            state.cleaned_data = cleaned_df
+                            state.raw_data = cleaned_df
+                            # Still update state references for consistency
+                            state.cleaned_data = cleaned_df
+                            state.raw_data = cleaned_df
                         
                         # 🎯 STEP 2: Run regular outlier analysis with confidence-based approach
                         print_to_log("🔍 Running confidence-based outlier detection on cleaned data...")
