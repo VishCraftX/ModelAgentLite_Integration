@@ -28,7 +28,8 @@ try:
     from preprocessing_agent_impl import (
         run_sequential_agent as run_preprocessing_agent,
         SequentialState,
-        PreprocessingPhase
+        PreprocessingPhase,
+        detect_and_handle_extreme_outliers
     )
     # Also import the new Slack-compatible version
     from preprocessing_agent_slack import (
@@ -748,7 +749,6 @@ class PreprocessingAgentWrapper:
                     
                     # 🚨 STEP 1: Always handle extreme outliers first (data quality)
                     print_to_log("🚨 Handling extreme outliers during outlier treatment...")
-                    from .preprocessing_agent_impl import detect_and_handle_extreme_outliers
                     df, extreme_report = detect_and_handle_extreme_outliers(df)
                     
                     if extreme_report['total_extreme_outliers'] > 0:
