@@ -486,6 +486,30 @@ Reply with the target column name (e.g., 'f_segment')"""
                     state.model_building_state = result_state.model_building_state
                     state.last_response = result_state.last_response
                     
+                    # CRITICAL: Send detailed metrics to Slack immediately and return
+                    # This prevents the generic summary from overwriting the detailed metrics
+                    if result_state.last_response:
+                        print_to_log("✅ Using detailed model building response with all classification metrics")
+                        
+                        # Send detailed metrics to Slack immediately
+                        slack_manager = getattr(self, "slack_manager", None)
+                        if not slack_manager:
+                            from toolbox import slack_manager as global_slack_manager
+                            slack_manager = global_slack_manager
+                        
+                        if slack_manager and state.chat_session:
+                            try:
+                                print_to_log("📤 Sending detailed classification metrics to Slack")
+                                slack_manager.send_message(state.chat_session, result_state.last_response)
+                                print_to_log("✅ Detailed metrics sent to Slack successfully")
+                            except Exception as e:
+                                print_to_log(f"⚠️ Error sending detailed metrics to Slack: {e}")
+                        else:
+                            print_to_log("⚠️ No Slack manager available - detailed metrics not sent")
+                        
+                        print_to_log("🎉 INTELLIGENT automated ML pipeline completed successfully!")
+                        return state
+                    
                     if state.trained_model:
                         print_to_log("✅ Model trained with comprehensive results (metrics, confusion matrix, rank ordering)")
                         if hasattr(state, "model_building_state") and state.model_building_state:
