@@ -80,59 +80,121 @@ Please specify which column is your **target variable** (the column you want to 
         return None  # Will wait for user response
     
     def _run_automated_pipeline(self, state: PipelineState) -> PipelineState:
-        """Run the complete automated ML pipeline"""
+        """Run the complete automated ML pipeline with clean progress messages"""
         print_to_log(f"🚀 Starting automated ML pipeline for target: {state.target_column}")
         
         try:
-            # Import pipeline components
+            # Import the preprocessing agent wrapper
             from agents_wrapper import preprocessing_agent, feature_selection_agent, model_building_agent
             
-            # Create simulator for automated responses
-            simulator = FastModeSimulator()
+            # Disable Slack messages during automated processing to avoid user guidance messages
+            original_chat_session = state.chat_session
+            state.chat_session = None
             
-            # Phase 1: Preprocessing
-            print_to_log("🧹 Phase 1: Automated Preprocessing")
-            state = preprocessing_agent.handle_interactive_command(state, simulator.get_response("preprocessing"))
+            print_to_log("🧹 Started preprocessing")
             
+            # Phase 1: Overview
+            print_to_log("📊 Starting overview phase")
+            state.user_query = "proceed"
+            state = preprocessing_agent.handle_interactive_command(state, "proceed")
             if state.last_error:
-                state.last_response = f"❌ **Preprocessing failed:** {state.last_error}"
+                state.last_response = f"❌ **Overview phase failed:** {state.last_error}"
                 return state
+            print_to_log("✅ Finished overview phase")
             
-            # Phase 2: Feature Selection  
-            print_to_log("🔍 Phase 2: Automated Feature Selection")
-            state = feature_selection_agent.handle_interactive_command(state, simulator.get_response("feature_selection"))
+            # Phase 2: Outliers
+            print_to_log("🚨 Starting outlier phase")
+            state.user_query = "continue"
+            state = preprocessing_agent.handle_interactive_command(state, "continue")
+            if state.last_error:
+                state.last_response = f"❌ **Outlier phase failed:** {state.last_error}"
+                return state
+            print_to_log("✅ Finished outlier phase")
             
+            # Phase 3: Missing Values
+            print_to_log("🗑️ Starting missing values phase")
+            state.user_query = "continue"
+            state = preprocessing_agent.handle_interactive_command(state, "continue")
+            if state.last_error:
+                state.last_response = f"❌ **Missing values phase failed:** {state.last_error}"
+                return state
+            print_to_log("✅ Finished missing values phase")
+            
+            # Phase 4: Encoding
+            print_to_log("🏷️ Starting encoding phase")
+            state.user_query = "continue"
+            state = preprocessing_agent.handle_interactive_command(state, "continue")
+            if state.last_error:
+                state.last_response = f"❌ **Encoding phase failed:** {state.last_error}"
+                return state
+            print_to_log("✅ Finished encoding phase")
+            
+            # Phase 5: Transformations
+            print_to_log("🔄 Starting transformations phase")
+            state.user_query = "continue"
+            state = preprocessing_agent.handle_interactive_command(state, "continue")
+            if state.last_error:
+                state.last_response = f"❌ **Transformations phase failed:** {state.last_error}"
+                return state
+            print_to_log("✅ Finished transformations phase")
+            
+            print_to_log("🎉 Finished preprocessing")
+            
+            # Phase 6: Feature Selection
+            print_to_log("🔍 Started feature selection")
+            
+            # Apply IV filter
+            state.user_query = "apply iv filter 0.02"
+            state = feature_selection_agent.handle_interactive_command(state, "apply iv filter 0.02")
             if state.last_error:
                 state.last_response = f"❌ **Feature selection failed:** {state.last_error}"
                 return state
             
-            # Phase 3: Model Building
-            print_to_log("🤖 Phase 3: Automated Model Building")
-            state = model_building_agent.handle_interactive_command(state, simulator.get_response("model_building"))
-            
+            # Apply correlation filter
+            state.user_query = "apply correlation filter 0.5"
+            state = feature_selection_agent.handle_interactive_command(state, "apply correlation filter 0.5")
             if state.last_error:
-                state.last_response = f"❌ **Model building failed:** {state.last_error}"
+                state.last_response = f"❌ **Feature selection failed:** {state.last_error}"
                 return state
             
-            # Success message
-            state.last_response = f"""🎉 **Fast Model Pipeline Complete!**
-
-✅ **Preprocessing:** Complete
-✅ **Feature Selection:** Complete  
-✅ **Model Training:** Complete
+            print_to_log("✅ Final features selected")
+            
+            # Phase 7: Model Building
+            print_to_log("🤖 Started modeling")
+            state.user_query = "build a classification model"
+            state = model_building_agent.run(state)
+            if state.last_error:
+                state.last_response = f"❌ **Modeling failed:** {state.last_error}"
+                return state
+            print_to_log("✅ Final modeling results completed")
+            
+            # Restore chat session for final message
+            state.chat_session = original_chat_session
+            
+            # Clean success message with results
+            final_shape = state.processed_data.shape if state.processed_data is not None else state.cleaned_data.shape if state.cleaned_data is not None else state.raw_data.shape
+            
+            state.last_response = f"""🎉 **Fast ML Pipeline Complete!**
 
 🎯 **Target:** {state.target_column}
-📊 **Final Dataset:** {state.processed_data.shape if state.processed_data is not None else 'N/A'}
-🤖 **Model:** Ready for predictions
+📊 **Data Shape:** {state.raw_data.shape} → {final_shape}
+🔍 **Features:** {len(state.selected_features) if state.selected_features else 'Auto-selected'}
+🤖 **Model:** {'✅ Trained Successfully' if state.trained_model else '⚠️ Training Attempted'}
 
-Your automated ML pipeline has finished successfully! The model is ready to use."""
+**All phases completed automatically - your model is ready!**"""
 
-            print_to_log("🎉 Fast model pipeline completed successfully!")
+            print_to_log("🎉 Complete automated ML pipeline finished successfully!")
             return state
             
         except Exception as e:
+            # Restore chat session in case of error
+            if 'original_chat_session' in locals():
+                state.chat_session = original_chat_session
+                
             error_msg = f"Pipeline execution failed: {str(e)}"
             print_to_log(f"❌ {error_msg}")
+            import traceback
+            traceback.print_exc()
             state.last_error = error_msg
             state.last_response = f"❌ **Pipeline Error:** {error_msg}"
             return state

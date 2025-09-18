@@ -2979,7 +2979,7 @@ class FeatureSelectionAgentWrapper:
             from toolbox import slack_manager as global_slack_manager
             slack_manager = global_slack_manager
         print_to_log(f"🔧 DEBUG FS HANDLER: Using slack_manager id: {id(slack_manager)}")
-        print_to_log(f"🔧 DEBUG FS HANDLER: Slack manager has {len(slack_manager.session_channels)} channels")
+        print_to_log(f"🔧 DEBUG FS HANDLER: Slack manager available: {slack_manager is not None}")
         
         # Get or create session for this user
         session_id = state.chat_session
@@ -3141,7 +3141,7 @@ class FeatureSelectionAgentWrapper:
             # Create a mock Slack say function that sends to our pipeline (MOVED UP)
             def mock_say(message, thread_ts=None):
                 print_to_log(f"🔧 DEBUG MOCK_SAY: Attempting to send message via slack_manager id: {id(slack_manager)}")
-                print_to_log(f"🔧 DEBUG MOCK_SAY: Session channels: {len(slack_manager.session_channels)}")
+                print_to_log(f"🔧 DEBUG FS HANDLER: Slack manager available: {slack_manager is not None}")
                 
                 if slack_manager and state.chat_session:
                     slack_manager.send_message(state.chat_session, message)
