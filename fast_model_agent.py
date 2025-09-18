@@ -177,8 +177,23 @@ Reply with the target column name (e.g., 'f_segment')"""
                     preprocessing_state.df = state.raw_data.copy()
                     print_to_log(f"✅ Data loaded into SequentialState: {preprocessing_state.df.shape}")
                 
-                # Use confidence-based processor (high-confidence rules + LLM fallback with timeout)
-                print_to_log("🎯 Starting confidence-based outlier analysis (2-min timeout)...")
+                # STEP 1: Handle extreme outliers FIRST (same as agents_wrapper.py)
+                print_to_log("🚨 Step 1: Detecting and handling extreme outliers...")
+                from preprocessing_agent_impl import detect_and_handle_extreme_outliers
+                
+                df_cleaned, extreme_report = detect_and_handle_extreme_outliers(preprocessing_state.df)
+                if extreme_report['total_extreme_outliers'] > 0:
+                    print_to_log(f"   🔧 Handled {extreme_report['total_extreme_outliers']} extreme outliers:")
+                    for col, info in extreme_report['extreme_outliers_found'].items():
+                        print_to_log(f"      • {col}: {info['count']} extreme values ({info['percentage']:.1f}%) → NaN")
+                    # Update the data with extreme outliers cleaned
+                    preprocessing_state.df = df_cleaned
+                    state.raw_data = df_cleaned  # Also update the main state
+                else:
+                    print_to_log("   ✅ No extreme outliers detected")
+                
+                # STEP 2: Use confidence-based processor for intelligent outlier analysis
+                print_to_log("🎯 Step 2: Starting confidence-based outlier analysis (2-min timeout)...")
                 outlier_results = confidence_processor.analyze_phase_with_confidence(preprocessing_state, "outliers")
                 state.preprocessing_state['outlier_results'] = outlier_results
                 
@@ -318,11 +333,12 @@ Reply with the target column name (e.g., 'f_segment')"""
                 
                 # Create UserSession for feature selection
                 session = UserSession(
-                    user_id=state.chat_session or "fast_mode",
                     file_path=temp_csv_path,
+                    file_name="fast_mode_data.csv",
+                    user_id=state.chat_session or "fast_mode",
                     target_column=state.target_column,
                     phase="analysis"
-                )
+                                )
                 
                 print_to_log("🔧 Step 2: Loading and cleaning data (removing single-value and object columns)")
                 # Load and clean data (removes single-value and object columns)
@@ -357,7 +373,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 feature_columns = [col for col in final_data.columns if col != state.target_column]
                 state.selected_features = feature_columns  # Store as list, not DataFrame
                 state.processed_data = final_data  # Store processed data for model building
-                
+                state.cleaned_data = final_data  # CRITICAL: Model agent looks for cleaned_data                
                 print_to_log(f"✅ Feature selection complete: {len(feature_columns)} features selected")
                 print_to_log(f"   📊 Original → Filtered: {df_working.shape} → {final_data.shape}")
                 
@@ -374,7 +390,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 state.selected_features = feature_columns  # Store as list, not DataFrame
                 state.processed_data = df_working
                 print_to_log(f"✅ Fallback: Using all {len(feature_columns)} features")
-            
+                state.cleaned_data = df_working  # CRITICAL: Model agent looks for cleaned_data            
             send_progress("✅ **Final features selected**")
             
             # Phase 7: Model Building (following actual flow with comprehensive results)
