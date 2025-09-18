@@ -2462,6 +2462,46 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                 
                 state["has_existing_model"] = True
                 print_to_log(f"🔍 Set has_existing_model = True")
+                
+                # Handle full dataset predictions and probabilities
+                if 'full_predictions' in result:
+                    full_predictions = result['full_predictions']
+                    full_probabilities = result.get('full_probabilities', None)
+                    print_to_log(f"🔍 Full predictions received: {len(full_predictions)} predictions")
+                    if full_probabilities is not None:
+                        print_to_log(f"🔍 Full probabilities received: {len(full_probabilities)} probability arrays")
+                    
+                    # Add predictions and probabilities to pipeline state
+                    if hasattr(state, 'add_predictions_to_dataset'):
+                        success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
+                        if success:
+                            print_to_log(f"✅ Added predictions and probabilities to dataset")
+                            
+                            # Save predictions dataset to artifacts
+                            artifacts_dir = os.path.join(os.path.dirname(result.get('model_path', '')), '..')
+                            if os.path.exists(artifacts_dir):
+                                # Extract model name from result
+                                model_name = "unknown_model"
+                                if 'model' in result:
+                                    model = result['model']
+                                    if hasattr(model, '__class__'):
+                                        model_name = model.__class__.__name__.lower()
+                                    elif hasattr(model, 'name'):
+                                        model_name = model.name.lower()
+                                
+                                # Create filename with model name
+                                timestamp = int(time.time())
+                                predictions_file = state.save_predictions_dataset(
+                                    os.path.join(artifacts_dir, f"predictions_dataset_{model_name}_{timestamp}.csv")
+                                )
+                                if predictions_file:
+                                    print_to_log(f"✅ Predictions dataset saved to: {predictions_file}")
+                        else:
+                            print_to_log(f"⚠️ Failed to add predictions to dataset")
+                    else:
+                        print_to_log(f"⚠️ PipelineState does not have add_predictions_to_dataset method")
+                else:
+                    print_to_log(f"⚠️ No full_predictions found in result")
             else:
                 print_to_log(f"⚠️ Model not recognized - no model_path and no performance metrics")
         else:
@@ -2493,6 +2533,12 @@ Return ONLY executable Python code (no markdown, no explanations, no function de
 🚨 CRITICAL: The code must be COMPLETE and EXECUTABLE immediately!
 🚨 CRITICAL: Your code MUST end with a 'result' dictionary containing all metrics and model_path!
 🚨 CRITICAL: DO NOT stop after model.fit() - continue with predictions, metrics, and result dictionary!
+
+🚨 METRICS CALCULATION RULES:
+- For BINARY classification: Use average='binary' (positive class metrics)
+- For MULTI-CLASS classification: Use average='macro' by default (better for imbalanced data)
+- If user explicitly requests 'weighted', 'micro', or 'macro' averaging, use their preference
+- Always include 'metrics_averaging' in result dictionary to show which method was used
 
 🚨 CRITICAL DATA AVAILABILITY:
 The variable `sample_data` is ALREADY LOADED and available in your environment.
@@ -2544,13 +2590,14 @@ Your code MUST follow this exact structure and be COMPLETE:
 2. Data splitting: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 3. Train/test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 4. Model training: model = [ModelType](...); model.fit(X_train, y_train)
-5. Predictions: y_pred = model.predict(X_test); y_proba = model.predict_proba(X_test)
-6. Metrics calculation: accuracy, precision, recall, f1, etc.
-7. Model saving: model_path = safe_joblib_dump(model, 'model_name.joblib')
-8. Plot generation (if applicable): safe_plt_savefig('plot_name.png')
-9. Result dictionary: result = {'model': model, 'model_path': model_path, 'accuracy': accuracy, ...}
+5. Test predictions: y_pred = model.predict(X_test); y_proba = model.predict_proba(X_test)
+6. Full dataset predictions: full_predictions = model.predict(X); full_probabilities = model.predict_proba(X)
+7. Metrics calculation: accuracy, precision, recall, f1, etc.
+8. Model saving: model_path = safe_joblib_dump(model, 'model_name.joblib')
+9. Plot generation (if applicable): safe_plt_savefig('plot_name.png')
+10. Result dictionary: result = {'model': model, 'model_path': model_path, 'accuracy': accuracy, 'full_predictions': full_predictions, 'full_probabilities': full_probabilities, ...}
 
-DO NOT STOP EARLY! Complete ALL 9 steps!
+DO NOT STOP EARLY! Complete ALL 10 steps!
 """
 
 CLASSIFICATION_METRICS_PROMPT = """
@@ -2559,6 +2606,10 @@ CLASSIFICATION_METRICS_PROMPT = """
 # Step 1: Make predictions
    y_pred = model.predict(X_test)
    y_proba = model.predict_proba(X_test)
+   
+# Step 1.5: Make predictions on full dataset
+   full_predictions = model.predict(X)
+   full_probabilities = model.predict_proba(X)
 
 # Step 2: Calculate all classification metrics
    cm = confusion_matrix(y_test, y_pred)
@@ -2569,17 +2620,28 @@ CLASSIFICATION_METRICS_PROMPT = """
 model_path = safe_joblib_dump(model, 'decision_tree_model.joblib')
 
 # Step 4: Create result dictionary (MANDATORY!)
+   # Determine averaging method based on number of classes
+   if len(np.unique(y_test)) == 2:
+       # Binary classification - use positive class (class 1)
+       avg_method = 'binary'
+   else:
+       # Multi-class - use macro average by default (better than weighted for imbalanced data)
+       avg_method = 'macro'
+   
    result = {
        'accuracy': float(accuracy_score(y_test, y_pred)),
-       'precision': float(precision_score(y_test, y_pred, average='weighted')),
-       'recall': float(recall_score(y_test, y_pred, average='weighted')),
-       'f1_score': float(f1_score(y_test, y_pred, average='weighted')),
+       'precision': float(precision_score(y_test, y_pred, average=avg_method)),
+       'recall': float(recall_score(y_test, y_pred, average=avg_method)),
+       'f1_score': float(f1_score(y_test, y_pred, average=avg_method)),
        'specificity': float(specificity),
     'roc_auc': float(roc_auc_score(y_test, y_proba[:,1])) if y_proba.shape[1] == 2 else float(roc_auc_score(y_test, y_proba, multi_class='ovr')),
        'confusion_matrix': cm.tolist(),
     'log_loss': float(log_loss(y_test, y_proba)),
     'model': model,
-    'model_path': model_path
+    'model_path': model_path,
+    'full_predictions': full_predictions.tolist(),
+    'full_probabilities': full_probabilities.tolist(),
+    'metrics_averaging': avg_method
 }
 
 🚨 CRITICAL: The code MUST end with the complete result dictionary!
@@ -2590,6 +2652,9 @@ REGRESSION_METRICS_PROMPT = """
 
 # Step 1: Make predictions
 y_pred = model.predict(X_test)
+
+# Step 1.5: Make predictions on full dataset
+full_predictions = model.predict(X)
 
 # Step 2: Calculate all regression metrics
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -2620,7 +2685,8 @@ result = {
     'adjusted_r2': float(adj_r2),
     'huber_loss': float(huber_loss),
     'model': model,
-    'model_path': model_path
+    'model_path': model_path,
+    'full_predictions': full_predictions.tolist()
 }
 
 🚨 CRITICAL: The code MUST end with the complete result dictionary!
@@ -3045,6 +3111,26 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         print_to_log(f"   🚫 Skipping tree plot for non-DecisionTree model (LGBM/XGB/etc.)")
     elif tree_in_prompt:
         print_to_log(f"   🌳 Tree keyword detected but plot not needed (using existing tree for other purposes)")
+    
+    # Detect averaging method from user query
+    user_query_lower = (original_query or prompt).lower()
+    avg_method = None
+    if 'weighted' in user_query_lower:
+        avg_method = 'weighted'
+    elif 'micro' in user_query_lower:
+        avg_method = 'micro'
+    elif 'macro' in user_query_lower:
+        avg_method = 'macro'
+    elif 'binary' in user_query_lower:
+        avg_method = 'binary'
+    
+    if avg_method:
+        print_to_log(f"📊 METRICS AVERAGING: User specified '{avg_method}' averaging method")
+        # Replace the averaging method in the system prompt
+        system_prompt = system_prompt.replace("avg_method = 'binary'", f"avg_method = '{avg_method}'")
+        system_prompt = system_prompt.replace("avg_method = 'macro'", f"avg_method = '{avg_method}'")
+    else:
+        print_to_log(f"📊 METRICS AVERAGING: Using default method (binary for 2-class, macro for multi-class)")
     
     # Replace TARGET_COLUMN placeholder with actual target column in system prompt
     if target_column:

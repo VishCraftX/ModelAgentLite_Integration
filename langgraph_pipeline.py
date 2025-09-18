@@ -892,6 +892,16 @@ Generate Python code to fulfill this request:"""
                 print_to_log(f"🔧 DEBUG: Data columns: {list(state.cleaned_data.columns)}")
             else:
                 state_dict['cleaned_data'] = None
+                
+            # Handle predictions_dataset DataFrame
+            if 'predictions_dataset' in state_dict and state.predictions_dataset is not None:
+                predictions_data_file = os.path.join(user_dir, "predictions_dataset.csv")
+                state.predictions_dataset.to_csv(predictions_data_file, index=False)
+                state_dict['predictions_dataset'] = {"type": "dataframe", "file": "predictions_dataset.csv", "shape": list(state.predictions_dataset.shape)}
+                print_to_log(f"💾 Saved predictions_dataset to session: {state.predictions_dataset.shape}")
+                print_to_log(f"📁 Predictions data saved to: {predictions_data_file}")
+            else:
+                state_dict['predictions_dataset'] = None
             
             # Handle interactive_session which may contain DataFrames
             if 'interactive_session' in state_dict and state_dict['interactive_session'] is not None:
@@ -972,6 +982,18 @@ Generate Python code to fulfill this request:"""
                         state_dict['cleaned_data'] = None
                 else:
                     print_to_log(f"🔧 DEBUG LOAD_SESSION: No cleaned_data in state_dict or not dict format")
+                
+                # Restore predictions_dataset from CSV file
+                if state_dict.get('predictions_dataset') and isinstance(state_dict['predictions_dataset'], dict):
+                    predictions_data_file = os.path.join(user_dir, state_dict['predictions_dataset']['file'])
+                    if os.path.exists(predictions_data_file):
+                        state_dict['predictions_dataset'] = pd.read_csv(predictions_data_file)
+                        print_to_log(f"📂 Restored predictions_dataset: {state_dict['predictions_dataset'].shape}")
+                    else:
+                        print_to_log(f"⚠️ DEBUG LOAD_SESSION: predictions_dataset file not found, setting to None")
+                        state_dict['predictions_dataset'] = None
+                else:
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: No predictions_dataset in state_dict or not dict format")
                 
                 print_to_log(f"🔧 DEBUG LOAD_SESSION: Final state_dict keys: {list(state_dict.keys())}")
                 print_to_log(f"🔧 DEBUG LOAD_SESSION: cleaned_data is None: {state_dict.get('cleaned_data') is None}")

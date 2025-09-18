@@ -115,21 +115,39 @@ class SlackMLBot:
             print(f"🔍 DEBUG: Session registered. Current sessions: {self.ml_pipeline.slack_manager.session_channels}")
             print(f"🔍 DEBUG: Session threads: {self.ml_pipeline.slack_manager.session_threads}")
             
+            # Send session directory path message for new sessions (not thread replies)
+            if not event.get('thread_ts'):  # This is a new message, not a thread reply
+                try:
+                    # Get the actual user data directory path (user_data/username/thread_id)
+                    from agent_utils import get_username_user_data_dir
+                    user_id_part, thread_ts = session_id.split('_', 1) if '_' in session_id else (session_id, 'main')
+                    user_data_dir_path = get_username_user_data_dir(user_id_part, thread_ts)
+                    
+                    session_info_message = (
+                        f"📁 **Session Directory:** `{user_data_dir_path}/`\n"
+                        f"💾 All artifacts, models, and debug logs for this conversation will be stored here.\n"
+                        f"🔧 This information is provided for reference and debugging purposes if needed."
+                    )
+                    say(session_info_message, thread_ts=session_thread_ts)
+                    print(f"📁 Sent session directory info: {user_data_dir_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not send session directory info: {e}")
+            
             # Clean the message text (remove bot mention)
             if f"<@{bot_user_id}>" in text:
                 text = text.replace(f"<@{bot_user_id}>", "").strip()
             
             # Handle file attachments first
             if files:
-                self._handle_file_attachments(files, session_id, say, thread_ts)
+                self._handle_file_attachments(files, session_id, say, session_thread_ts)
             
             # Handle text query if present
             if text.strip():
-                self._handle_text_query(text, session_id, say, thread_ts)
+                self._handle_text_query(text, session_id, say, session_thread_ts)
             elif not files:
                 # No text and no files
                 say("👋 Hi! I'm your AI ML pipeline assistant. Upload a data file and ask me to build models, preprocess data, or analyze your data!", 
-                    thread_ts=thread_ts)
+                    thread_ts=session_thread_ts)
         
         @self.app.command("/pipeline_status")
         def pipeline_status_command(ack, respond, command):

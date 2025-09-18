@@ -13,6 +13,7 @@ Uses the actual working implementations AS-IS without modification
 
 import os
 import tempfile
+import time
 import pandas as pd
 import numpy as np
 from typing import Optional, Any, Dict
@@ -3859,6 +3860,49 @@ class ModelBuildingAgentWrapper:
                         title="Decision Tree Visualization", 
                         comment="Generated decision tree plot"
                     )
+                
+                # Check for predictions dataset
+                if 'full_predictions' in execution_result:
+                    full_predictions = execution_result['full_predictions']
+                    full_probabilities = execution_result.get('full_probabilities', None)
+                    print_to_log(f"🔍 UPLOAD DEBUG: Found full_predictions: {len(full_predictions)} predictions")
+                    if full_probabilities is not None:
+                        print_to_log(f"🔍 UPLOAD DEBUG: Found full_probabilities: {len(full_probabilities)} probability arrays")
+                    
+                    # Add predictions and probabilities to pipeline state
+                    success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
+                    if success:
+                        print_to_log(f"✅ Added predictions and probabilities to dataset")
+                        
+                        # Save predictions dataset to artifacts
+                        if 'model_path' in execution_result:
+                            artifacts_dir = os.path.dirname(execution_result['model_path'])
+                            
+                            # Extract model name from execution result
+                            model_name = "unknown_model"
+                            if 'model' in execution_result:
+                                model = execution_result['model']
+                                if hasattr(model, '__class__'):
+                                    model_name = model.__class__.__name__.lower()
+                                elif hasattr(model, 'name'):
+                                    model_name = model.name.lower()
+                            
+                            # Create filename with model name
+                            timestamp = int(time.time())
+                            predictions_file = state.save_predictions_dataset(
+                                os.path.join(artifacts_dir, f"predictions_dataset_{model_name}_{timestamp}.csv")
+                            )
+                            if predictions_file:
+                                print_to_log(f"✅ Predictions dataset saved to: {predictions_file}")
+                                
+                                # Add predictions dataset to pending uploads
+                                state.add_pending_file_upload({
+                                    "path": predictions_file,
+                                    "title": f"Dataset with {model_name.title()} Predictions & Scores",
+                                    "comment": f"Complete dataset with {model_name} model predictions and probability scores"
+                                })
+                    else:
+                        print_to_log(f"⚠️ Failed to add predictions to dataset")
                 
                 # Check for any other file paths in execution result
                 else:

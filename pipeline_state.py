@@ -69,6 +69,9 @@ class PipelineState(BaseModel):
     # File upload management
     pending_file_uploads: Optional[Dict] = None
     
+    # Predictions dataset
+    predictions_dataset: Optional[pd.DataFrame] = None  # Dataset with predictions column
+    
     
     class Config:
         arbitrary_types_allowed = True
@@ -438,6 +441,100 @@ class PipelineState(BaseModel):
             file_list.append(f"• {title} ({os.path.basename(file_path)})")
         
         return f"Pending uploads ({len(files)} files):\n" + "\n".join(file_list)
+    
+    def add_predictions_to_dataset(self, predictions: List, prediction_column_name: str = "predictions", probabilities: List = None):
+        """
+        Add predictions and probabilities as new columns to the dataset
+        
+        Args:
+            predictions: List or array of predictions (classes)
+            prediction_column_name: Name for the predictions column
+            probabilities: Optional list or array of prediction probabilities
+        """
+        if self.cleaned_data is not None:
+            # Use cleaned data if available
+            self.predictions_dataset = self.cleaned_data.copy()
+        elif self.raw_data is not None:
+            # Fall back to raw data if no cleaned data
+            self.predictions_dataset = self.raw_data.copy()
+        else:
+            print_to_log("⚠️ No data available to add predictions to")
+            return False
+        
+        # Add predictions column
+        self.predictions_dataset[prediction_column_name] = predictions
+        print_to_log(f"✅ Added predictions column '{prediction_column_name}' to dataset")
+        
+        # Add probabilities columns if provided
+        if probabilities is not None:
+            import numpy as np
+            probabilities_array = np.array(probabilities)
+            
+            if probabilities_array.ndim == 2:  # Multi-class probabilities
+                n_classes = probabilities_array.shape[1]
+                
+                if n_classes == 2:  # Binary classification
+                    # For binary classification, use probability of class 1 (positive class)
+                    prob_column_name = f"{prediction_column_name}_probability"
+                    self.predictions_dataset[prob_column_name] = probabilities_array[:, 1]
+                    print_to_log(f"✅ Added positive class (class 1) probability column '{prob_column_name}' to dataset")
+                else:  # Multi-class classification
+                    # For multi-class, use the probability of the predicted class
+                    predicted_probs = []
+                    for i, pred in enumerate(predictions):
+                        pred_idx = int(pred) if pred < n_classes else 0
+                        predicted_probs.append(probabilities_array[i, pred_idx])
+                    
+                    prob_column_name = f"{prediction_column_name}_probability"
+                    self.predictions_dataset[prob_column_name] = predicted_probs
+                    print_to_log(f"✅ Added predicted class probability column '{prob_column_name}' to dataset")
+            else:  # Single probability array
+                prob_column_name = f"{prediction_column_name}_probability"
+                self.predictions_dataset[prob_column_name] = probabilities_array
+                print_to_log(f"✅ Added probability column '{prob_column_name}' to dataset")
+        
+        return True
+    
+    def save_predictions_dataset(self, file_path: str = None, model_name: str = None) -> str:
+        """
+        Save the predictions dataset to a file
+        
+        Args:
+            file_path: Optional custom file path
+            model_name: Optional model name to include in filename
+            
+        Returns:
+            Path to the saved file
+        """
+        if self.predictions_dataset is None:
+            print_to_log("⚠️ No predictions dataset available to save")
+            return None
+        
+        if file_path is None:
+            # Generate default filename with model name if available
+            timestamp = int(time.time())
+            if model_name:
+                file_path = f"predictions_dataset_{model_name}_{timestamp}.csv"
+            else:
+                file_path = f"predictions_dataset_{timestamp}.csv"
+        
+        try:
+            self.predictions_dataset.to_csv(file_path, index=False)
+            print_to_log(f"✅ Predictions dataset saved to: {file_path}")
+            return file_path
+        except Exception as e:
+            print_to_log(f"❌ Failed to save predictions dataset: {e}")
+            return None
+    
+    def get_predictions_summary(self) -> str:
+        """Get a summary of the predictions dataset"""
+        if self.predictions_dataset is None:
+            return "No predictions dataset available"
+        
+        shape = self.predictions_dataset.shape
+        columns = list(self.predictions_dataset.columns)
+        
+        return f"Predictions dataset: {shape[0]} rows × {shape[1]} columns\nColumns: {', '.join(columns)}"
 
 
 class StateManager:
@@ -495,6 +592,11 @@ class StateManager:
             state.cleaned_data.to_pickle(cleaned_data_path)
             state_dict["cleaned_data"] = cleaned_data_path
         
+        if state.predictions_dataset is not None:
+            predictions_data_path = os.path.join(session_dir, "predictions_dataset.pkl")
+            state.predictions_dataset.to_pickle(predictions_data_path)
+            state_dict["predictions_dataset"] = predictions_data_path
+        
         # Handle trained model
         if state.trained_model is not None:
             model_path = os.path.join(session_dir, "trained_model.pkl")
@@ -536,6 +638,11 @@ class StateManager:
                 state_dict["cleaned_data"] = pd.read_pickle(state_dict["cleaned_data"])
             else:
                 state_dict["cleaned_data"] = None
+            
+            if isinstance(state_dict.get("predictions_dataset"), str) and os.path.exists(state_dict["predictions_dataset"]):
+                state_dict["predictions_dataset"] = pd.read_pickle(state_dict["predictions_dataset"])
+            else:
+                state_dict["predictions_dataset"] = None
             
             # Load trained model
             if isinstance(state_dict.get("trained_model"), str) and os.path.exists(state_dict["trained_model"]):
@@ -582,6 +689,10 @@ class StateManager:
                 print_to_log(f"Error deleting session {session_id}: {e}")
                 return False
         return False
+    
+    def get_session_directory_path(self, session_id: str) -> str:
+        """Get the directory path for a session"""
+        return os.path.join(self.base_dir, session_id)
     
     def cleanup_old_sessions(self, max_age_hours: int = 24):
         """Clean up sessions older than specified hours"""
