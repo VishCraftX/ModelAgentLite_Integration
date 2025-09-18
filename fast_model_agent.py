@@ -446,6 +446,33 @@ Reply with the target column name (e.g., 'f_segment')"""
                     state.user_query = model_query
                     
                     # Run the actual model building agent (provides metrics, confusion matrix, rank ordering)
+                    # CRITICAL: Ensure target column is set in model agent's global state
+                    # The model agent looks for target in global_model_states, not just user_states
+                    try:
+                        # Import the global states that the model agent uses
+                        from model_building_agent_impl import global_model_states
+                        
+                        # Ensure the user exists in global_model_states
+                        user_id = state.chat_session or "fast_mode"
+                        if user_id not in global_model_states:
+                            global_model_states[user_id] = {}
+                        
+                        # Set the target column in the global state where generate_model_code looks for it
+                        global_model_states[user_id]["target_column"] = state.target_column
+                        print_to_log(f"🎯 Set target column in global_model_states: {state.target_column}")
+                        
+                        # Also ensure sample_data includes the target column
+                        if hasattr(state, "cleaned_data") and state.cleaned_data is not None:
+                            if state.target_column in state.cleaned_data.columns:
+                                global_model_states[user_id]["sample_data"] = state.cleaned_data
+                                print_to_log(f"📊 Updated sample_data with target column included: {state.cleaned_data.shape}")
+                            else:
+                                print_to_log(f"⚠️ Target column {state.target_column} not found in cleaned_data columns")
+                        
+                    except Exception as e:
+                        print_to_log(f"⚠️ Error setting target in global_model_states: {e}")
+                    
+                    # Run the actual model building agent (provides metrics, confusion matrix, rank ordering)
                     result_state = model_agent.run(state)                    
                     # Update our state with comprehensive results
                     state.trained_model = result_state.trained_model
