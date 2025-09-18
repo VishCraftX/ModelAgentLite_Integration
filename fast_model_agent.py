@@ -254,3 +254,20 @@ Please specify which column is your **target variable** (the column you want to 
             state.last_error = error_msg
             state.last_response = f"❌ **Pipeline Error:** {error_msg}"
             return state
+
+def fast_model_agent(state: PipelineState) -> PipelineState:
+    """Main entry point for fast model agent - called by langgraph_pipeline.py"""
+    print_to_log("🚀 [Fast Model Agent] Starting fast model pipeline")
+    
+    agent = FastModelAgent()
+    
+    # Check if this is a target column response
+    if state.target_column is None and state.user_query and state.raw_data is not None:
+        # Check if user query looks like a column name
+        if state.user_query.strip() in state.raw_data.columns:
+            print_to_log(f"🎯 [Fast Model Agent] Setting target column: {state.user_query.strip()}")
+            return agent.handle_fast_model_request(state, state.user_query.strip())
+    
+    # Otherwise start the normal flow
+    print_to_log("🚀 [Fast Model Agent] Starting automated pipeline")
+    return agent.handle_fast_model_request(state)
