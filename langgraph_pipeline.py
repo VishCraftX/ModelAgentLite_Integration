@@ -105,6 +105,8 @@ class MultiAgentMLPipeline:
         graph.add_node("model_building", self._model_building_node)
         graph.add_node("general_response", self._general_response_node)
         graph.add_node("code_execution", self._code_execution_node)
+        graph.add_node("fast_model_pipeline", self._fast_model_pipeline_node)
+        graph.add_node("fast_model_pipeline", self._fast_model_pipeline_node)
         
         # Add edges from orchestrator to agents
         graph.add_conditional_edges(
@@ -116,6 +118,7 @@ class MultiAgentMLPipeline:
                 AgentType.MODEL_BUILDING.value: "model_building",
                 "general_response": "general_response",
                 "code_execution": "code_execution",
+                "fast_model_pipeline": "fast_model_pipeline",
                 AgentType.END.value: END
             }
         )
@@ -156,6 +159,7 @@ class MultiAgentMLPipeline:
         
         # Code execution and general response always end after completion
         graph.add_edge("code_execution", END)
+        graph.add_edge("fast_model_pipeline", END)
         graph.add_edge("general_response", END)
         
         # Set entry point
@@ -431,6 +435,16 @@ Generate Python code to fulfill this request:"""
             state.last_error = str(e)
             state.last_response = f"❌ Code execution failed: {str(e)}"
             return state
+    
+    def _fast_model_pipeline_node(self, state: PipelineState) -> PipelineState:
+        """Fast model pipeline node - handles automated ML pipeline"""
+        print_to_log(f"\n🚀 [Fast Model Pipeline] Starting automated ML pipeline")
+        print_to_log(f"🔍 [Fast Model Pipeline] Query: '{state.user_query}'")
+        
+        # Import the fast model agent
+        from fast_model_agent import fast_model_agent
+        
+        return fast_model_agent(state)
     
     def _get_user_session_dir(self, session_id: str) -> str:
         """Get user session directory for conversation history"""
