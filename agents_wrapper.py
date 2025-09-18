@@ -3760,7 +3760,7 @@ class ModelBuildingAgentWrapper:
                 
             # Determine features to use (selected > all columns)
             features_to_use = None
-            if state.selected_features:
+            if state.selected_features is not None and (hasattr(state.selected_features, "__len__") and len(state.selected_features) > 0):
                 features_to_use = state.selected_features
                 print_to_log(f"🎯 Using selected features: {len(state.selected_features)}")
             elif data_to_use is not None:

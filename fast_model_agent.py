@@ -9,6 +9,35 @@ class FastModelAgent:
     def __init__(self):
         print_to_log("🚀 FastModelAgent initialized - using intelligent LLM + rule-based analysis")
     
+    def _extract_model_request_from_query(self, original_query: str) -> str:
+        """Extract model building request from original user query"""
+        query_lower = original_query.lower()
+        
+        # Check for specific model types in user query
+        if "xgboost" in query_lower or "xgb" in query_lower:
+            return "build an XGBoost model"
+        elif "random forest" in query_lower or "randomforest" in query_lower or "rf" in query_lower:
+            return "build a Random Forest model"
+        elif "decision tree" in query_lower or "tree" in query_lower:
+            return "build a Decision Tree model"
+        elif "lightgbm" in query_lower or "lgbm" in query_lower:
+            return "build a LightGBM model"
+        elif "logistic regression" in query_lower or "logistic" in query_lower:
+            return "build a Logistic Regression model"
+        elif "svm" in query_lower or "support vector" in query_lower:
+            return "build an SVM model"
+        elif "neural network" in query_lower or "mlp" in query_lower:
+            return "build a Neural Network model"
+        elif "gradient boosting" in query_lower or "gbm" in query_lower:
+            return "build a Gradient Boosting model"
+        elif "adaboost" in query_lower:
+            return "build an AdaBoost model"
+        elif "naive bayes" in query_lower:
+            return "build a Naive Bayes model"
+        else:
+            # Default to Random Forest for fast mode
+            return "build a Random Forest model with comprehensive metrics and visualizations"
+
     def handle_fast_model_request(self, state: PipelineState, target_column: str = None) -> PipelineState:
         """Handle fast model request with target column setting"""
         print_to_log("🚀 FastModelAgent: Starting intelligent automated pipeline")
@@ -278,50 +307,76 @@ Reply with the target column name (e.g., 'f_segment')"""
             print_to_log("🔍 Phase 6: Feature Selection - Following actual flow with IV and correlation filtering")
             
             try:
-                from feature_selection_agent_impl import DataProcessor
+                from feature_selection_agent_impl import DataProcessor, AnalysisEngine, UserSession
+                import tempfile
                 
-                # Initialize DataProcessor
-                processor = DataProcessor()
+                print_to_log("🔧 Step 1: Setting up feature selection session")
+                # Create a temporary CSV file for the UserSession
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
+                    df_working.to_csv(tmp_file.name, index=False)
+                    temp_csv_path = tmp_file.name
                 
-                print_to_log("🔧 Step 1: Loading and cleaning data (removing single-value and object columns)")
-                # Load and clean data (removes single-value and object columns)
-                clean_data = processor.load_and_clean_data(df_working, state.target_column)
-                print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
-                
-                print_to_log("🔧 Step 2: Applying IV filter (threshold > 0.02)")
-                # Apply IV filter with 0.02 threshold
-                iv_filtered_data = processor.apply_iv_filter(
-                    data=clean_data,
+                # Create UserSession for feature selection
+                session = UserSession(
+                    user_id=state.chat_session or "fast_mode",
+                    file_path=temp_csv_path,
                     target_column=state.target_column,
-                    threshold=0.02
+                    phase="analysis"
                 )
-                print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
                 
-                print_to_log("🔧 Step 3: Applying correlation filter (threshold > 0.5)")
-                # Apply correlation filter with 0.5 threshold
-                final_data = processor.apply_correlation_filter(
-                    data=iv_filtered_data,
-                    threshold=0.5
-                )
-                print_to_log(f"   📊 After correlation filtering: {final_data.shape}")
+                print_to_log("🔧 Step 2: Loading and cleaning data (removing single-value and object columns)")
+                # Load and clean data (removes single-value and object columns)
+                if DataProcessor.load_and_clean_data(session):
+                    clean_data = session.current_df
+                    print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
+                    
+                    print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.02)")
+                    # Apply IV filter with 0.02 threshold
+                    iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.02)
+                    if 'error' not in iv_results:
+                        iv_filtered_data = session.current_df  # Data is updated in session
+                        print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
+                        
+                        print_to_log("🔧 Step 4: Applying correlation filter (threshold > 0.5)")
+                        # Apply correlation filter with 0.5 threshold
+                        corr_results = AnalysisEngine.run_correlation_analysis(session, threshold=0.5)
+                        if 'error' not in corr_results:
+                            final_data = session.current_df  # Data is updated in session
+                            print_to_log(f"   📊 After correlation filtering: {final_data.shape}")
+                        else:
+                            print_to_log(f"   ⚠️ Correlation filtering failed: {corr_results.get('error', 'Unknown error')}")
+                            final_data = iv_filtered_data
+                    else:
+                        print_to_log(f"   ⚠️ IV filtering failed: {iv_results.get('error', 'Unknown error')}")
+                        final_data = clean_data
+                else:
+                    print_to_log("   ⚠️ Data cleaning failed, using original data")
+                    final_data = df_working
                 
                 # Update state with selected features (excluding target)
                 feature_columns = [col for col in final_data.columns if col != state.target_column]
-                state.selected_features = final_data[feature_columns].copy()
+                state.selected_features = feature_columns  # Store as list, not DataFrame
                 state.processed_data = final_data  # Store processed data for model building
                 
                 print_to_log(f"✅ Feature selection complete: {len(feature_columns)} features selected")
-                print_to_log(f"   📊 Original → Cleaned → IV → Correlation: {df_working.shape} → {clean_data.shape} → {iv_filtered_data.shape} → {final_data.shape}")
+                print_to_log(f"   📊 Original → Filtered: {df_working.shape} → {final_data.shape}")
+                
+                # Clean up temporary file
+                import os
+                os.unlink(temp_csv_path)
                 
             except Exception as e:
                 print_to_log(f"⚠️ Feature selection failed: {e}, using all features")
+                import traceback
+                traceback.print_exc()
                 # Fallback: use all features
                 feature_columns = [col for col in df_working.columns if col != state.target_column]
-                state.selected_features = df_working[feature_columns].copy()
+                state.selected_features = feature_columns  # Store as list, not DataFrame
                 state.processed_data = df_working
                 print_to_log(f"✅ Fallback: Using all {len(feature_columns)} features")
             
-            send_progress("✅ **Final features selected**")            
+            send_progress("✅ **Final features selected**")
+            
             # Phase 7: Model Building (following actual flow with comprehensive results)
             send_progress("🤖 **Started modeling**")
             print_to_log("🤖 Phase 7: Model Building - Training with comprehensive metrics like actual flow")
@@ -333,7 +388,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 model_agent = ModelBuildingAgentWrapper()
                 
                 if model_agent.available:
-                    print_to_log("🔧 Using actual model building agent for comprehensive results")
+                    print_to_log("🔧 Using actual model building agent with user prompt-based model selection")
                     
                     # Ensure selected features are properly set
                     if not hasattr(state, "selected_features") or state.selected_features is None:
@@ -345,11 +400,21 @@ Reply with the target column name (e.g., 'f_segment')"""
                             print_to_log("❌ No processed data available for model building")
                             raise Exception("No data available for model building")
                     
-                    print_to_log(f"🔧 Model building with {len(state.selected_features.columns) if hasattr(state.selected_features, 'columns') else len(state.selected_features)} selected features")
+                    print_to_log(f"🔧 Model building with {len(state.selected_features) if hasattr(state.selected_features, '__len__') else 0} selected features")
+                    
+                    # 🎯 CRITICAL: Extract model type from original user query for prompt-based model selection
+                    original_query = state.user_query if hasattr(state, 'user_query') else ""
+                    print_to_log(f"🔍 Original user query: '{original_query}'")
+                    
+                    # Parse model type from user query or use default
+                    model_query = self._extract_model_request_from_query(original_query)
+                    print_to_log(f"🤖 Model building query: '{model_query}'")
+                    
+                    # Set the model building query so the agent knows what model to build
+                    state.user_query = model_query
                     
                     # Run the actual model building agent (provides metrics, confusion matrix, rank ordering)
-                    result_state = model_agent.run(state)
-                    
+                    result_state = model_agent.run(state)                    
                     # Update our state with comprehensive results
                     state.trained_model = result_state.trained_model
                     state.model_building_state = result_state.model_building_state
@@ -401,7 +466,7 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             # Generate final success message
             final_shape = state.processed_data.shape if state.processed_data is not None else state.cleaned_data.shape
-            feature_count = len(state.selected_features) if state.selected_features else final_shape[1] - 1
+            feature_count = len(state.selected_features) if state.selected_features is not None and hasattr(state.selected_features, '__len__') else final_shape[1] - 1
             model_status = "✅ Trained Successfully" if state.trained_model else "⚠️ Training Attempted"
             
             accuracy_text = ""
