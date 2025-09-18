@@ -273,96 +273,125 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             print_to_log(f"✅ All intelligent preprocessing completed: {df_working.shape}")
             
-            # Phase 6: Feature Selection
+            # Phase 6: Feature Selection (following actual flow)
             send_progress("🔍 **Started feature selection**")
-            print_to_log("🔍 Phase 6: Feature Selection - Using all features (LLM analysis complete)")
-            
-            # For now, use all features (feature selection can be added later)
-            state.processed_data = df_working
-            state.selected_features = [col for col in df_working.columns if col != state.target_column]
-            
-            print_to_log(f"✅ Feature selection: Using all {len(state.selected_features)} features")
-            
-            send_progress("✅ **Final features selected**")
-            
-            # Phase 7: Model Building
-            send_progress("🤖 **Started modeling**")
-            print_to_log("🤖 Phase 7: Model Building - Training classification model")
+            print_to_log("🔍 Phase 6: Feature Selection - Following actual flow with IV and correlation filtering")
             
             try:
-                # Build model using available features and target
-                model_data = state.processed_data
+                from feature_selection_agent_impl import DataProcessor
                 
-                if state.target_column in model_data.columns:
-                    # Prepare data with proper type handling
-                    X = model_data.drop(columns=[state.target_column])
-                    y = model_data[state.target_column]
+                # Initialize DataProcessor
+                processor = DataProcessor()
+                
+                print_to_log("🔧 Step 1: Loading and cleaning data (removing single-value and object columns)")
+                # Load and clean data (removes single-value and object columns)
+                clean_data = processor.load_and_clean_data(df_working, state.target_column)
+                print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
+                
+                print_to_log("🔧 Step 2: Applying IV filter (threshold > 0.02)")
+                # Apply IV filter with 0.02 threshold
+                iv_filtered_data = processor.apply_iv_filter(
+                    data=clean_data,
+                    target_column=state.target_column,
+                    threshold=0.02
+                )
+                print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
+                
+                print_to_log("🔧 Step 3: Applying correlation filter (threshold > 0.5)")
+                # Apply correlation filter with 0.5 threshold
+                final_data = processor.apply_correlation_filter(
+                    data=iv_filtered_data,
+                    threshold=0.5
+                )
+                print_to_log(f"   📊 After correlation filtering: {final_data.shape}")
+                
+                # Update state with selected features (excluding target)
+                feature_columns = [col for col in final_data.columns if col != state.target_column]
+                state.selected_features = final_data[feature_columns].copy()
+                state.processed_data = final_data  # Store processed data for model building
+                
+                print_to_log(f"✅ Feature selection complete: {len(feature_columns)} features selected")
+                print_to_log(f"   📊 Original → Cleaned → IV → Correlation: {df_working.shape} → {clean_data.shape} → {iv_filtered_data.shape} → {final_data.shape}")
+                
+            except Exception as e:
+                print_to_log(f"⚠️ Feature selection failed: {e}, using all features")
+                # Fallback: use all features
+                feature_columns = [col for col in df_working.columns if col != state.target_column]
+                state.selected_features = df_working[feature_columns].copy()
+                state.processed_data = df_working
+                print_to_log(f"✅ Fallback: Using all {len(feature_columns)} features")
+            
+            send_progress("✅ **Final features selected**")            
+            # Phase 7: Model Building (following actual flow with comprehensive results)
+            send_progress("🤖 **Started modeling**")
+            print_to_log("🤖 Phase 7: Model Building - Training with comprehensive metrics like actual flow")
+            
+            try:
+                from agents_wrapper import ModelBuildingAgentWrapper
+                
+                # Use the actual model building agent for comprehensive results
+                model_agent = ModelBuildingAgentWrapper()
+                
+                if model_agent.available:
+                    print_to_log("🔧 Using actual model building agent for comprehensive results")
                     
-                    # Remove high cardinality columns that shouldn't be in model
-                    columns_to_drop = []
-                    for col in X.columns:
-                        if X[col].dtype == 'object':
-                            unique_ratio = X[col].nunique() / len(X)
-                            if unique_ratio > 0.25:  # High cardinality
-                                columns_to_drop.append(col)
-                                print_to_log(f"🔧 Dropping high cardinality column from model: {col}")
+                    # Ensure selected features are properly set
+                    if not hasattr(state, "selected_features") or state.selected_features is None:
+                        # Fallback: use processed data features
+                        if hasattr(state, "processed_data") and state.processed_data is not None:
+                            feature_columns = [col for col in state.processed_data.columns if col != state.target_column]
+                            state.selected_features = state.processed_data[feature_columns].copy()
+                        else:
+                            print_to_log("❌ No processed data available for model building")
+                            raise Exception("No data available for model building")
                     
-                    if columns_to_drop:
-                        X = X.drop(columns=columns_to_drop)
+                    print_to_log(f"🔧 Model building with {len(state.selected_features.columns) if hasattr(state.selected_features, 'columns') else len(state.selected_features)} selected features")
                     
-                    # Convert remaining object columns to numeric
-                    for col in X.columns:
-                        if X[col].dtype == 'object':
-                            try:
-                                # Try to convert to numeric
-                                X[col] = pd.to_numeric(X[col], errors='coerce')
-                                # Fill any resulting NaNs with median
-                                if X[col].isnull().sum() > 0:
-                                    X[col] = X[col].fillna(X[col].median())
-                            except:
-                                # If conversion fails, use label encoding
-                                from sklearn.preprocessing import LabelEncoder
-                                le = LabelEncoder()
-                                X[col] = le.fit_transform(X[col].astype(str))
+                    # Run the actual model building agent (provides metrics, confusion matrix, rank ordering)
+                    result_state = model_agent.run(state)
                     
-                    # Ensure target is numeric
-                    if y.dtype == 'object':
-                        from sklearn.preprocessing import LabelEncoder
-                        le_target = LabelEncoder()
-                        y = le_target.fit_transform(y)
+                    # Update our state with comprehensive results
+                    state.trained_model = result_state.trained_model
+                    state.model_building_state = result_state.model_building_state
+                    state.last_response = result_state.last_response
                     
-                    # Final check - ensure all columns are numeric
-                    non_numeric_cols = X.select_dtypes(exclude=[np.number]).columns.tolist()
-                    if non_numeric_cols:
-                        print_to_log(f"🔧 Dropping non-numeric columns: {non_numeric_cols}")
-                        X = X.select_dtypes(include=[np.number])
-                    
-                    print_to_log(f"🔧 Final model data: {X.shape} features, {len(y)} samples")
-                    
-                    # Simple model training
-                    from sklearn.ensemble import RandomForestClassifier
-                    from sklearn.model_selection import train_test_split
-                    from sklearn.metrics import accuracy_score
-                    
-                    # Split data
-                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-                    
-                    # Train model
-                    model = RandomForestClassifier(n_estimators=100, random_state=42)
-                    model.fit(X_train, y_train)
-                    
-                    # Evaluate
-                    y_pred = model.predict(X_test)
-                    accuracy = accuracy_score(y_test, y_pred)
-                    
-                    state.trained_model = model
-                    # Store metrics in preprocessing_state instead of PipelineState
-                    state.preprocessing_state['model_metrics'] = {'accuracy': accuracy}
-                    
-                    print_to_log(f"✅ Model trained successfully - Accuracy: {accuracy:.3f}")
+                    if state.trained_model:
+                        print_to_log("✅ Model trained with comprehensive results (metrics, confusion matrix, rank ordering)")
+                        if hasattr(state, "model_building_state") and state.model_building_state:
+                            if "metrics" in state.model_building_state:
+                                metrics = state.model_building_state["metrics"]
+                                print_to_log(f"📊 Model metrics available: {list(metrics.keys()) if isinstance(metrics, dict) else 'Available'}")
+                    else:
+                        print_to_log("⚠️ Model training completed but no model object returned")
+                
                 else:
-                    print_to_log(f"⚠️ Target column {state.target_column} not found in processed data")
+                    print_to_log("⚠️ Model building agent not available, using simple fallback")
+                    # Simple fallback model training
+                    model_data = state.processed_data if hasattr(state, "processed_data") and state.processed_data is not None else df_working
                     
+                    if state.target_column in model_data.columns:
+                        X = model_data.drop(columns=[state.target_column])
+                        y = model_data[state.target_column]
+                        
+                        # Basic model training
+                        from sklearn.ensemble import RandomForestClassifier
+                        from sklearn.model_selection import train_test_split
+                        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+                        
+                        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+                        model = RandomForestClassifier(n_estimators=100, random_state=42)
+                        model.fit(X_train, y_train)
+                        
+                        y_pred = model.predict(X_test)
+                        accuracy = accuracy_score(y_test, y_pred)
+                        
+                        state.trained_model = model
+                        state.preprocessing_state["model_metrics"] = {"accuracy": accuracy}
+                        
+                        print_to_log(f"✅ Fallback model trained - Accuracy: {accuracy:.3f}")
+                    else:
+                        print_to_log(f"❌ Target column {state.target_column} not found in processed data")
+
             except Exception as e:
                 print_to_log(f"⚠️ Model building failed: {e}")
                 import traceback
