@@ -8,9 +8,23 @@ import pandas as pd
 from typing import Dict, Any, Optional
 from pipeline_state import PipelineState
 from toolbox import print_to_log
-from langgraph_pipeline import FastModeSimulator
 import threading
 import time
+
+class FastModeSimulator:
+    """Simulates user inputs for automated pipeline execution"""
+    
+    def __init__(self):
+        self.responses = {
+            "preprocessing": ["proceed", "continue", "yes"],
+            "feature_selection": ["continue", "proceed", "yes"],
+            "model_building": ["continue", "proceed", "yes"],
+            "general": ["continue", "proceed", "yes"]
+        }
+    
+    def get_response(self, context: str = "general") -> str:
+        """Get automated response based on context"""
+        return self.responses.get(context, ["continue"])[0]
 
 class FastModelAgent:
     """Agent for automated ML pipeline execution"""
