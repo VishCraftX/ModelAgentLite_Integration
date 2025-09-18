@@ -37,10 +37,8 @@ Reply with the target column name (e.g., 'f_segment')"""
         try:
             # Import the intelligent analysis functions
             from preprocessing_agent_impl import (
-                analyze_outliers_with_llm,
-                analyze_missing_values_with_llm, 
-                analyze_encoding_with_llm,
-                analyze_transformations_with_llm,
+                initialize_dataset_analysis,
+                ConfidenceBasedPreprocessor, 
                 apply_outliers_treatment,
                 apply_missing_values_treatment,
                 apply_encoding_treatment,
@@ -81,6 +79,43 @@ Reply with the target column name (e.g., 'f_segment')"""
             )
             
             # Initialize preprocessing state tracking
+            
+            # Create SequentialState for intelligent analysis
+            import tempfile
+            import os
+            
+            # Create temporary file for SequentialState
+            temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False)
+            temp_df_path = temp_file.name
+            temp_file.close()
+            
+            # Save data to temporary file
+            state.raw_data.to_csv(temp_df_path, index=False)
+            print_to_log(f"📁 Saved data to temporary file: {temp_df_path}")
+            
+            # Create SequentialState for intelligent analysis
+            preprocessing_state = SequentialState(
+                df_path=temp_df_path,
+                target_column=state.target_column,
+                current_phase="overview"
+            )
+            
+            # CRITICAL: Load the dataframe into SequentialState
+            print_to_log("🔧 Loading dataset into SequentialState...")
+            preprocessing_state = initialize_dataset_analysis(preprocessing_state)
+            
+            if preprocessing_state.current_step == "error":
+                raise Exception("Failed to load dataset into SequentialState")
+            
+            print_to_log(f"✅ Dataset loaded: {preprocessing_state.df.shape}")
+            
+            # Initialize confidence-based preprocessor (high-confidence rules + LLM fallback)
+            confidence_processor = ConfidenceBasedPreprocessor(
+                confidence_threshold=0.8,
+                timeout_minutes=2
+            )
+            
+            # Initialize preprocessing state tracking
             if not hasattr(state, 'preprocessing_state'):
                 state.preprocessing_state = {}
             
@@ -107,7 +142,15 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             # Run the same intelligent outlier analysis as manual flow
             try:
-                outlier_results = analyze_outliers_with_llm(preprocessing_state)
+                # CRITICAL: Ensure data is loaded in preprocessing_state BEFORE analysis
+                if preprocessing_state.df is None:
+                    print_to_log("🔧 Data not loaded in SequentialState, loading now...")
+                    preprocessing_state.df = state.raw_data.copy()
+                    print_to_log(f"✅ Data loaded into SequentialState: {preprocessing_state.df.shape}")
+                
+                # Use confidence-based processor (high-confidence rules + LLM fallback with timeout)
+                print_to_log("🎯 Starting confidence-based outlier analysis (2-min timeout)...")
+                outlier_results = confidence_processor.analyze_phase_with_confidence(preprocessing_state, "outliers")
                 state.preprocessing_state['outlier_results'] = outlier_results
                 
                 outlier_columns = len(outlier_results.get('outlier_columns', []))
@@ -141,7 +184,9 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             # Run the same intelligent missing values analysis as manual flow
             try:
-                missing_results = analyze_missing_values_with_llm(preprocessing_state)
+                # Use confidence-based processor (high-confidence rules + LLM fallback with timeout)
+                print_to_log("🎯 Starting confidence-based missing values analysis (2-min timeout)...")
+                missing_results = confidence_processor.analyze_phase_with_confidence(preprocessing_state, "missing_values")
                 state.preprocessing_state['missing_results'] = missing_results
                 
                 missing_columns = len(missing_results.get('missing_columns', []))
@@ -171,7 +216,9 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             # Run the same intelligent encoding analysis as manual flow
             try:
-                encoding_results = analyze_encoding_with_llm(preprocessing_state)
+                # Use confidence-based processor (high-confidence rules + LLM fallback with timeout)
+                print_to_log("🎯 Starting confidence-based encoding analysis (2-min timeout)...")
+                encoding_results = confidence_processor.analyze_phase_with_confidence(preprocessing_state, "encoding")
                 state.preprocessing_state['encoding_results'] = encoding_results
                 
                 encoding_columns = len(encoding_results.get('categorical_columns', []))
@@ -201,7 +248,9 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             # Run the same intelligent transformations analysis as manual flow
             try:
-                transformation_results = analyze_transformations_with_llm(preprocessing_state)
+                # Use confidence-based processor (high-confidence rules + LLM fallback with timeout)
+                print_to_log("🎯 Starting confidence-based transformation analysis (2-min timeout)...")
+                transformation_results = confidence_processor.analyze_phase_with_confidence(preprocessing_state, "transformations")
                 state.preprocessing_state['transformation_results'] = transformation_results
                 
                 transform_columns = len(transformation_results.get('transformation_columns', []))
