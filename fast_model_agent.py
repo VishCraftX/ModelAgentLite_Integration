@@ -36,13 +36,21 @@ class FastModelAgent:
             return "build a Naive Bayes model"
         else:
             # Default to Random Forest for fast mode
-            return "build a Random Forest model with comprehensive metrics and visualizations"
+            return "build a machine learning model with comprehensive metrics and visualizations"
 
     def handle_fast_model_request(self, state: PipelineState, target_column: str = None) -> PipelineState:
         """Handle fast model request with target column setting"""
         print_to_log("🚀 FastModelAgent: Starting intelligent automated pipeline")
         
-        # Set target column if provided
+        # CRITICAL: Preserve original user query at the very beginning
+        if not hasattr(state, "preprocessing_state") or state.preprocessing_state is None:
+            state.preprocessing_state = {}
+        
+        # Store original intent if not already stored
+        if "original_user_intent" not in state.preprocessing_state and state.user_query:
+            state.preprocessing_state["original_user_intent"] = state.user_query
+            print_to_log(f"🔍 [FastModelAgent] Preserved original user intent: '{state.user_query}'")
+                # Set target column if provided
         if target_column:
             state.target_column = target_column
             print_to_log(f"🎯 Target column set: {target_column}")
@@ -419,9 +427,17 @@ Reply with the target column name (e.g., 'f_segment')"""
                     print_to_log(f"🔧 Model building with {len(state.selected_features) if hasattr(state.selected_features, '__len__') else 0} selected features")
                     
                     # 🎯 CRITICAL: Extract model type from original user query for prompt-based model selection
-                    original_query = state.user_query if hasattr(state, 'user_query') else ""
-                    print_to_log(f"🔍 Original user query: '{original_query}'")
-                    
+                    # Use preserved original intent if available, otherwise fallback to current user_query
+                    original_query = ""
+                    if hasattr(state, "preprocessing_state") and state.preprocessing_state and "original_user_intent" in state.preprocessing_state:
+                        original_query = state.preprocessing_state["original_user_intent"]
+                        print_to_log(f"🔍 Using preserved original intent: '{original_query}'")
+                    elif hasattr(state, "user_query") and state.user_query:
+                        original_query = state.user_query
+                        print_to_log(f"🔍 Using current user query: '{original_query}'")
+                    else:
+                        original_query = "build a machine learning model with comprehensive metrics and visualizations"
+                        print_to_log(f"🔍 Using default query: '{original_query}'")                    
                     # Parse model type from user query or use default
                     model_query = self._extract_model_request_from_query(original_query)
                     print_to_log(f"🤖 Model building query: '{model_query}'")
