@@ -106,7 +106,6 @@ class MultiAgentMLPipeline:
         graph.add_node("general_response", self._general_response_node)
         graph.add_node("code_execution", self._code_execution_node)
         graph.add_node("fast_model_pipeline", self._fast_model_pipeline_node)
-        graph.add_node("fast_model_pipeline", self._fast_model_pipeline_node)
         
         # Add edges from orchestrator to agents
         graph.add_conditional_edges(
