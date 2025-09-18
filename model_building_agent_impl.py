@@ -2783,8 +2783,10 @@ def extract_target_column_from_prompt(prompt: str) -> Optional[str]:
         r'predict\s+([a-zA-Z_][a-zA-Z0-9_]*)',
         r'([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+target\s+column',
         r'([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+target',
-    ]
-    
+        r'with\s+target\s+column\s+["'"]([a-zA-Z_][a-zA-Z0-9_]*)["'"]',  # "with target column 'f_segment'"
+        r'with\s+target\s+column\s+([a-zA-Z_][a-zA-Z0-9_]*)',  # "with target column f_segment"
+        r"with target column '([^']+)'",  # Simple pattern for single quotes    
+    ]    
     for pattern in patterns:
         match = re.search(pattern, prompt_lower)
         if match:
