@@ -439,9 +439,16 @@ Reply with the target column name (e.g., 'f_segment')"""
                         original_query = "build a machine learning model with comprehensive metrics and visualizations"
                         print_to_log(f"🔍 Using default query: '{original_query}'")                    
                     # Parse model type from user query or use default
-                    model_query = self._extract_model_request_from_query(original_query)
-                    print_to_log(f"🤖 Model building query: '{model_query}'")
+                    base_model_query = self._extract_model_request_from_query(original_query)
                     
+                    # CRITICAL: Merge original intent with target column for complete prompt
+                    # This solves the target column detection issue by including it in the prompt
+                    if state.target_column:
+                        model_query = f"{base_model_query} with target column '{state.target_column}'"
+                        print_to_log(f"🎯 Enhanced model query with target: '{model_query}'")
+                    else:
+                        model_query = base_model_query
+                        print_to_log(f"🤖 Base model query: '{model_query}'")                    
                     # Set the model building query so the agent knows what model to build
                     state.user_query = model_query
                     
