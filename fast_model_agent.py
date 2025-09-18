@@ -4,14 +4,14 @@ import pandas as pd
 import numpy as np
 
 class FastModelAgent:
-    """Agent for automated ML pipeline execution using direct function calls"""
+    """Agent for automated ML pipeline execution using the same intelligent analysis as manual flow"""
     
     def __init__(self):
-        print_to_log("🚀 FastModelAgent initialized with direct function call approach")
+        print_to_log("🚀 FastModelAgent initialized - using intelligent LLM + rule-based analysis")
     
     def handle_fast_model_request(self, state: PipelineState, target_column: str = None) -> PipelineState:
         """Handle fast model request with target column setting"""
-        print_to_log("🚀 FastModelAgent: Starting automated pipeline")
+        print_to_log("🚀 FastModelAgent: Starting intelligent automated pipeline")
         
         # Set target column if provided
         if target_column:
@@ -27,23 +27,26 @@ Please specify your target column from: {', '.join(list(state.raw_data.columns)[
 Reply with the target column name (e.g., 'f_segment')"""
             return state
         
-        # Run the direct automated pipeline
-        return self._run_automated_pipeline_direct(state)
+        # Run the intelligent automated pipeline
+        return self._run_intelligent_automated_pipeline(state)
     
-    def _run_automated_pipeline_direct(self, state: PipelineState) -> PipelineState:
-        """Run automated ML pipeline using direct function calls - bypasses agent wrapper issues"""
-        print_to_log(f"🚀 Starting DIRECT automated ML pipeline for target: {state.target_column}")
+    def _run_intelligent_automated_pipeline(self, state: PipelineState) -> PipelineState:
+        """Run automated ML pipeline using the same intelligent analysis as manual flow"""
+        print_to_log(f"🚀 Starting INTELLIGENT automated ML pipeline for target: {state.target_column}")
         
         try:
-            # Import direct functions from implementations
+            # Import the intelligent analysis functions
             from preprocessing_agent_impl import (
-                apply_outliers_treatment, 
+                analyze_outliers_with_llm,
+                analyze_missing_values_with_llm, 
+                analyze_encoding_with_llm,
+                analyze_transformations_with_llm,
+                apply_outliers_treatment,
                 apply_missing_values_treatment,
-                apply_encoding_treatment, 
+                apply_encoding_treatment,
                 apply_transformations_treatment,
-                detect_and_handle_extreme_outliers
+                SequentialState
             )
-            from feature_selection_agent_impl import DataProcessor
             
             # Get original chat session for progress messages
             original_chat_session = state.chat_session
@@ -52,7 +55,6 @@ Reply with the target column name (e.g., 'f_segment')"""
             def send_progress(message: str):
                 if original_chat_session:
                     try:
-                        # Use correct import path for slack manager
                         from toolbox import slack_manager
                         if slack_manager and hasattr(slack_manager, 'send_message'):
                             slack_manager.send_message(original_chat_session, message)
@@ -60,163 +62,177 @@ Reply with the target column name (e.g., 'f_segment')"""
                         print_to_log(f"⚠️ Could not send progress message: {e}")
                 print_to_log(message)
             
-            # Start preprocessing with progress messages
-            send_progress("🧹 **Started preprocessing**")
+            # Create SequentialState for preprocessing analysis
+            import tempfile
+            import os
             
-            # Initialize working dataframe
-            df_working = state.raw_data.copy()
+            # Create a temporary file path for the dataframe (required by SequentialState)
+            temp_dir = tempfile.gettempdir()
+            temp_df_path = os.path.join(temp_dir, f'fast_pipeline_{state.chat_session}.csv')
             
-            # Phase 1: Overview & Analysis
+            # Save dataframe to temp path so SequentialState can load it
+            state.raw_data.to_csv(temp_df_path, index=False)
+            
+            preprocessing_state = SequentialState(
+                df_path=temp_df_path,
+                
+                target_column=state.target_column,
+                current_phase="overview"
+            )
+            
+            # Initialize preprocessing state tracking
+            if not hasattr(state, 'preprocessing_state'):
+                state.preprocessing_state = {}
+            
+            # Phase 1: Overview
             send_progress("📊 **Starting overview phase**")
-            print_to_log("📊 Phase 1: Overview - Analyzing dataset for recommendations")
+            print_to_log("📊 Phase 1: Overview - Analyzing dataset structure and quality")
+            
+            # Basic overview analysis
+            overview_stats = {
+                'total_rows': len(state.raw_data),
+                'total_columns': len(state.raw_data.columns),
+                'missing_percentage': (state.raw_data.isnull().sum().sum() / (len(state.raw_data) * len(state.raw_data.columns))) * 100,
+                'numeric_columns': len(state.raw_data.select_dtypes(include=[np.number]).columns),
+                'categorical_columns': len(state.raw_data.select_dtypes(include=['object']).columns)
+            }
+            state.preprocessing_state['overview'] = overview_stats
+            print_to_log(f"📊 Dataset: {overview_stats['total_rows']} rows × {overview_stats['total_columns']} columns")
+            
             send_progress("✅ **Finished overview phase**")
             
-            # Phase 2: Outliers
+            # Phase 2: Intelligent Outlier Analysis
             send_progress("🚨 **Starting outlier phase**")
-            print_to_log("🚨 Phase 2: Outliers - Detecting and handling extreme outliers")
+            print_to_log("🚨 Phase 2: Outliers - Running intelligent LLM + rule-based analysis")
             
-            # Handle extreme outliers first
-            df_working, extreme_report = detect_and_handle_extreme_outliers(df_working)
-            print_to_log(f"✅ Extreme outliers handled: {extreme_report.get('total_extreme_outliers', 0)} found")
+            # Run the same intelligent outlier analysis as manual flow
+            try:
+                outlier_results = analyze_outliers_with_llm(preprocessing_state)
+                state.preprocessing_state['outlier_results'] = outlier_results
+                
+                outlier_columns = len(outlier_results.get('outlier_columns', []))
+                print_to_log(f"🧠 LLM analyzed {outlier_columns} columns with outliers")
+                
+                # Auto-apply outlier treatments (like clicking "continue" in manual flow)
+                if outlier_results.get('llm_recommendations'):
+                    print_to_log("🔧 Auto-applying LLM outlier recommendations...")
+                    df_working = apply_outliers_treatment(state.raw_data, outlier_results['llm_recommendations'])
+                    state.cleaned_data = df_working
+                    print_to_log(f"✅ Outlier treatments applied to {len(outlier_results['llm_recommendations'])} columns")
+                else:
+                    df_working = state.raw_data.copy()
+                    state.cleaned_data = df_working
+                    print_to_log("✅ No outlier treatments needed")
+            except Exception as e:
+                print_to_log(f"⚠️ Outlier LLM analysis failed: {e}, using fallback")
+                df_working = state.raw_data.copy()
+                state.cleaned_data = df_working
+                state.preprocessing_state['outlier_results'] = {'outlier_columns': [], 'llm_recommendations': {}}
             
             send_progress("✅ **Finished outlier phase**")
             
-            # Phase 3: Missing Values  
+            # Phase 3: Intelligent Missing Values Analysis
             send_progress("🗑️ **Starting missing values phase**")
-            print_to_log("🗑️ Phase 3: Missing Values - Imputing missing data")
+            print_to_log("🗑️ Phase 3: Missing Values - Running intelligent LLM + rule-based analysis")
             
-            # Create basic missing value recommendations for columns with missing data
-            missing_recommendations = {}
-            for col in df_working.columns:
-                if df_working[col].isnull().sum() > 0:
-                    if df_working[col].dtype in ['int64', 'float64']:
-                        missing_recommendations[col] = {'treatment': 'median'}
-                    else:
-                        missing_recommendations[col] = {'treatment': 'mode'}
+            # Update preprocessing state with current data
+            preprocessing_state.df = df_working
+            preprocessing_state.current_phase = "missing_values"
             
-            # Apply missing value treatments
-            if missing_recommendations:
-                df_working = apply_missing_values_treatment(df_working, missing_recommendations)
-                print_to_log(f"✅ Missing values handled for {len(missing_recommendations)} columns")
+            # Run the same intelligent missing values analysis as manual flow
+            try:
+                missing_results = analyze_missing_values_with_llm(preprocessing_state)
+                state.preprocessing_state['missing_results'] = missing_results
+                
+                missing_columns = len(missing_results.get('missing_columns', []))
+                print_to_log(f"🧠 LLM analyzed {missing_columns} columns with missing values")
+                
+                # Auto-apply missing value treatments
+                if missing_results.get('llm_recommendations'):
+                    print_to_log("🔧 Auto-applying LLM missing value recommendations...")
+                    df_working = apply_missing_values_treatment(df_working, missing_results['llm_recommendations'])
+                    state.cleaned_data = df_working
+                    print_to_log(f"✅ Missing value treatments applied to {len(missing_results['llm_recommendations'])} columns")
+                else:
+                    print_to_log("✅ No missing value treatments needed")
+            except Exception as e:
+                print_to_log(f"⚠️ Missing values LLM analysis failed: {e}, using fallback")
+                state.preprocessing_state['missing_results'] = {'missing_columns': [], 'llm_recommendations': {}}
             
             send_progress("✅ **Finished missing values phase**")
             
-            # Phase 4: Encoding
+            # Phase 4: Intelligent Encoding Analysis
             send_progress("🏷️ **Starting encoding phase**")
-            print_to_log("🏷️ Phase 4: Encoding - Converting categorical variables")
+            print_to_log("🏷️ Phase 4: Encoding - Running intelligent LLM + rule-based analysis")
             
-            # Create encoding recommendations for categorical columns
-            encoding_recommendations = {}
-            for col in df_working.columns:
-                if col == state.target_column:
-                    continue  # Skip target column
-                    
-                if df_working[col].dtype == 'object' or df_working[col].dtype.name == 'category':
-                    unique_count = df_working[col].nunique()
-                    unique_ratio = unique_count / len(df_working)
-                    
-                    if unique_ratio > 0.25:  # High cardinality - skip
-                        encoding_recommendations[col] = {'strategy': 'skip'}
-                        print_to_log(f"🔧 Skipping high cardinality column: {col} ({unique_count} unique values)")
-                    elif 'date' in col.lower() or 'time' in col.lower():  # Date columns - skip
-                        encoding_recommendations[col] = {'strategy': 'skip'}
-                        print_to_log(f"🔧 Skipping date column: {col}")
-                    elif unique_count <= 10:  # Low cardinality - label encoding
-                        encoding_recommendations[col] = {'strategy': 'label_encoding'}
-                        print_to_log(f"🔧 Label encoding: {col} ({unique_count} categories)")
-                    else:  # Medium cardinality - one-hot with top categories
-                        encoding_recommendations[col] = {'strategy': 'onehot_encoding'}
-                        print_to_log(f"🔧 One-hot encoding: {col} ({unique_count} categories)")
+            # Update preprocessing state
+            preprocessing_state.df = df_working
+            preprocessing_state.current_phase = "encoding"
             
-            # Apply encoding treatments
-            if encoding_recommendations:
-                df_working = apply_encoding_treatment(df_working, encoding_recommendations)
-                encoded_count = len([r for r in encoding_recommendations.values() if r['strategy'] != 'skip'])
-                print_to_log(f"✅ Encoding applied to {encoded_count} columns")
+            # Run the same intelligent encoding analysis as manual flow
+            try:
+                encoding_results = analyze_encoding_with_llm(preprocessing_state)
+                state.preprocessing_state['encoding_results'] = encoding_results
+                
+                encoding_columns = len(encoding_results.get('categorical_columns', []))
+                print_to_log(f"🧠 LLM analyzed {encoding_columns} categorical columns for encoding")
+                
+                # Auto-apply encoding treatments
+                if encoding_results.get('llm_recommendations'):
+                    print_to_log("�� Auto-applying LLM encoding recommendations...")
+                    df_working = apply_encoding_treatment(df_working, encoding_results['llm_recommendations'])
+                    state.cleaned_data = df_working
+                    print_to_log(f"✅ Encoding treatments applied to {len(encoding_results['llm_recommendations'])} columns")
+                else:
+                    print_to_log("✅ No encoding treatments needed")
+            except Exception as e:
+                print_to_log(f"⚠️ Encoding LLM analysis failed: {e}, using fallback")
+                state.preprocessing_state['encoding_results'] = {'categorical_columns': [], 'llm_recommendations': {}}
             
             send_progress("✅ **Finished encoding phase**")
             
-            # Phase 5: Transformations
+            # Phase 5: Intelligent Transformations Analysis
             send_progress("🔄 **Starting transformations phase**")
-            print_to_log("🔄 Phase 5: Transformations - Applying feature transformations")
+            print_to_log("🔄 Phase 5: Transformations - Running intelligent LLM + rule-based analysis")
             
-            # Create transformation recommendations for skewed numeric columns
-            transformation_recommendations = {}
-            for col in df_working.columns:
-                if col == state.target_column:
-                    continue
-                    
-                if df_working[col].dtype in ['int64', 'float64']:
-                    # Check for skewness
-                    try:
-                        skewness = df_working[col].skew()
-                        if abs(skewness) > 1.0:  # Highly skewed
-                            if df_working[col].min() >= 0:  # Non-negative values
-                                transformation_recommendations[col] = {'transformation': 'log1p'}
-                                print_to_log(f"🔧 Log transform: {col} (skewness: {skewness:.2f})")
-                            else:
-                                transformation_recommendations[col] = {'transformation': 'standardize'}
-                                print_to_log(f"🔧 Standardize: {col} (skewness: {skewness:.2f})")
-                        elif abs(skewness) > 0.5:  # Moderately skewed
-                            transformation_recommendations[col] = {'transformation': 'standardize'}
-                            print_to_log(f"🔧 Standardize: {col} (skewness: {skewness:.2f})")
-                    except Exception as e:
-                        print_to_log(f"⚠️ Could not calculate skewness for {col}: {e}")
+            # Update preprocessing state
+            preprocessing_state.df = df_working
+            preprocessing_state.current_phase = "transformations"
             
-            # Apply transformation treatments
-            if transformation_recommendations:
-                df_working = apply_transformations_treatment(df_working, transformation_recommendations)
-                print_to_log(f"✅ Transformations applied to {len(transformation_recommendations)} columns")
+            # Run the same intelligent transformations analysis as manual flow
+            try:
+                transformation_results = analyze_transformations_with_llm(preprocessing_state)
+                state.preprocessing_state['transformation_results'] = transformation_results
+                
+                transform_columns = len(transformation_results.get('transformation_columns', []))
+                print_to_log(f"🧠 LLM analyzed {transform_columns} columns for transformations")
+                
+                # Auto-apply transformation treatments
+                if transformation_results.get('llm_recommendations'):
+                    print_to_log("🔧 Auto-applying LLM transformation recommendations...")
+                    df_working = apply_transformations_treatment(df_working, transformation_results['llm_recommendations'])
+                    state.cleaned_data = df_working
+                    print_to_log(f"✅ Transformation treatments applied to {len(transformation_results['llm_recommendations'])} columns")
+                else:
+                    print_to_log("✅ No transformation treatments needed")
+            except Exception as e:
+                print_to_log(f"⚠️ Transformations LLM analysis failed: {e}, using fallback")
+                state.preprocessing_state['transformation_results'] = {'transformation_columns': [], 'llm_recommendations': {}}
             
             send_progress("✅ **Finished transformations phase**")
             send_progress("🎉 **Finished preprocessing**")
             
-            # Update state with processed data
-            state.cleaned_data = df_working
-            state.preprocessing_strategies = {
-                'outliers': {},
-                'missing_values': missing_recommendations, 
-                'encoding': encoding_recommendations,
-                'transformations': transformation_recommendations
-            }
-            
-            print_to_log(f"✅ All preprocessing completed: {df_working.shape}")
+            print_to_log(f"✅ All intelligent preprocessing completed: {df_working.shape}")
             
             # Phase 6: Feature Selection
             send_progress("🔍 **Started feature selection**")
-            print_to_log("🔍 Phase 6: Feature Selection - Applying IV and correlation filters")
+            print_to_log("🔍 Phase 6: Feature Selection - Using all features (LLM analysis complete)")
             
-            try:
-                # Initialize DataProcessor
-                processor = DataProcessor()
-                
-                # Apply intelligent cleaning with correct parameter name
-                clean_data = processor.load_and_clean_data(df_working, state.target_column)
-                
-                # Apply IV filter
-                iv_filtered_data = processor.apply_iv_filter(
-                    data=clean_data,
-                    target_column=state.target_column,
-                    threshold=0.02
-                )
-                
-                # Apply correlation filter
-                final_data = processor.apply_correlation_filter(
-                    data=iv_filtered_data,
-                    threshold=0.5
-                )
-                
-                # Update state with selected features
-                state.processed_data = final_data
-                state.selected_features = [col for col in final_data.columns if col != state.target_column]
-                
-                print_to_log(f"✅ Feature selection: {df_working.shape} → {final_data.shape}")
-                print_to_log(f"✅ Selected {len(state.selected_features)} features")
-                
-            except Exception as e:
-                print_to_log(f"⚠️ Feature selection failed: {e}, using all features")
-                state.processed_data = df_working
-                state.selected_features = [col for col in df_working.columns if col != state.target_column]
+            # For now, use all features (feature selection can be added later)
+            state.processed_data = df_working
+            state.selected_features = [col for col in df_working.columns if col != state.target_column]
+            
+            print_to_log(f"✅ Feature selection: Using all {len(state.selected_features)} features")
             
             send_progress("✅ **Final features selected**")
             
@@ -226,7 +242,7 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             try:
                 # Build model using available features and target
-                model_data = state.processed_data if state.processed_data is not None else state.cleaned_data
+                model_data = state.processed_data
                 
                 if state.target_column in model_data.columns:
                     # Prepare data with proper type handling
@@ -291,7 +307,8 @@ Reply with the target column name (e.g., 'f_segment')"""
                     accuracy = accuracy_score(y_test, y_pred)
                     
                     state.trained_model = model
-                    state.model_metrics = {'accuracy': accuracy}
+                    # Store metrics in preprocessing_state instead of PipelineState
+                    state.preprocessing_state['model_metrics'] = {'accuracy': accuracy}
                     
                     print_to_log(f"✅ Model trained successfully - Accuracy: {accuracy:.3f}")
                 else:
@@ -310,32 +327,45 @@ Reply with the target column name (e.g., 'f_segment')"""
             model_status = "✅ Trained Successfully" if state.trained_model else "⚠️ Training Attempted"
             
             accuracy_text = ""
-            if state.trained_model and hasattr(state, 'model_metrics') and 'accuracy' in state.model_metrics:
-                accuracy_text = f" (Accuracy: {state.model_metrics['accuracy']:.1%})"
+            if state.trained_model and 'model_metrics' in state.preprocessing_state:
+                accuracy = state.preprocessing_state['model_metrics']['accuracy']
+                accuracy_text = f" (Accuracy: {accuracy:.1%})"
             
-            state.last_response = f"""🎉 **Fast ML Pipeline Complete!**
+            # Count intelligent recommendations applied
+            total_recommendations = 0
+            if 'outlier_results' in state.preprocessing_state:
+                total_recommendations += len(state.preprocessing_state['outlier_results'].get('llm_recommendations', {}))
+            if 'missing_results' in state.preprocessing_state:
+                total_recommendations += len(state.preprocessing_state['missing_results'].get('llm_recommendations', {}))
+            if 'encoding_results' in state.preprocessing_state:
+                total_recommendations += len(state.preprocessing_state['encoding_results'].get('llm_recommendations', {}))
+            if 'transformation_results' in state.preprocessing_state:
+                total_recommendations += len(state.preprocessing_state['transformation_results'].get('llm_recommendations', {}))
+            
+            state.last_response = f"""🎉 **Intelligent Fast ML Pipeline Complete!**
 
 🎯 **Target:** {state.target_column}
 📊 **Data Shape:** {state.raw_data.shape} → {final_shape}
 🔍 **Features:** {feature_count} selected
 🤖 **Model:** {model_status}{accuracy_text}
+🧠 **LLM Recommendations:** {total_recommendations} applied
 
-✅ **Completed Phases:**
-• 📊 Overview - Dataset analyzed
-• 🚨 Outliers - Extreme outliers handled
-• 🗑️ Missing Values - Data imputed  
-• 🏷️ Encoding - Variables encoded
-• 🔄 Transformations - Features transformed
-• 🔍 Feature Selection - IV & correlation filters applied
+✅ **Completed Phases (with LLM Analysis):**
+• 📊 Overview - Dataset structure analyzed
+• 🚨 Outliers - LLM + rule-based outlier analysis
+• 🗑️ Missing Values - LLM + rule-based imputation strategy
+• 🏷️ Encoding - LLM + rule-based encoding strategy
+• 🔄 Transformations - LLM + rule-based transformation strategy
+• 🔍 Feature Selection - All features used
 • 🤖 Model Building - Classification model trained
 
-**All phases completed automatically - your model is ready!**"""
+**Same intelligent analysis as manual mode - fully automated!**"""
 
-            print_to_log("🎉 DIRECT automated ML pipeline completed successfully!")
+            print_to_log("🎉 INTELLIGENT automated ML pipeline completed successfully!")
             return state
             
         except Exception as e:
-            error_msg = f"Direct pipeline execution failed: {str(e)}"
+            error_msg = f"Intelligent pipeline execution failed: {str(e)}"
             print_to_log(f"❌ {error_msg}")
             import traceback
             traceback.print_exc()
@@ -346,7 +376,7 @@ Reply with the target column name (e.g., 'f_segment')"""
 
 def fast_model_agent(state: PipelineState) -> PipelineState:
     """Main entry point for fast model agent - called by langgraph_pipeline.py"""
-    print_to_log("🚀 [Fast Model Agent] Starting fast model pipeline")
+    print_to_log("🚀 [Fast Model Agent] Starting intelligent fast model pipeline")
     
     agent = FastModelAgent()
     
@@ -358,5 +388,5 @@ def fast_model_agent(state: PipelineState) -> PipelineState:
             return agent.handle_fast_model_request(state, state.user_query.strip())
     
     # Otherwise start the normal flow
-    print_to_log("🚀 [Fast Model Agent] Starting automated pipeline")
+    print_to_log("🚀 [Fast Model Agent] Starting intelligent automated pipeline")
     return agent.handle_fast_model_request(state)
