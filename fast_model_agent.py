@@ -354,17 +354,19 @@ Reply with the target column name (e.g., 'f_segment')"""
                 if DataProcessor.load_and_clean_data(session):
                     clean_data = session.current_df
                     print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
-                    
+                    send_progress("🔍 **Started IV Value Filtering with threshold 0.02**")
                     print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.02)")
                     # Apply IV filter with 0.02 threshold
                     iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.02)
+                    send_progress("🔍 **IV Value filtering complete**")
                     if 'error' not in iv_results:
                         iv_filtered_data = session.current_df  # Data is updated in session
                         print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
-                        
+                        send_progress("🔍 **Started VIF Value Filtering with threshold 5**")
                         print_to_log("🔧 Step 4: Applying VIF (threshold > 5)")
                         # Apply VIF filter with 5 threshold
                         vif_results = AnalysisEngine.run_vif_analysis(session, threshold=5)
+                        send_progress("🔍 **VIF Value filtering complete**")
                         if 'error' not in vif_results:
                             final_data = session.current_df  # Data is updated in session
                             print_to_log(f"   📊 After VIF filtering: {final_data.shape}")
