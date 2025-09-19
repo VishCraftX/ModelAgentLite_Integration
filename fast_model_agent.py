@@ -329,7 +329,7 @@ Reply with the target column name (e.g., 'f_segment')"""
             
             # Phase 6: Feature Selection (following actual flow)
             send_progress("🔍 **Started feature selection**")
-            print_to_log("🔍 Phase 6: Feature Selection - Following actual flow with IV and correlation filtering")
+            print_to_log("🔍 Phase 6: Feature Selection - Following actual flow with IV and VIF filtering")
             
             try:
                 from feature_selection_agent_impl import DataProcessor, AnalysisEngine, UserSession
@@ -363,14 +363,14 @@ Reply with the target column name (e.g., 'f_segment')"""
                         iv_filtered_data = session.current_df  # Data is updated in session
                         print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
                         
-                        print_to_log("🔧 Step 4: Applying correlation filter (threshold > 0.7)")
-                        # Apply correlation filter with 0.5 threshold
-                        corr_results = AnalysisEngine.run_correlation_analysis(session, threshold=0.7)
-                        if 'error' not in corr_results:
+                        print_to_log("🔧 Step 4: Applying VIF (threshold > 5)")
+                        # Apply VIF filter with 5 threshold
+                        vif_results = AnalysisEngine.run_vif_analysis(session, threshold=5)
+                        if 'error' not in vif_results:
                             final_data = session.current_df  # Data is updated in session
-                            print_to_log(f"   📊 After correlation filtering: {final_data.shape}")
+                            print_to_log(f"   📊 After VIF filtering: {final_data.shape}")
                         else:
-                            print_to_log(f"   ⚠️ Correlation filtering failed: {corr_results.get('error', 'Unknown error')}")
+                            print_to_log(f"   ⚠️ VIF filtering failed: {vif_results.get('error', 'Unknown error')}")
                             final_data = iv_filtered_data
                     else:
                         print_to_log(f"   ⚠️ IV filtering failed: {iv_results.get('error', 'Unknown error')}")
