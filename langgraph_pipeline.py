@@ -17,6 +17,7 @@ import os
 import time
 from datetime import datetime
 
+import pandas as pd
 # Import thread logging system
 from thread_logger import get_thread_logger, close_thread_logger
 
@@ -1145,11 +1146,66 @@ Generate Python code to fulfill this request:"""
             print_to_log(f"[SimplifiedPipeline] Unknown agent type: {agent_type}")
             return state
     
-    def process_query(self, 
-                     query: str, 
-                     session_id: str = None,
-                     raw_data: Optional[Any] = None,
-                     progress_callback: Optional[Callable] = None) -> Dict[str, Any]:
+    def _find_target_column_enhanced(self, user_specified: str, available_columns: list) -> tuple:
+        """
+        Find target column using ENHANCED fuzzy matching.
+        
+        Handles variations like:
+        - f_segment → f_segment (exact)
+        - fsegment → f_segment (normalized)
+        - F_segment → f_segment (case insensitive)
+        - f segment → f_segment (normalized)
+        - segment → f_segment (partial)
+        """
+        if not user_specified or not available_columns:
+            return None, 'none'
+        
+        user_specified = user_specified.strip()
+        available_columns = [col.strip() for col in available_columns]
+        
+        # 1. Exact match
+        if user_specified in available_columns:
+            return user_specified, 'exact'
+        
+        # 2. Case-insensitive match
+        user_lower = user_specified.lower()
+        for col in available_columns:
+            if col.lower() == user_lower:
+                return col, 'case_insensitive'
+        
+        # 3. ENHANCED: Normalized matching (remove spaces, underscores, special chars)
+        def normalize_text(text: str) -> str:
+            """Remove spaces, underscores, and convert to lowercase"""
+            import re
+            return re.sub(r'[_\s\-\.]+', '', text.lower())
+        
+        user_normalized = normalize_text(user_specified)
+        if user_normalized:  # Only proceed if we have normalized text
+            for col in available_columns:
+                col_normalized = normalize_text(col)
+                if user_normalized == col_normalized and col_normalized:
+                    return col, 'normalized'
+        
+        # 4. Partial match (user input is substring of column name)
+        for col in available_columns:
+            if user_lower in col.lower():
+                return col, 'partial'
+        
+        # 5. Reverse partial match (column name is substring of user input)
+        for col in available_columns:
+            if col.lower() in user_lower:
+                return col, 'partial'
+        
+        # 6. ENHANCED: Normalized partial matching
+        if user_normalized:
+            for col in available_columns:
+                col_normalized = normalize_text(col)
+                if col_normalized and (user_normalized in col_normalized or col_normalized in user_normalized):
+                    return col, 'normalized_partial'
+        
+        return None, 'none'
+
+    def process_query(self, query: str, session_id: str, raw_data: pd.DataFrame = None) -> Dict[str, Any]:
         """
         Main entry point for processing user queries
         """
@@ -1254,20 +1310,46 @@ Generate Python code to fulfill this request:"""
             
             print_to_log(f"🎯 [Early Interception] Target column needed, checking query: '{query}'")
             
-            # Check if query looks like a column name
-            if (state.raw_data is not None and 
-                query.strip() in state.raw_data.columns):
+            # Check if query looks like a column name with FUZZY MATCHING
+            if state.raw_data is not None:
+                available_columns = list(state.raw_data.columns)
                 
-                target_col = query.strip()
-                state.target_column = target_col
-                state.interactive_session['target_column'] = target_col
-                state.interactive_session['needs_target'] = False
-                state.interactive_session['needs_mode_selection'] = True
+                # Use enhanced fuzzy matching function
+                matched_column, match_type = self._find_target_column_enhanced(query.strip(), available_columns)
                 
-                print_to_log(f"✅ [Early Interception] Target column set: {target_col}")
-                
-                # Show mode choice message
-                mode_choice_msg = f"""✅ **Target column set:** `{target_col}`
+                if matched_column:
+                    target_col = matched_column
+                    state.target_column = target_col
+                    state.interactive_session['target_column'] = target_col
+                    state.interactive_session['needs_target'] = False
+                    state.interactive_session['needs_mode_selection'] = True
+                    
+                    # Log the fuzzy matching result
+                    if match_type == 'exact':
+                        print_to_log(f"✅ [Early Interception] Target column set: {target_col} (exact match)")
+                    else:
+                        print_to_log(f"✅ [Early Interception] Target column set: {target_col} (fuzzy match: {match_type})")
+                        print_to_log(f"   🔍 User input: '{query.strip()}' → Matched: '{target_col}'")
+                else:
+                    # No match found - show available columns
+                    available_cols_preview = ', '.join(available_columns[:5])
+                    if len(available_columns) > 5:
+                        available_cols_preview += f" ... and {len(available_columns) - 5} more"
+                    
+                    error_msg = f"""❌ **Target column not found**
+
+🔍 **Your input:** `{query.strip()}`
+
+📊 **Available columns:** {available_cols_preview}
+
+💡 **Try:** Type the exact column name (case-sensitive) or a close variation"""
+                    
+                    self.slack_manager.send_message(session_id, error_msg)
+                    return self._prepare_response(state, f"Target column '{query.strip()}' not found. Please try again.")
+                    
+                # If we have a valid target, show mode choice
+                if hasattr(state, 'target_column') and state.target_column:
+                    mode_choice_msg = f"""✅ **Target column set:** `{target_col}`
 
 🚀 **Choose Your ML Pipeline Mode**
 
@@ -1285,12 +1367,12 @@ Generate Python code to fulfill this request:"""
 • Full control over decisions
 
 💬 **Choose:** Type `fast` or `slow`"""
-                
-                self.slack_manager.send_message(session_id, mode_choice_msg)
-                
-                # Save state and return
-                self._save_session_state(session_id, state)
-                return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
+                    
+                    self.slack_manager.send_message(session_id, mode_choice_msg)
+                    
+                    # Save state and return
+                    self._save_session_state(session_id, state)
+                    return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
         
         # Handle mode selection (fast vs slow)
         elif (hasattr(state, 'interactive_session') and 
@@ -1620,7 +1702,7 @@ Generate Python code to fulfill this request:"""
                 state.interactive_session = None
             elif is_continuation or is_target_specification:
                 print_to_log(f"🔄 Continuing interactive session: {state.interactive_session['agent_type']}")
-                print_to_log(f"🔧 DEBUG CONTINUATION: Query='{query}', Agent={state.interactive_session['agent_type']}")
+                print_to_log(f"�� DEBUG CONTINUATION: Query='{query}', Agent={state.interactive_session['agent_type']}")
                 print_to_log(f"🔧 DEBUG CONTINUATION: Session ID={state.chat_session}")
                 print_to_log(f"🔧 DEBUG CONTINUATION: Interactive session details={state.interactive_session}")
                 

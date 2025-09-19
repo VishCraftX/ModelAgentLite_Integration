@@ -356,16 +356,16 @@ Reply with the target column name (e.g., 'f_segment')"""
                     clean_data = session.current_df
                     print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
                     
-                    print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.01)")
+                    print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.02)")
                     # Apply IV filter with 0.02 threshold
-                    iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.01)
+                    iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.02)
                     if 'error' not in iv_results:
                         iv_filtered_data = session.current_df  # Data is updated in session
                         print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
                         
-                        print_to_log("🔧 Step 4: Applying correlation filter (threshold > 0.5)")
+                        print_to_log("🔧 Step 4: Applying correlation filter (threshold > 0.7)")
                         # Apply correlation filter with 0.5 threshold
-                        corr_results = AnalysisEngine.run_correlation_analysis(session, threshold=0.5)
+                        corr_results = AnalysisEngine.run_correlation_analysis(session, threshold=0.7)
                         if 'error' not in corr_results:
                             final_data = session.current_df  # Data is updated in session
                             print_to_log(f"   📊 After correlation filtering: {final_data.shape}")
