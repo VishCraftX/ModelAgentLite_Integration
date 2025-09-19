@@ -3006,9 +3006,6 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
                 print_to_log(f"🎯 TARGET COLUMN: {error_msg}")
                 return error_msg, "", ""
             
-            error_msg = f"❌ No target column found. Please specify the target column in your request. Available columns: {available_cols_str}"
-            print_to_log(f"🎯 TARGET COLUMN: {error_msg}")
-            return error_msg, "", ""
     
     # Final target column validation
     if target_column and sample_data is not None:
