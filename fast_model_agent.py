@@ -35,8 +35,10 @@ class FastModelAgent:
         elif "naive bayes" in query_lower:
             return "build a Naive Bayes model"
         else:
-            # Default to Random Forest for fast mode
-            return "build a machine learning model with comprehensive metrics and visualizations"
+            # 🎯 IMPROVED DEFAULT: Use Random Forest for generic prompts
+            # This handles cases like "build me a model", "clean my data", "fast", etc.
+            print_to_log("🤖 No specific model mentioned - defaulting to Random Forest (best for general use)")
+            return "build a Random Forest model"
 
     def handle_fast_model_request(self, state: PipelineState, target_column: str = None) -> PipelineState:
         """Handle fast model request with target column setting"""
@@ -278,7 +280,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 
                 # Auto-apply encoding treatments
                 if encoding_results.get('llm_recommendations'):
-                    print_to_log("�� Auto-applying LLM encoding recommendations...")
+                    print_to_log("🔧 Auto-applying LLM encoding recommendations...")
                     df_working = apply_encoding_treatment(df_working, encoding_results['llm_recommendations'])
                     state.cleaned_data = df_working
                     print_to_log(f"✅ Encoding treatments applied to {len(encoding_results['llm_recommendations'])} columns")
@@ -354,9 +356,9 @@ Reply with the target column name (e.g., 'f_segment')"""
                     clean_data = session.current_df
                     print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
                     
-                    print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.02)")
+                    print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.01)")
                     # Apply IV filter with 0.02 threshold
-                    iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.02)
+                    iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.01)
                     if 'error' not in iv_results:
                         iv_filtered_data = session.current_df  # Data is updated in session
                         print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
