@@ -159,7 +159,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 state.preprocessing_state = {}
             
             # Phase 1: Overview
-            send_progress("📊 **Starting overview phase**")
+        
             print_to_log("📊 Phase 1: Overview - Analyzing dataset structure and quality")
             
             # Basic overview analysis
@@ -172,8 +172,7 @@ Reply with the target column name (e.g., 'f_segment')"""
             }
             state.preprocessing_state['overview'] = overview_stats
             print_to_log(f"📊 Dataset: {overview_stats['total_rows']} rows × {overview_stats['total_columns']} columns")
-            
-            send_progress("✅ **Finished overview phase**")
+        
             
             # Phase 2: Intelligent Outlier Analysis
             send_progress("🚨 **Starting outlier phase**")
