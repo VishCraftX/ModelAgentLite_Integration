@@ -2851,7 +2851,9 @@ def extract_target_column_from_prompt(prompt: str) -> Optional[str]:
         r'([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s+target',
         r'with\s+target\s+column\s+["'"]([a-zA-Z_][a-zA-Z0-9_]*)["'"]',  # "with target column 'f_segment'"
         r'with\s+target\s+column\s+([a-zA-Z_][a-zA-Z0-9_]*)',  # "with target column f_segment"
-        r"with target column '([^']+)'",  # Simple pattern for single quotes    
+        r"with target column '([^']+)'",  # Simple pattern for single quotes
+        r'with\s+target\s+([a-zA-Z_][a-zA-Z0-9_]*)',  # "with target f_segment" - CRITICAL MISSING PATTERN
+        r'target\s+([a-zA-Z_][a-zA-Z0-9_]*)',  # "target f_segment"
     ]    
     for pattern in patterns:
         match = re.search(pattern, prompt_lower)
@@ -2971,10 +2973,37 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
             target_column_source = "default_target_column"
             print_to_log(f"🎯 TARGET COLUMN: Using default 'target' column")
         else:
-            # No target column found anywhere - ask user to specify
-            available_cols_str = ", ".join(sample_data.columns[:10])  # Show first 10 columns
-            if len(sample_data.columns) > 10:
-                available_cols_str += f" ... and {len(sample_data.columns) - 10} more"
+            # FALLBACK: Try to read target column from session state
+            print_to_log(f"🔍 TARGET COLUMN: Attempting session state fallback for user: {user_id}")
+            try:
+                from langgraph_pipeline import MultiAgentMLPipeline
+                pipeline = MultiAgentMLPipeline()
+                
+                # Try to load session state
+                session_state = pipeline._load_session_state(user_id)
+                if session_state and hasattr(session_state, 'target_column') and session_state.target_column:
+                    # Verify the target column exists in the current data
+                    if session_state.target_column in sample_data.columns:
+                        target_column = session_state.target_column
+                        target_column_source = "session_state_fallback"
+                        print_to_log(f"✅ TARGET COLUMN: Found in session state: '{target_column}'")
+                    else:
+                        print_to_log(f"⚠️ TARGET COLUMN: Session state target '{session_state.target_column}' not in current data columns")
+                else:
+                    print_to_log(f"🔍 TARGET COLUMN: No target found in session state")
+                    
+            except Exception as e:
+                print_to_log(f"⚠️ TARGET COLUMN: Session state fallback failed: {e}")
+            
+            # If still no target column found anywhere - ask user to specify
+            if not target_column:
+                available_cols_str = ", ".join(sample_data.columns[:10])  # Show first 10 columns
+                if len(sample_data.columns) > 10:
+                    available_cols_str += f" ... and {len(sample_data.columns) - 10} more"
+                
+                error_msg = f"❌ No target column found. Please specify the target column in your request. Available columns: {available_cols_str}"
+                print_to_log(f"🎯 TARGET COLUMN: {error_msg}")
+                return error_msg, "", ""
             
             error_msg = f"❌ No target column found. Please specify the target column in your request. Available columns: {available_cols_str}"
             print_to_log(f"🎯 TARGET COLUMN: {error_msg}")

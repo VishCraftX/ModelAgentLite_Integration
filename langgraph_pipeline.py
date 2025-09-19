@@ -1324,6 +1324,13 @@ Generate Python code to fulfill this request:"""
                 if matched_column:
                     target_col = matched_column
                     state.target_column = target_col
+                    # IMMEDIATE SAVE: Persist target column to session state for fallback
+                    try:
+                        state_manager.save_state(state)
+                        print_to_log(f"💾 Immediately saved target column '{target_col}' to session state")
+                    except Exception as e:
+                        print_to_log(f"⚠️ Could not immediately save target column: {e}")
+                    
                     state.interactive_session['target_column'] = target_col
                     state.interactive_session['needs_target'] = False
                     state.interactive_session['needs_mode_selection'] = True

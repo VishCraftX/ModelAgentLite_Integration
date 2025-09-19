@@ -2844,6 +2844,14 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
         if target_column and target_column in available_columns:
             # Set target column and continue preprocessing
             state.target_column = target_column
+            
+            # IMMEDIATE SAVE: Persist target column to session state for fallback
+            try:
+                from state_management import state_manager
+                state_manager.save_state(state)
+                print_to_log(f"💾 Immediately saved target column '{target_column}' to session state")
+            except Exception as e:
+                print_to_log(f"⚠️ Could not immediately save target column: {e}")
             print_to_log(f"✅ Target column set: {target_column}")
             
             # Send confirmation message
