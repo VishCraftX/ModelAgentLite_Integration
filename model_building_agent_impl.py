@@ -2981,16 +2981,17 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
                 
                 # Try to load session state
                 session_state = pipeline._load_session_state(user_id)
-                if session_state and hasattr(session_state, 'target_column') and session_state.target_column:
+                if session_state and isinstance(session_state, dict) and session_state.get('target_column'):
                     # Verify the target column exists in the current data
-                    if session_state.target_column in sample_data.columns:
-                        target_column = session_state.target_column
+                    session_target = session_state.get('target_column')
+                    if session_target in sample_data.columns:
+                        target_column = session_target
                         target_column_source = "session_state_fallback"
                         print_to_log(f"✅ TARGET COLUMN: Found in session state: '{target_column}'")
                     else:
-                        print_to_log(f"⚠️ TARGET COLUMN: Session state target '{session_state.target_column}' not in current data columns")
+                        print_to_log(f"⚠️ TARGET COLUMN: Session state target '{session_target}' not in current data columns")
                 else:
-                    print_to_log(f"🔍 TARGET COLUMN: No target found in session state")
+                    print_to_log(f"🔍 TARGET COLUMN: No target found in session state (session_state type: {type(session_state)})")
                     
             except Exception as e:
                 print_to_log(f"⚠️ TARGET COLUMN: Session state fallback failed: {e}")
