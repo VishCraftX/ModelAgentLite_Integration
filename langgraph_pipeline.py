@@ -1205,7 +1205,11 @@ Generate Python code to fulfill this request:"""
         
         return None, 'none'
 
-    def process_query(self, query: str, session_id: str, raw_data: pd.DataFrame = None) -> Dict[str, Any]:
+    def process_query(self, 
+                     query: str, 
+                     session_id: str = None,
+                     raw_data: Optional[Any] = None,
+                     progress_callback: Optional[Callable] = None) -> Dict[str, Any]:
         """
         Main entry point for processing user queries
         """
