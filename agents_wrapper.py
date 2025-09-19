@@ -207,7 +207,9 @@ class PreprocessingAgentWrapper:
                 "session_id": state.chat_session,
                 "phase": phase,
                 "target_column": state.target_column,
-                "current_phase": "overview"
+                "current_phase": "overview",
+                "needs_target": (phase == "need_target"),
+                "needs_mode_selection": False
             }
             
             # Set preprocessing state as active

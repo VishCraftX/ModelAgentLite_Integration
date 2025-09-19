@@ -105,7 +105,6 @@ class MultiAgentMLPipeline:
         graph.add_node("model_building", self._model_building_node)
         graph.add_node("general_response", self._general_response_node)
         graph.add_node("code_execution", self._code_execution_node)
-        graph.add_node("fast_model_pipeline", self._fast_model_pipeline_node)
         
         # Add edges from orchestrator to agents
         graph.add_conditional_edges(
@@ -117,7 +116,6 @@ class MultiAgentMLPipeline:
                 AgentType.MODEL_BUILDING.value: "model_building",
                 "general_response": "general_response",
                 "code_execution": "code_execution",
-                "fast_model_pipeline": "fast_model_pipeline",
                 AgentType.END.value: END
             }
         )
@@ -158,7 +156,6 @@ class MultiAgentMLPipeline:
         
         # Code execution and general response always end after completion
         graph.add_edge("code_execution", END)
-        graph.add_edge("fast_model_pipeline", END)
         graph.add_edge("general_response", END)
         
         # Set entry point
@@ -435,15 +432,6 @@ Generate Python code to fulfill this request:"""
             state.last_response = f"❌ Code execution failed: {str(e)}"
             return state
     
-    def _fast_model_pipeline_node(self, state: PipelineState) -> PipelineState:
-        """Fast model pipeline node - handles automated ML pipeline"""
-        print_to_log(f"\n🚀 [Fast Model Pipeline] Starting automated ML pipeline")
-        print_to_log(f"🔍 [Fast Model Pipeline] Query: '{state.user_query}'")
-        
-        # Import the fast model agent
-        from fast_model_agent import fast_model_agent
-        
-        return fast_model_agent(state)
     
     def _get_user_session_dir(self, session_id: str) -> str:
         """Get user session directory for conversation history"""
@@ -1257,6 +1245,97 @@ Generate Python code to fulfill this request:"""
         
         # Update user query (always use the new query, not the saved one)
         state.user_query = query
+        
+        # ===== EARLY INTERCEPTION: TARGET COLUMN & MODE SELECTION =====
+        # Handle target column specification (before any orchestrator routing)
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session is not None and 
+            state.interactive_session.get('needs_target', False)):
+            
+            print_to_log(f"🎯 [Early Interception] Target column needed, checking query: '{query}'")
+            
+            # Check if query looks like a column name
+            if (state.raw_data is not None and 
+                query.strip() in state.raw_data.columns):
+                
+                target_col = query.strip()
+                state.target_column = target_col
+                state.interactive_session['target_column'] = target_col
+                state.interactive_session['needs_target'] = False
+                state.interactive_session['needs_mode_selection'] = True
+                
+                print_to_log(f"✅ [Early Interception] Target column set: {target_col}")
+                
+                # Show mode choice message
+                mode_choice_msg = f"""✅ **Target column set:** `{target_col}`
+
+🚀 **Choose Your ML Pipeline Mode**
+
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target:** {target_col}
+
+**⚡ Fast Mode (Automated):** 
+• Complete ML pipeline without interaction
+• AI handles all preprocessing decisions
+• Get results in 2-3 minutes
+
+**🎛️ Slow Mode (Interactive):** 
+• Step-by-step guided process
+• Review and approve each phase
+• Full control over decisions
+
+💬 **Choose:** Type `fast` or `slow`"""
+                
+                self.slack_manager.send_message(session_id, mode_choice_msg)
+                
+                # Save state and return
+                self._save_session_state(session_id, state)
+                return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
+        
+        # Handle mode selection (fast vs slow)
+        elif (hasattr(state, 'interactive_session') and 
+              state.interactive_session is not None and 
+              state.interactive_session.get('needs_mode_selection', False)):
+            
+            print_to_log(f"🎯 [Early Interception] Mode selection needed, checking query: '{query}'")
+            query_lower = query.lower().strip()
+            
+            if 'fast' in query_lower:
+                print_to_log("⚡ [Early Interception] Fast mode selected")
+                state.interactive_session['needs_mode_selection'] = False
+                state.interactive_session['mode_selected'] = 'fast'
+                
+                self.slack_manager.send_message(session_id, "⚡ **Fast Mode Selected** - Starting automated ML pipeline...")
+                
+                # Directly call fast model agent
+                from fast_model_agent import fast_model_agent
+                
+                # Save state before calling fast agent
+                self._save_session_state(session_id, state)
+                
+                # Call fast model agent directly
+                result_state = fast_model_agent(state)
+                
+                # Save result and return
+                self._save_session_state(session_id, result_state)
+                return self._prepare_response(result_state, "Fast mode pipeline completed!")
+                
+            elif 'slow' in query_lower:
+                print_to_log("🎛️ [Early Interception] Slow mode selected")
+                state.interactive_session['needs_mode_selection'] = False
+                state.interactive_session['mode_selected'] = 'slow'
+                state.interactive_session['session_active'] = True
+                state.interactive_session['agent_type'] = 'preprocessing'
+                state.interactive_session['phase'] = 'waiting_input'
+                
+                self.slack_manager.send_message(session_id, "🎛️ **Slow Mode Selected** - Starting interactive preprocessing...")
+                
+                # Continue to normal interactive flow below
+                self._save_session_state(session_id, state)
+                
+            else:
+                self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
+                return self._prepare_response(state, "Please choose fast or slow mode.")
         
         # Clear pending file uploads for new queries - they should only be relevant to current query
         if state.pending_file_uploads:
