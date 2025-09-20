@@ -84,7 +84,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 apply_transformations_treatment,
                 SequentialState
             )
-            from unified_strategy_applicator import UnifiedStrategyApplicator
+
             
             # Get original chat session for progress messages
             original_chat_session = state.chat_session
