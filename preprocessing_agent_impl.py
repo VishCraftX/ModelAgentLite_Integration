@@ -735,20 +735,21 @@ Column: {col}
     
     prompt += f"""
 
-IMPUTATION STRATEGIES:
-- "mean": For normally distributed numeric data with low missing%
-- "median": For skewed numeric data or data with outliers
-- "mode": For categorical data or highly skewed numeric
-- "forward_fill": For time series data
-- "model_based": For high correlation with other features
-- "constant": For specific business logic (e.g., 0 for amounts)
-- "drop_column": If missing > 70% and low importance
-- "keep_missing": If missingness itself is informative
+AVAILABLE STRATEGIES (ML-SAFE ONLY):
+- "median": For numeric data (recommended - robust to outliers)
+- "mean": For normally distributed numeric data  
+- "mode": For categorical data (most frequent value)
+- "constant": For specific defaults (0 for numeric, "Unknown" for categorical)
+
+SELECTION RULES:
+- Numeric columns: Use "median" (handles outliers and skewness)
+- Categorical columns: Use "mode" (preserves distribution)
+- High missing% (>50%): Use "constant" with appropriate default
 
 Return JSON with imputation recommendations:
 {{
   "column_name": {{
-    "strategy": "mean/median/mode/model_based/constant/drop_column/keep_missing",
+    "strategy": "median/mean/mode/constant",
     "reasoning": "Statistical justification for this choice",
     "priority": "high/medium/low",
     "constant_value": "if strategy is constant, specify the value"
@@ -2967,6 +2968,16 @@ def apply_missing_values_treatment(df: pd.DataFrame, recommendations: Dict[str, 
             df_processed[col] = df_processed[col].fillna(constant_value)
             print_to_log(f"   • {col}: Filled with constant ({constant_value})")
         
+        elif strategy == 'model_based':
+            # Simple model-based imputation (fallback to median/mode)
+            if pd.api.types.is_numeric_dtype(df_processed[col]):
+                df_processed[col] = df_processed[col].fillna(df_processed[col].median())
+                print_to_log(f"   • {col}: Model-based imputation (fallback to median)")
+            else:
+                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else 'Unknown'
+                df_processed[col] = df_processed[col].fillna(mode_val)
+                print_to_log(f"   • {col}: Model-based imputation (fallback to mode)")
+        
         else:
             print_to_log(f"⚠️ Unknown missing value strategy '{strategy}' for {col}, using smart default")
             # Simple fallback to safe defaults
@@ -2977,19 +2988,7 @@ def apply_missing_values_treatment(df: pd.DataFrame, recommendations: Dict[str, 
                 mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else 'Unknown'
                 df_processed[col] = df_processed[col].fillna(mode_val)
                 print_to_log(f"   • {col}: Applied mode (default for categorical)")
-        
-        elif strategy == 'model_based':
-            # Simple model-based imputation (e.g., using median/mode as fallback)
-            if pd.api.types.is_numeric_dtype(df_processed[col]):
-                df_processed[col] = df_processed[col].fillna(df_processed[col].median())
-                print_to_log(f"   • {col}: Model-based imputation (fallback to median)")
-            else:
-                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else ''
-                df_processed[col] = df_processed[col].fillna(mode_val)
-                print_to_log(f"   • {col}: Model-based imputation (fallback to mode)")
-        
-        else:
-            print_to_log(f"⚠️ Unknown missing value strategy '{strategy}' for {col}, kept as-is")
+
     
     print_to_log(f"✅ Missing value treatment complete. Final shape: {df_processed.shape}")
     return df_processed

@@ -906,6 +906,16 @@ class PreprocessingAgentWrapper:
                                     
                                     df[col] = df[col].fillna(constant_value)
                                     applied_treatments.append(f"• {col}: Filled with constant ({constant_value})")
+                                elif strategy == 'model_based':
+                                    # Simple model-based imputation (fallback to median/mode)
+                                    if pd.api.types.is_numeric_dtype(df[col]):
+                                        df[col] = df[col].fillna(df[col].median())
+                                        applied_treatments.append(f"• {col}: Model-based (fallback median)")
+                                    else:
+                                        mode_val = df[col].mode()
+                                        fill_val = mode_val.iloc[0] if not mode_val.empty else 'Unknown'
+                                        df[col] = df[col].fillna(fill_val)
+                                        applied_treatments.append(f"• {col}: Model-based (fallback mode)")
                                 else:
                                     # Simple fallback for any unknown strategy
                                     if pd.api.types.is_numeric_dtype(df[col]):
@@ -916,16 +926,6 @@ class PreprocessingAgentWrapper:
                                         fill_val = mode_val.iloc[0] if not mode_val.empty else 'Unknown'
                                         df[col] = df[col].fillna(fill_val)
                                         applied_treatments.append(f"• {col}: Mode (default)")
-                                elif strategy == 'model_based':
-                                    # Placeholder: fall back to median/most_frequent depending on dtype
-                                    if pd.api.types.is_numeric_dtype(df[col]):
-                                        df[col] = df[col].fillna(df[col].median())
-                                        applied_treatments.append(f"• {col}: Model-based (fallback median)")
-                                    else:
-                                        mode_val = df[col].mode()
-                                        fill_val = mode_val.iloc[0] if not mode_val.empty else df[col].dropna().iloc[0] if df[col].dropna().shape[0] else ''
-                                        df[col] = df[col].fillna(fill_val)
-                                        applied_treatments.append(f"• {col}: Model-based (fallback mode)")
 
                         # Update state with processed data
                         state.cleaned_data = df
