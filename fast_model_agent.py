@@ -81,7 +81,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 apply_outliers_treatment,
                 apply_missing_values_treatment,
                 apply_encoding_treatment,
-                apply_transformations_treatment,
+                
                 SequentialState
             )
 
@@ -291,43 +291,11 @@ Reply with the target column name (e.g., 'f_segment')"""
                 state.preprocessing_state['encoding_results'] = {'categorical_columns': [], 'llm_recommendations': {}}
             
             send_progress("✅ **Finished encoding phase**")
-            
-            # Phase 5: Intelligent Transformations Analysis
-            send_progress("🔄 **Starting transformations phase**")
-            print_to_log("🔄 Phase 5: Transformations - Running intelligent LLM + rule-based analysis")
-            
-            # Update preprocessing state
-            preprocessing_state.df = df_working
-            preprocessing_state.current_phase = "transformations"
-            
-            # Run the same intelligent transformations analysis as manual flow
-            try:
-                # Use confidence-based processor (high-confidence rules + LLM fallback with timeout)
-                print_to_log("🎯 Starting confidence-based transformation analysis (2-min timeout)...")
-                transformation_results = confidence_processor.analyze_phase_with_confidence(preprocessing_state, "transformations")
-                state.preprocessing_state['transformation_results'] = transformation_results
-                
-                transform_columns = len(transformation_results.get('transformation_columns', []))
-                print_to_log(f"🧠 LLM analyzed {transform_columns} columns for transformations")
-                
-                # Auto-apply transformation treatments
-                if transformation_results.get('llm_recommendations'):
-                    print_to_log("🔧 Auto-applying LLM transformation recommendations...")
-                    df_working = apply_transformations_treatment(df_working, transformation_results['llm_recommendations'], state.target_column)
-                    state.cleaned_data = df_working
-                    print_to_log(f"✅ Transformation treatments applied to {len(transformation_results['llm_recommendations'])} columns")
-                else:
-                    print_to_log("✅ No transformation treatments needed")
-            except Exception as e:
-                print_to_log(f"⚠️ Transformations LLM analysis failed: {e}, using fallback")
-                state.preprocessing_state['transformation_results'] = {'transformation_columns': [], 'llm_recommendations': {}}
-            
-            send_progress("✅ **Finished transformations phase**")
             send_progress("🎉 **Finished preprocessing**")
             
             print_to_log(f"✅ All intelligent preprocessing completed: {df_working.shape}")
             
-            # Phase 6: Feature Selection (following actual flow)
+            # Phase 5: Feature Selection (following actual flow)
             send_progress("🔍 **Started feature selection**")
             print_to_log("🔍 Phase 6: Feature Selection - Following actual flow with IV and VIF filtering")
             
@@ -592,7 +560,7 @@ Reply with the target column name (e.g., 'f_segment')"""
 • 🚨 Outliers - LLM + rule-based outlier analysis
 • 🗑️ Missing Values - LLM + rule-based imputation strategy
 • 🏷️ Encoding - LLM + rule-based encoding strategy
-• 🔄 Transformations - LLM + rule-based transformation strategy
+
 • 🔍 Feature Selection - All features used
 • 🤖 Model Building - Classification model trained
 
@@ -609,7 +577,6 @@ Reply with the target column name (e.g., 'f_segment')"""
             state.last_error = error_msg
             state.last_response = f"❌ **Pipeline Error:** {error_msg}"
             return state
-
 
 def fast_model_agent(state: PipelineState) -> PipelineState:
     """Main entry point for fast model agent - called by langgraph_pipeline.py"""

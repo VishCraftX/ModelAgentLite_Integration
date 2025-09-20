@@ -739,7 +739,7 @@ AVAILABLE STRATEGIES (ML-SAFE ONLY):
 - "median": For numeric data (recommended - robust to outliers)
 - "mean": For normally distributed numeric data  
 - "mode": For categorical data (most frequent value)
-- "constant": For specific defaults (0 for numeric, "Unknown" for categorical)
+- "constant": For specific defaults (-222 for numeric, "Unknown" for categorical)
 
 SELECTION RULES:
 - Numeric columns: Use "median" (handles outliers and skewness)
@@ -793,7 +793,7 @@ Consider:
             elif analysis['missing_percentage'] > 50:
                 # High missing%: use constant with appropriate default
                 if analysis['dtype'] in ['int64', 'float64', 'int32', 'float32']:
-                    strategy = "constant"  # Will use 0 for numeric
+                    strategy = "constant"  # Will use -222 for numeric
                 else:
                     strategy = "mode"  # Fallback to mode for mixed types
             elif analysis['dtype'] in ['int64', 'float64', 'int32', 'float32']:
@@ -1007,7 +1007,7 @@ def analyze_encoding_single_batch(state: SequentialState, current_df: pd.DataFra
     # Create optimized prompt for encoding analysis
     prompt = f"""Analyze encoding for {len(categorical_columns)} categorical columns. Target: {state.target_column}
 
-STRATEGIES: label_encoding, onehot_encoding, target_encoding, skip, drop_column
+STRATEGIES: label_encoding, onehot_encoding, target_encoding, skip
 
 COLUMNS:"""
     
@@ -2961,7 +2961,7 @@ def apply_missing_values_treatment(df: pd.DataFrame, recommendations: Dict[str, 
             if 'constant_value' in rec:
                 constant_value = rec['constant_value']
             elif pd.api.types.is_numeric_dtype(df_processed[col]):
-                constant_value = 0  # Zero for numeric columns
+                constant_value = -222  # Standard constant for numeric columns
             else:
                 constant_value = 'Unknown'  # 'Unknown' for categorical columns
             
@@ -3554,20 +3554,20 @@ class ConfidenceBasedPreprocessor:
         is_numeric = analysis.get('dtype', '').startswith(('int', 'float'))
         skewness = abs(analysis.get('skewness', 0)) if is_numeric else 0
         
-        # Rule 1: Very high missing rate (>80%) → Drop column (High Confidence)
+        # Rule 1: Very high missing rate (>80%) → Constant (High Confidence)
         if missing_pct > 80.0:
             return {
-                'strategy': 'drop_column',
+                'strategy': 'constant',
                 'confidence': 0.95,
-                'reasoning': f'Very high missing rate ({missing_pct:.1f}%) - insufficient data'
+                'reasoning': f'Very high missing rate ({missing_pct:.1f}%) - use constant imputation (ML-safe)'
             }
         
-        # Rule 2: ID columns → Drop missing (Very High Confidence)
+        # Rule 2: ID columns → Constant (Very High Confidence)
         if any(keyword in column.lower() for keyword in ['id', 'key', 'uuid', 'guid']):
             return {
-                'strategy': 'drop_missing',
+                'strategy': 'constant',
                 'confidence': 0.95,
-                'reasoning': 'ID column - missing values should be excluded'
+                'reasoning': 'ID column - use constant imputation (ML-safe, preserves rows)'
             }
         
         # Rule 3: Low missing rate (<5%) + Numeric + Low skewness → Mean (High Confidence)
@@ -3594,12 +3594,12 @@ class ConfidenceBasedPreprocessor:
                 'reasoning': f'Low missing rate ({missing_pct:.1f}%) categorical with low cardinality'
             }
         
-        # Rule 6: High cardinality categorical (likely IDs) → Drop missing (High Confidence)
+        # Rule 6: High cardinality categorical (likely IDs) → Constant (High Confidence)
         if not is_numeric and unique_ratio > 0.8:
             return {
-                'strategy': 'drop_missing',
+                'strategy': 'constant',
                 'confidence': 0.85,
-                'reasoning': f'High cardinality ({unique_ratio:.2f}) - likely unique identifiers'
+                'reasoning': f'High cardinality ({unique_ratio:.2f}) - use constant imputation (ML-safe)'
             }
         
         # Gray area - needs LLM

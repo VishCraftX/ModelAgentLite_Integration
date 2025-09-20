@@ -900,7 +900,7 @@ class PreprocessingAgentWrapper:
                                     if 'constant_value' in recommendation:
                                         constant_value = recommendation['constant_value']
                                     elif pd.api.types.is_numeric_dtype(df[col]):
-                                        constant_value = 0  # Zero for numeric columns
+                                        constant_value = -222  # Standard constant for numeric columns
                                     else:
                                         constant_value = 'Unknown'  # 'Unknown' for categorical columns
                                     
@@ -2314,7 +2314,7 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                                     const_val = float(val) if re.match(r"^\d+(\.\d+)?$", val) else val
                                     state.user_overrides[current_phase][col] = { 'strategy': 'constant', 'constant_value': const_val }
                                 except Exception:
-                                    state.user_overrides[current_phase][col] = { 'strategy': 'constant', 'constant_value': 0 }
+                                    state.user_overrides[current_phase][col] = { 'strategy': 'constant', 'constant_value': -222 }
                             else:
                                 state.user_overrides[current_phase][col] = { 'strategy': strat }
                         elif current_phase == 'outliers':
