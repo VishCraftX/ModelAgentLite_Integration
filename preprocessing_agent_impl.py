@@ -877,15 +877,15 @@ def analyze_missing_values_chunked(state: SequentialState, current_df: pd.DataFr
                 col = col_info['column']
                 analysis = col_info['analysis']
                 
-                # Simple rule-based fallback
-                if analysis['missing_percentage'] > 70:
-                    strategy = "drop_column"
-                elif analysis['dtype'] in ['object', 'category']:
+                # ML-SAFE rule-based fallback
+                if analysis['dtype'] in ['object', 'category', 'string']:
                     strategy = "mode"
+                elif analysis['missing_percentage'] > 50:
+                    strategy = "constant"  # Use constant for high missing%
                 elif analysis.get('skewness', 0) > 1.0:
                     strategy = "median"
                 else:
-                    strategy = "mean"
+                    strategy = "median"  # Default to median (more robust than mean)
                     
                 all_recommendations[col] = {
                     "strategy": strategy,
@@ -1043,8 +1043,8 @@ Return JSON: {{"column_name": {{"strategy": "strategy_name", "reasoning": "brief
                 unique_count = current_df[col].nunique()
                 
                 if unique_count > 1000:
-                    strategy = "drop_column"
-                    reasoning = "Extremely high cardinality"
+                    strategy = "skip"  # Skip encoding for extremely high cardinality
+                    reasoning = "Extremely high cardinality - skip encoding"
                 elif unique_count > 50:
                     strategy = "target_encoding"
                     reasoning = "High cardinality, use target encoding"
@@ -1076,7 +1076,7 @@ Return JSON: {{"column_name": {{"strategy": "strategy_name", "reasoning": "brief
             unique_count = current_df[col].nunique()
             
             if unique_count > 1000:
-                strategy = "drop_column"
+                strategy = "skip"  # Skip encoding for extremely high cardinality
             elif unique_count > 50:
                 strategy = "target_encoding"
             elif unique_count > 10:
@@ -3249,7 +3249,7 @@ def analyze_encoding_chunked(state: SequentialState, current_df: pd.DataFrame, c
                 unique_count = current_df[col].nunique()
                 
                 if unique_count > 1000:
-                    strategy = "drop_column"
+                    strategy = "skip"  # Skip encoding for extremely high cardinality
                 elif unique_count > 50:
                     strategy = "target_encoding"
                 elif unique_count > 10:
@@ -3986,8 +3986,8 @@ GUIDELINES:
                 is_numeric = analysis.get('dtype', '').startswith(('int', 'float'))
                 
                 if missing_pct > 50:
-                    strategy = 'drop_column'
-                    reasoning = f'Timeout fallback: {missing_pct:.1f}% missing → drop column (safe choice)'
+                    strategy = 'constant'
+                    reasoning = f'Timeout fallback: {missing_pct:.1f}% missing → constant imputation (ML-safe)'
                 elif is_numeric:
                     strategy = 'median'
                     reasoning = f'Timeout fallback: numeric column → median imputation (robust)'
