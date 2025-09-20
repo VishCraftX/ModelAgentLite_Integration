@@ -785,14 +785,22 @@ Consider:
             col = col_info['column']
             analysis = col_info['analysis']
             
-            if analysis['missing_percentage'] > 70:
-                strategy = "drop_column"
-            elif analysis['dtype'] in ['object', 'category']:
+            # 🎯 ML-SAFE FALLBACK LOGIC (Data Science Best Practices)
+            if analysis['dtype'] in ['object', 'category', 'string']:
+                # Categorical data: always use mode (most frequent)
                 strategy = "mode"
-            elif analysis.get('skewness', 0) > 1.0:
+            elif analysis['missing_percentage'] > 50:
+                # High missing%: use constant with appropriate default
+                if analysis['dtype'] in ['int64', 'float64', 'int32', 'float32']:
+                    strategy = "constant"  # Will use 0 for numeric
+                else:
+                    strategy = "mode"  # Fallback to mode for mixed types
+            elif analysis['dtype'] in ['int64', 'float64', 'int32', 'float32']:
+                # Numeric data: prefer median (robust to outliers and skewness)
                 strategy = "median"
             else:
-                strategy = "mean"
+                # Fallback for any other data type
+                strategy = "mode"
                 
             recommendations[col] = {
                 "strategy": strategy,
@@ -901,7 +909,7 @@ def analyze_missing_values_chunk(state: SequentialState, chunk: list, current_df
     # Create optimized prompt for this chunk
     prompt = f"""Analyze missing values for {len(chunk)} columns. Target: {state.target_column}
 
-STRATEGIES: mean, median, mode, model_based, constant, drop_column, keep_missing
+STRATEGIES: median, mean, mode, constant
 
 COLUMNS:"""
     
@@ -2948,38 +2956,27 @@ def apply_missing_values_treatment(df: pd.DataFrame, recommendations: Dict[str, 
             print_to_log(f"   • {col}: Filled with mode")
         
         elif strategy == 'constant':
-            constant_value = rec.get('constant_value', 0)
+            # Smart constant defaults based on data type
+            if 'constant_value' in rec:
+                constant_value = rec['constant_value']
+            elif pd.api.types.is_numeric_dtype(df_processed[col]):
+                constant_value = 0  # Zero for numeric columns
+            else:
+                constant_value = 'Unknown'  # 'Unknown' for categorical columns
+            
             df_processed[col] = df_processed[col].fillna(constant_value)
             print_to_log(f"   • {col}: Filled with constant ({constant_value})")
         
-        elif strategy == 'drop_column' or strategy == 'drop':
-            if col in df_processed.columns:
-                df_processed = df_processed.drop(columns=[col])
-                print_to_log(f"   • {col}: Dropped due to high missing percentage")
-        
-        elif strategy == 'keep_missing':
-            # Leave NaNs; optionally add indicator
-            indicator_col = f"{col}_was_missing"
-            df_processed[indicator_col] = df_processed[col].isna().astype(int)
-            print_to_log(f"   • {col}: Kept missing (added indicator column '{indicator_col}')")
-        
-        elif strategy == 'forward_fill':
-            df_processed[col] = df_processed[col].fillna(method='ffill')
-            print_to_log(f"   • {col}: Forward filled missing values")
-        
-        elif strategy == 'backward_fill':
-            df_processed[col] = df_processed[col].fillna(method='bfill')
-            print_to_log(f"   • {col}: Backward filled missing values")
-        
-        elif strategy == 'interpolate':
+        else:
+            print_to_log(f"⚠️ Unknown missing value strategy '{strategy}' for {col}, using smart default")
+            # Simple fallback to safe defaults
             if pd.api.types.is_numeric_dtype(df_processed[col]):
-                df_processed[col] = df_processed[col].interpolate(method='linear', limit_direction='both')
-                print_to_log(f"   • {col}: Interpolated missing values")
+                df_processed[col] = df_processed[col].fillna(df_processed[col].median())
+                print_to_log(f"   • {col}: Applied median (default for numeric)")
             else:
-                print_to_log(f"⚠️ Column '{col}' is not numeric, cannot interpolate. Falling back to mode.")
-                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else ''
+                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else 'Unknown'
                 df_processed[col] = df_processed[col].fillna(mode_val)
-                print_to_log(f"   • {col}: Filled with mode (fallback from interpolate)")
+                print_to_log(f"   • {col}: Applied mode (default for categorical)")
         
         elif strategy == 'model_based':
             # Simple model-based imputation (e.g., using median/mode as fallback)

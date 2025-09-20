@@ -896,18 +896,26 @@ class PreprocessingAgentWrapper:
                                     df[col] = df[col].fillna(fill_val)
                                     applied_treatments.append(f"• {col}: Filled with mode")
                                 elif strategy == 'constant':
-                                    constant_value = recommendation.get('constant_value', 0)
+                                    # Smart constant defaults based on data type
+                                    if 'constant_value' in recommendation:
+                                        constant_value = recommendation['constant_value']
+                                    elif pd.api.types.is_numeric_dtype(df[col]):
+                                        constant_value = 0  # Zero for numeric columns
+                                    else:
+                                        constant_value = 'Unknown'  # 'Unknown' for categorical columns
+                                    
                                     df[col] = df[col].fillna(constant_value)
                                     applied_treatments.append(f"• {col}: Filled with constant ({constant_value})")
-                                elif strategy == 'drop_column':
-                                    if col in df.columns:
-                                        df = df.drop(columns=[col])
-                                        applied_treatments.append(f"• {col}: Dropped due to high missing%")
-                                elif strategy == 'keep_missing':
-                                    # Leave NaNs; optionally add indicator
-                                    indicator_col = f"{col}_was_missing"
-                                    df[indicator_col] = df[col].isna().astype(int)
-                                    applied_treatments.append(f"• {col}: Kept missing (added indicator)")
+                                else:
+                                    # Simple fallback for any unknown strategy
+                                    if pd.api.types.is_numeric_dtype(df[col]):
+                                        df[col] = df[col].fillna(df[col].median())
+                                        applied_treatments.append(f"• {col}: Median (default)")
+                                    else:
+                                        mode_val = df[col].mode()
+                                        fill_val = mode_val.iloc[0] if not mode_val.empty else 'Unknown'
+                                        df[col] = df[col].fillna(fill_val)
+                                        applied_treatments.append(f"• {col}: Mode (default)")
                                 elif strategy == 'model_based':
                                     # Placeholder: fall back to median/most_frequent depending on dtype
                                     if pd.api.types.is_numeric_dtype(df[col]):
