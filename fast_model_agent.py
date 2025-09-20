@@ -84,6 +84,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 apply_transformations_treatment,
                 SequentialState
             )
+            from unified_strategy_applicator import UnifiedStrategyApplicator
             
             # Get original chat session for progress messages
             original_chat_session = state.chat_session
@@ -280,7 +281,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 # Auto-apply encoding treatments
                 if encoding_results.get('llm_recommendations'):
                     print_to_log("🔧 Auto-applying LLM encoding recommendations...")
-                    df_working = apply_encoding_treatment(df_working, encoding_results['llm_recommendations'])
+                    df_working = apply_encoding_treatment(df_working, encoding_results['llm_recommendations'], state.target_column)
                     state.cleaned_data = df_working
                     print_to_log(f"✅ Encoding treatments applied to {len(encoding_results['llm_recommendations'])} columns")
                 else:
@@ -312,7 +313,7 @@ Reply with the target column name (e.g., 'f_segment')"""
                 # Auto-apply transformation treatments
                 if transformation_results.get('llm_recommendations'):
                     print_to_log("🔧 Auto-applying LLM transformation recommendations...")
-                    df_working = apply_transformations_treatment(df_working, transformation_results['llm_recommendations'])
+                    df_working = apply_transformations_treatment(df_working, transformation_results['llm_recommendations'], state.target_column)
                     state.cleaned_data = df_working
                     print_to_log(f"✅ Transformation treatments applied to {len(transformation_results['llm_recommendations'])} columns")
                 else:

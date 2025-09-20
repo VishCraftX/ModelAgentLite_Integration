@@ -2816,211 +2816,381 @@ def get_current_data_state(state: SequentialState) -> pd.DataFrame:
     if 'encoding' in state.phase_results:
         encoding_results = state.phase_results['encoding']
         if 'llm_recommendations' in encoding_results:
-            df = apply_encoding_treatment(df, encoding_results['llm_recommendations'])
+            df = apply_encoding_treatment(df, encoding_results['llm_recommendations'], getattr(state, 'target_column', None))
     
     # Apply transformations treatment if completed
     if 'transformations' in state.phase_results:
         transformation_results = state.phase_results['transformations']
         if 'llm_recommendations' in transformation_results:
-            df = apply_transformations_treatment(df, transformation_results['llm_recommendations'])
+            df = apply_transformations_treatment(df, transformation_results['llm_recommendations'], getattr(state, 'target_column', None))
     
     return df
 
 def apply_outliers_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) -> pd.DataFrame:
-    """Apply outlier treatments to dataframe"""
+    """Apply outlier treatments to dataframe based on recommendations - Enhanced version"""
+    import pandas as pd
+    import numpy as np
+    from print_to_log import print_to_log
+    
     df_processed = df.copy()
+    print_to_log(f"🔧 Applying outlier strategies to {len(recommendations)} columns...")
     
     for col, rec in recommendations.items():
-        if col in df_processed.columns and isinstance(rec, dict):
-            treatment = rec.get('treatment', 'keep')
-            
-            if treatment == 'winsorize':
-                # Winsorize at 5th and 95th percentiles
-                q05 = df_processed[col].quantile(0.05)
-                q95 = df_processed[col].quantile(0.95)
-                df_processed[col] = df_processed[col].clip(lower=q05, upper=q95)
-                print_to_log(f"   • {col}: Winsorized at 5th-95th percentiles")
-            
-            elif treatment == 'clip':
-                # Clip at reasonable bounds based on data
-                q01 = df_processed[col].quantile(0.01)
-                q99 = df_processed[col].quantile(0.99)
-                df_processed[col] = df_processed[col].clip(lower=q01, upper=q99)
-                print_to_log(f"   • {col}: Clipped at 1st-99th percentiles")
-            
-            elif treatment == 'mark_missing':
-                # Convert outliers to NaN
-                q01 = df_processed[col].quantile(0.01)
-                q99 = df_processed[col].quantile(0.99)
-                # Fix: Use np.logical_or instead of | for boolean arrays
-                outlier_mask = np.logical_or(df_processed[col] < q01, df_processed[col] > q99)
-                outlier_count = outlier_mask.sum()
-                df_processed.loc[outlier_mask, col] = np.nan
-                print_to_log(f"   • {col}: Marked {outlier_count} outliers as missing")
-            
-            elif treatment == 'keep':
-                print_to_log(f"   • {col}: Kept as-is")
+        if col not in df_processed.columns or not isinstance(rec, dict):
+            continue
+        
+        raw_treatment = rec.get('treatment', 'winsorize')
+        treatment = str(raw_treatment).lower().replace('-', '_')
+        
+        # Skip non-numeric columns for outlier treatment
+        if not pd.api.types.is_numeric_dtype(df_processed[col]):
+            print_to_log(f"⚠️ Column '{col}' is not numeric, skipping outlier treatment '{treatment}'")
+            continue
+        
+        if treatment == 'winsorize' or treatment == 'winsorize_5th_95th':
+            # Winsorize at 5th and 95th percentiles
+            q05 = df_processed[col].quantile(0.05)
+            q95 = df_processed[col].quantile(0.95)
+            df_processed[col] = df_processed[col].clip(lower=q05, upper=q95)
+            print_to_log(f"   • {col}: Winsorized at 5th-95th percentiles (bounds: {q05:.2f}, {q95:.2f})")
+        
+        elif treatment == 'winsorize_1st_99th':
+            # Winsorize at 1st and 99th percentiles
+            q01 = df_processed[col].quantile(0.01)
+            q99 = df_processed[col].quantile(0.99)
+            df_processed[col] = df_processed[col].clip(lower=q01, upper=q99)
+            print_to_log(f"   • {col}: Winsorized at 1st-99th percentiles (bounds: {q01:.2f}, {q99:.2f})")
+        
+        elif treatment == 'clip' or treatment == 'clip_percentile':
+            # Clip at 1st and 99th percentiles
+            q01 = df_processed[col].quantile(0.01)
+            q99 = df_processed[col].quantile(0.99)
+            df_processed[col] = df_processed[col].clip(lower=q01, upper=q99)
+            print_to_log(f"   • {col}: Clipped at 1st-99th percentiles (bounds: {q01:.2f}, {q99:.2f})")
+        
+        elif treatment == 'mark_missing':
+            # Mark outliers as NaN using IQR method
+            Q1 = df_processed[col].quantile(0.25)
+            Q3 = df_processed[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            outlier_mask = (df_processed[col] < lower_bound) | (df_processed[col] > upper_bound)
+            outlier_count = outlier_mask.sum()
+            df_processed.loc[outlier_mask, col] = np.nan
+            print_to_log(f"   • {col}: Marked {outlier_count} outliers as missing using IQR method")
+        
+        elif treatment == 'remove' or treatment == 'drop':
+            # Remove outlier rows using IQR method
+            initial_rows = df_processed.shape[0]
+            Q1 = df_processed[col].quantile(0.25)
+            Q3 = df_processed[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            df_processed = df_processed[(df_processed[col] >= lower_bound) & (df_processed[col] <= upper_bound)]
+            removed_rows = initial_rows - df_processed.shape[0]
+            print_to_log(f"   • {col}: Removed {removed_rows} rows with outliers using IQR method")
+        
+        elif treatment == 'keep':
+            print_to_log(f"   • {col}: Kept as-is (no outlier treatment)")
+        
+        else:
+            print_to_log(f"⚠️ Unknown outlier strategy '{treatment}' for {col}, kept as-is")
     
     print_to_log(f"✅ Outlier treatment complete. Final shape: {df_processed.shape}")
     return df_processed
 
 def apply_missing_values_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) -> pd.DataFrame:
-    """Apply missing value treatments to dataframe"""
+    """Apply missing value treatments to dataframe based on recommendations - Enhanced version"""
+    import pandas as pd
+    import numpy as np
+    from print_to_log import print_to_log
+    
     df_processed = df.copy()
+    print_to_log(f"🔧 Applying missing values strategies to {len(recommendations)} columns...")
     
     for col, rec in recommendations.items():
-        if col in df_processed.columns and isinstance(rec, dict):
-            strategy = rec.get('strategy', 'mean')
-            
-            if strategy == 'mean':
+        if col not in df_processed.columns or not isinstance(rec, dict):
+            continue
+        
+        raw_strategy = rec.get('strategy', 'median')
+        strategy = str(raw_strategy).lower().replace('-', '_')
+        
+        # Skip if no missing values
+        if df_processed[col].isnull().sum() == 0:
+            print_to_log(f"   • {col}: No missing values, skipping treatment")
+            continue
+        
+        if strategy == 'mean':
+            if pd.api.types.is_numeric_dtype(df_processed[col]):
                 df_processed[col] = df_processed[col].fillna(df_processed[col].mean())
-            elif strategy == 'median':
+                print_to_log(f"   • {col}: Filled with mean")
+            else:
+                print_to_log(f"⚠️ Column '{col}' is not numeric, cannot apply mean imputation. Falling back to mode.")
+                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else ''
+                df_processed[col] = df_processed[col].fillna(mode_val)
+                print_to_log(f"   • {col}: Filled with mode (fallback from mean)")
+        
+        elif strategy == 'median':
+            if pd.api.types.is_numeric_dtype(df_processed[col]):
                 df_processed[col] = df_processed[col].fillna(df_processed[col].median())
-            elif strategy == 'mode':
-                mode_value = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else 0
-                df_processed[col] = df_processed[col].fillna(mode_value)
-            elif strategy == 'drop':
+                print_to_log(f"   • {col}: Filled with median")
+            else:
+                print_to_log(f"⚠️ Column '{col}' is not numeric, cannot apply median imputation. Falling back to mode.")
+                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else ''
+                df_processed[col] = df_processed[col].fillna(mode_val)
+                print_to_log(f"   • {col}: Filled with mode (fallback from median)")
+        
+        elif strategy == 'mode' or strategy == 'most_frequent':
+            mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else (0 if pd.api.types.is_numeric_dtype(df_processed[col]) else '')
+            df_processed[col] = df_processed[col].fillna(mode_val)
+            print_to_log(f"   • {col}: Filled with mode")
+        
+        elif strategy == 'constant':
+            constant_value = rec.get('constant_value', 0)
+            df_processed[col] = df_processed[col].fillna(constant_value)
+            print_to_log(f"   • {col}: Filled with constant ({constant_value})")
+        
+        elif strategy == 'drop_column' or strategy == 'drop':
+            if col in df_processed.columns:
                 df_processed = df_processed.drop(columns=[col])
+                print_to_log(f"   • {col}: Dropped due to high missing percentage")
+        
+        elif strategy == 'keep_missing':
+            # Leave NaNs; optionally add indicator
+            indicator_col = f"{col}_was_missing"
+            df_processed[indicator_col] = df_processed[col].isna().astype(int)
+            print_to_log(f"   • {col}: Kept missing (added indicator column '{indicator_col}')")
+        
+        elif strategy == 'forward_fill':
+            df_processed[col] = df_processed[col].fillna(method='ffill')
+            print_to_log(f"   • {col}: Forward filled missing values")
+        
+        elif strategy == 'backward_fill':
+            df_processed[col] = df_processed[col].fillna(method='bfill')
+            print_to_log(f"   • {col}: Backward filled missing values")
+        
+        elif strategy == 'interpolate':
+            if pd.api.types.is_numeric_dtype(df_processed[col]):
+                df_processed[col] = df_processed[col].interpolate(method='linear', limit_direction='both')
+                print_to_log(f"   • {col}: Interpolated missing values")
+            else:
+                print_to_log(f"⚠️ Column '{col}' is not numeric, cannot interpolate. Falling back to mode.")
+                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else ''
+                df_processed[col] = df_processed[col].fillna(mode_val)
+                print_to_log(f"   • {col}: Filled with mode (fallback from interpolate)")
+        
+        elif strategy == 'model_based':
+            # Simple model-based imputation (e.g., using median/mode as fallback)
+            if pd.api.types.is_numeric_dtype(df_processed[col]):
+                df_processed[col] = df_processed[col].fillna(df_processed[col].median())
+                print_to_log(f"   • {col}: Model-based imputation (fallback to median)")
+            else:
+                mode_val = df_processed[col].mode().iloc[0] if not df_processed[col].mode().empty else ''
+                df_processed[col] = df_processed[col].fillna(mode_val)
+                print_to_log(f"   • {col}: Model-based imputation (fallback to mode)")
+        
+        else:
+            print_to_log(f"⚠️ Unknown missing value strategy '{strategy}' for {col}, kept as-is")
     
+    print_to_log(f"✅ Missing value treatment complete. Final shape: {df_processed.shape}")
     return df_processed
 
-def apply_encoding_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) -> pd.DataFrame:
-    """Apply encoding treatments to dataframe"""
+def _apply_top10_onehot_encoding(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    """Helper for one-hot encoding top 10 categories and grouping others."""
+    value_counts = df[col].value_counts()
+    top_10_categories = value_counts.head(10).index.tolist()
+    encoded_col = df[col].apply(lambda x: x if x in top_10_categories else 'Other')
+    dummies = pd.get_dummies(encoded_col, prefix=col)
+    df = pd.concat([df, dummies], axis=1)
+    df = df.drop(columns=[col])
+    return df
+
+def apply_encoding_treatment(df: pd.DataFrame, recommendations: Dict[str, Any], target_column: str = None) -> pd.DataFrame:
+    """Apply encoding treatments to dataframe based on recommendations - Enhanced version"""
+    import pandas as pd
+    import numpy as np
+    from print_to_log import print_to_log
+    from sklearn.preprocessing import LabelEncoder
+    
     df_processed = df.copy()
+    print_to_log(f"🔧 Applying encoding strategies to {len(recommendations)} columns...")
     
     for col, rec in recommendations.items():
-        if col in df_processed.columns and isinstance(rec, dict):
-            # Fix: Look for 'strategy' key (what LLM outputs) instead of 'encoding'
-            strategy = rec.get('strategy', 'label_encoding')
-            
-            # Map strategy values to encoding types
-            if strategy == 'onehot_encoding' or strategy == 'onehot':
-                # Smart one-hot encoding: Top-10 + Other for medium cardinality
-                unique_count = df_processed[col].nunique()
-                if unique_count > 15:  # Use top-10 for medium/high cardinality
-                    try:
-                        # Inline top-10 one-hot encoding
-                        value_counts = df_processed[col].value_counts()
-                        top_10_categories = value_counts.head(10).index.tolist()
-                        
-                        # Replace non-top-10 categories with 'Other'
-                        encoded_col = df_processed[col].apply(
-                            lambda x: x if x in top_10_categories else 'Other'
-                        )
-                        
-                        # Apply one-hot encoding
-                        dummies = pd.get_dummies(encoded_col, prefix=col)
-                        df_processed = pd.concat([df_processed, dummies], axis=1)
-                        df_processed.drop(columns=[col], inplace=True)
-                    except Exception:
-                        # Fallback to regular one-hot
-                        dummies = pd.get_dummies(df_processed[col], prefix=col)
-                        df_processed = pd.concat([df_processed, dummies], axis=1)
-                        df_processed.drop(columns=[col], inplace=True)
-                else:
-                    # Regular one-hot for low cardinality
-                    dummies = pd.get_dummies(df_processed[col], prefix=col)
-                    df_processed = pd.concat([df_processed, dummies], axis=1)
-                    df_processed.drop(columns=[col], inplace=True)
-            
-            elif strategy == 'label_encoding' or strategy == 'label':
-                # Label encoding
-                from sklearn.preprocessing import LabelEncoder
+        if col not in df_processed.columns or not isinstance(rec, dict):
+            continue
+        
+        # Normalize key names and values from LLM/analysis
+        raw_strategy = rec.get('encoding_type') or rec.get('strategy') or rec.get('encoding') or 'label_encoding'
+        strategy = str(raw_strategy).lower().replace('-', '_')
+        
+        # Skip numeric columns for encoding
+        if pd.api.types.is_numeric_dtype(df_processed[col]):
+            print_to_log(f"⚠️ Column '{col}' is numeric, skipping encoding.")
+            continue
+        
+        if strategy == 'label_encoding' or strategy == 'label' or strategy == 'ordinal':
+            le = LabelEncoder()
+            df_processed[col] = le.fit_transform(df_processed[col].astype(str))
+            print_to_log(f"   • {col}: Label encoded")
+        
+        elif strategy == 'onehot_encoding' or strategy == 'onehot' or strategy == 'one_hot':
+            unique_count = df_processed[col].nunique()
+            if unique_count > 10:
+                df_processed = _apply_top10_onehot_encoding(df_processed, col)
+                print_to_log(f"   • {col}: Top-10 one-hot encoded (others grouped)")
+            else:
+                df_processed = pd.get_dummies(df_processed, columns=[col], prefix=col)
+                print_to_log(f"   • {col}: One-hot encoded")
+        
+        elif strategy == 'target_encoding' or strategy == 'target':
+            if target_column and target_column in df_processed.columns:
+                target_means = df_processed.groupby(col)[target_column].mean()
+                df_processed[col] = df_processed[col].map(target_means)
+                overall_mean = df_processed[target_column].mean()
+                df_processed[col] = df_processed[col].fillna(overall_mean) # Fill NaNs from categories not in target_means
+                print_to_log(f"   • {col}: Target encoded using '{target_column}'")
+            else:
+                print_to_log(f"⚠️ Target column '{target_column}' not available for target encoding on '{col}'. Falling back to label encoding.")
                 le = LabelEncoder()
                 df_processed[col] = le.fit_transform(df_processed[col].astype(str))
-            
-            elif strategy == 'target_encoding' or strategy == 'target':
-                # Target encoding (simplified)
-                target_col = [c for c in df_processed.columns if c != col][0]  # Assume first other column is target
-                if target_col in df_processed.columns:
-                    target_means = df_processed.groupby(col)[target_col].mean()
-                    df_processed[col] = df_processed[col].map(target_means)
-            
-            elif strategy == 'skip':
-                # Skip encoding - leave column as-is
-                pass
-            
-            elif strategy == 'drop_column' or strategy == 'drop':
-                df_processed.drop(columns=[col], inplace=True)
+                print_to_log(f"   • {col}: Label encoded (fallback from target encoding)")
+        
+        elif strategy == 'binary_encoding' or strategy == 'binary':
+            # Simple binary encoding for demonstration
+            unique_values = df_processed[col].dropna().unique()
+            if len(unique_values) > 1:
+                le = LabelEncoder()
+                numeric_values = le.fit_transform(df_processed[col].astype(str))
+                max_bits = len(bin(len(unique_values) - 1)) - 2
+                for bit in range(max_bits):
+                    df_processed[f'{col}_binary_{bit}'] = (numeric_values >> bit) & 1
+                df_processed = df_processed.drop(columns=[col])
+                print_to_log(f"   • {col}: Binary encoded into {max_bits} columns")
+            else:
+                print_to_log(f"⚠️ Column '{col}' has too few unique values for binary encoding. Falling back to label encoding.")
+                le = LabelEncoder()
+                df_processed[col] = le.fit_transform(df_processed[col].astype(str))
+                print_to_log(f"   • {col}: Label encoded (fallback from binary encoding)")
+        
+        elif strategy == 'drop_column' or strategy == 'drop':
+            if col in df_processed.columns:
+                df_processed = df_processed.drop(columns=[col])
+                print_to_log(f"   • {col}: Dropped as per recommendation")
+        
+        elif strategy == 'skip' or strategy == 'leave_as_is' or strategy == 'none':
+            print_to_log(f"   • {col}: Skipped encoding (left as-is)")
+        
+        else:
+            print_to_log(f"⚠️ Unknown encoding strategy '{strategy}' for {col}, kept as-is")
     
+    print_to_log(f"✅ Encoding treatment complete. Final shape: {df_processed.shape}")
     return df_processed
 
-def apply_transformations_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) -> pd.DataFrame:
-    """Apply transformation treatments to dataframe"""
+def apply_transformations_treatment(df: pd.DataFrame, recommendations: Dict[str, Any], target_column: str = None) -> pd.DataFrame:
+    """Apply transformation treatments to dataframe based on recommendations - Enhanced version"""
+    import pandas as pd
+    import numpy as np
+    from print_to_log import print_to_log
+    from sklearn.preprocessing import StandardScaler, RobustScaler, QuantileTransformer
+    from scipy.stats import boxcox, yeojohnson
+    import warnings
+    
     df_processed = df.copy()
+    print_to_log(f"🔧 Applying transformation strategies to {len(recommendations)} columns...")
     
     for col, rec in recommendations.items():
-        if col in df_processed.columns and isinstance(rec, dict):
-            # Look for 'transformation' key (what LLM outputs)
-            transformation = rec.get('transformation', 'standardize')
-            
-            if transformation == 'log1p':
-                # Log transformation (log1p for safety with zeros)
-                df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
-            
-            elif transformation == 'sqrt':
-                # Square root transformation
-                df_processed[col] = np.sqrt(df_processed[col] - df_processed[col].min())
-            
-            elif transformation == 'square':
-                # Square transformation
-                df_processed[col] = df_processed[col] ** 2
-            
-            elif transformation == 'standardize':
-                # Standardization (z-score)
-                mean_val = df_processed[col].mean()
-                std_val = df_processed[col].std()
-                if std_val > 0:
-                    df_processed[col] = (df_processed[col] - mean_val) / std_val
-            
-            elif transformation == 'normalize':
-                # Min-max normalization
-                min_val = df_processed[col].min()
-                max_val = df_processed[col].max()
-                if max_val > min_val:
-                    df_processed[col] = (df_processed[col] - min_val) / (max_val - min_val)
-            
-            elif transformation == 'robust_scale':
-                # Robust scaling using median and IQR
-                median_val = df_processed[col].median()
-                q75 = df_processed[col].quantile(0.75)
-                q25 = df_processed[col].quantile(0.25)
-                iqr = q75 - q25
-                if iqr > 0:
-                    df_processed[col] = (df_processed[col] - median_val) / iqr
+        if col not in df_processed.columns or not isinstance(rec, dict):
+            continue
+        
+        # Fix key mismatch: LLM uses 'strategy' key, not 'transformation'
+        raw_transformation = rec.get('strategy') or rec.get('transformation') or rec.get('transformation_type') or 'none'
+        transformation = str(raw_transformation).lower().replace('-', '_')
+        
+        # Skip non-numeric columns for transformation
+        if not pd.api.types.is_numeric_dtype(df_processed[col]):
+            print_to_log(f"⚠️ Column '{col}' is not numeric, skipping transformation '{transformation}'")
+            continue
+        
+        # Handle potential negative values for log/sqrt/box_cox
+        min_val = df_processed[col].min()
+        
+        if transformation == 'log1p':
+            df_processed[col] = np.log1p(df_processed[col] - min_val + 1)
+            print_to_log(f"   • {col}: Log1p transformation applied")
+        
+        elif transformation == 'log':
+            if min_val > 0:
+                df_processed[col] = np.log(df_processed[col])
+                print_to_log(f"   • {col}: Log transformation applied")
+            else:
+                print_to_log(f"⚠️ Log transformation requires positive values, using log1p for {col}")
+                df_processed[col] = np.log1p(df_processed[col] - min_val + 1)
+        
+        elif transformation == 'sqrt':
+            if min_val >= 0:
+                df_processed[col] = np.sqrt(df_processed[col])
+                print_to_log(f"   • {col}: Square root transformation applied")
+            else:
+                print_to_log(f"⚠️ Square root transformation requires non-negative values, adjusting and applying sqrt for {col}")
+                df_processed[col] = np.sqrt(df_processed[col] - min_val)
+        
+        elif transformation == 'square':
+            df_processed[col] = df_processed[col] ** 2
+            print_to_log(f"   • {col}: Square transformation applied")
+        
+        elif transformation == 'standardize':
+            scaler = StandardScaler()
+            df_processed[col] = scaler.fit_transform(df_processed[[col]])
+            print_to_log(f"   • {col}: Standardized (Z-score scaled)")
+        
+        elif transformation == 'normalize':
+            min_val_col = df_processed[col].min()
+            max_val_col = df_processed[col].max()
+            if max_val_col > min_val_col:
+                df_processed[col] = (df_processed[col] - min_val_col) / (max_val_col - min_val_col)
+                print_to_log(f"   • {col}: Min-Max Normalized")
+            else:
+                print_to_log(f"⚠️ Cannot normalize '{col}' (min == max), skipping.")
+        
+        elif transformation == 'robust_scale' or transformation == 'robust':
+            scaler = RobustScaler()
+            df_processed[col] = scaler.fit_transform(df_processed[[col]])
+            print_to_log(f"   • {col}: Robust Scaled (using median and IQR)")
+        
+        elif transformation == 'quantile':
+            qt = QuantileTransformer(output_distribution='uniform', random_state=42)
+            df_processed[col] = qt.fit_transform(df_processed[[col]])
+            print_to_log(f"   • {col}: Quantile transformation applied (uniform distribution)")
+        
+        elif transformation == 'box_cox':
+            if min_val > 0:
+                df_processed[col], _ = boxcox(df_processed[col])
+                print_to_log(f"   • {col}: Box-Cox transformation applied")
+            else:
+                print_to_log(f"⚠️ Box-Cox requires positive values, using log1p for {col}")
+                df_processed[col] = np.log1p(df_processed[col] - min_val + 1)
+        
+        elif transformation == 'yeo_johnson':
+            df_processed[col], _ = yeojohnson(df_processed[col])
+            print_to_log(f"   • {col}: Yeo-Johnson transformation applied")
+        
+        elif transformation == 'power':
+            # Placeholder for power transformation (e.g., using PowerTransformer)
+            # from sklearn.preprocessing import PowerTransformer
+            # pt = PowerTransformer(method='yeo-johnson') # default
+            # df_processed[col] = pt.fit_transform(df_processed[[col]])
+            print_to_log(f"⚠️ Power transformation not fully implemented, falling back to Yeo-Johnson for {col}")
+            df_processed[col], _ = yeojohnson(df_processed[col])
+        
+        elif transformation == 'none':
+            print_to_log(f"   • {col}: No transformation needed (kept as-is)")
+        
+        else:
+            print_to_log(f"⚠️ Unknown transformation strategy '{transformation}' for {col}, kept as-is")
     
-            
-            elif transformation == 'log':
-                # Log transformation for positive values only
-                if df_processed[col].min() > 0:
-                    df_processed[col] = np.log(df_processed[col])
-                else:
-                    print_to_log(f"⚠️ Log transformation requires positive values, using log1p for {col}")
-                    df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
-            
-            elif transformation == 'box_cox':
-                # Box-Cox transformation (requires positive values)
-                from scipy import stats
-                if df_processed[col].min() > 0:
-                    df_processed[col], _ = stats.boxcox(df_processed[col])
-                else:
-                    print_to_log(f"⚠️ Box-Cox requires positive values, using log1p for {col}")
-                    df_processed[col] = np.log1p(df_processed[col] - df_processed[col].min() + 1)
-            
-            elif transformation == 'yeo_johnson':
-                # Yeo-Johnson transformation (handles negative values)
-                from scipy import stats
-                df_processed[col], _ = stats.yeojohnson(df_processed[col])
-            
-            elif transformation == 'quantile':
-                # Quantile uniform transformation
-                from sklearn.preprocessing import QuantileTransformer
-                qt = QuantileTransformer(output_distribution='uniform', random_state=42)
-                df_processed[col] = qt.fit_transform(df_processed[col].values.reshape(-1, 1)).flatten()
-            
-            elif transformation == 'none':
-                # No transformation - keep original values
-                pass
+    print_to_log(f"✅ Transformation treatment complete. Final shape: {df_processed.shape}")
     return df_processed
 
 def analyze_encoding_chunked(state: SequentialState, current_df: pd.DataFrame, chunk_size: int = 10, progress_callback=None) -> Dict[str, Any]:
