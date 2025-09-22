@@ -2603,18 +2603,27 @@ DO NOT STOP EARLY! Complete ALL 10 steps!
 CLASSIFICATION_METRICS_PROMPT = """
 🚨 MANDATORY: After model training, you MUST complete these steps:
 
-# Step 1: Make predictions
+# Step 1: Make predictions on TEST set
    y_pred = model.predict(X_test)
    y_proba = model.predict_proba(X_test)
    
-# Step 1.5: Make predictions on full dataset
+# Step 1.5: Make predictions on TRAINING set (for overfitting detection)
+   y_train_pred = model.predict(X_train)
+   y_train_proba = model.predict_proba(X_train)
+   
+# Step 1.6: Make predictions on full dataset
    full_predictions = model.predict(X)
    full_probabilities = model.predict_proba(X)
 
-# Step 2: Calculate all classification metrics
+# Step 2: Calculate TEST set metrics
    cm = confusion_matrix(y_test, y_pred)
    tn, fp, fn, tp = cm.ravel() if cm.shape == (2,2) else (0,0,0,0)
    specificity = tn/(tn+fp) if (tn+fp) > 0 else 0.0
+   
+# Step 2.5: Calculate TRAINING set metrics (for overfitting detection)
+   cm_train = confusion_matrix(y_train, y_train_pred)
+   tn_train, fp_train, fn_train, tp_train = cm_train.ravel() if cm_train.shape == (2,2) else (0,0,0,0)
+   specificity_train = tn_train/(tn_train+fp_train) if (tn_train+fp_train) > 0 else 0.0
    
 # Step 3: Save the model
 model_path = safe_joblib_dump(model, 'decision_tree_model.joblib')
@@ -2629,20 +2638,33 @@ model_path = safe_joblib_dump(model, 'decision_tree_model.joblib')
        avg_method = 'macro'
    
    result = {
+       # TEST SET METRICS
        'accuracy': float(accuracy_score(y_test, y_pred)),
        'precision': float(precision_score(y_test, y_pred, average=avg_method)),
        'recall': float(recall_score(y_test, y_pred, average=avg_method)),
        'f1_score': float(f1_score(y_test, y_pred, average=avg_method)),
        'specificity': float(specificity),
-    'roc_auc': float(roc_auc_score(y_test, y_proba[:,1])) if y_proba.shape[1] == 2 else float(roc_auc_score(y_test, y_proba, multi_class='ovr')),
+       'roc_auc': float(roc_auc_score(y_test, y_proba[:,1])) if y_proba.shape[1] == 2 else float(roc_auc_score(y_test, y_proba, multi_class='ovr')),
        'confusion_matrix': cm.tolist(),
-    'log_loss': float(log_loss(y_test, y_proba)),
-    'model': model,
-    'model_path': model_path,
-    'full_predictions': full_predictions.tolist(),
-    'full_probabilities': full_probabilities.tolist(),
-    'metrics_averaging': avg_method
-}
+       'log_loss': float(log_loss(y_test, y_proba)),
+       
+       # TRAINING SET METRICS (for overfitting detection)
+       'train_accuracy': float(accuracy_score(y_train, y_train_pred)),
+       'train_precision': float(precision_score(y_train, y_train_pred, average=avg_method)),
+       'train_recall': float(recall_score(y_train, y_train_pred, average=avg_method)),
+       'train_f1_score': float(f1_score(y_train, y_train_pred, average=avg_method)),
+       'train_specificity': float(specificity_train),
+       'train_roc_auc': float(roc_auc_score(y_train, y_train_proba[:,1])) if y_train_proba.shape[1] == 2 else float(roc_auc_score(y_train, y_train_proba, multi_class='ovr')),
+       'train_confusion_matrix': cm_train.tolist(),
+       'train_log_loss': float(log_loss(y_train, y_train_proba)),
+       
+       # OTHER METADATA
+       'model': model,
+       'model_path': model_path,
+       'full_predictions': full_predictions.tolist(),
+       'full_probabilities': full_probabilities.tolist(),
+       'metrics_averaging': avg_method
+   }
 
 🚨 CRITICAL: The code MUST end with the complete result dictionary!
 """
@@ -2650,13 +2672,16 @@ model_path = safe_joblib_dump(model, 'decision_tree_model.joblib')
 REGRESSION_METRICS_PROMPT = """
 🚨 MANDATORY: After model training, you MUST complete these steps:
 
-# Step 1: Make predictions
+# Step 1: Make predictions on TEST set
 y_pred = model.predict(X_test)
 
-# Step 1.5: Make predictions on full dataset
+# Step 1.5: Make predictions on TRAINING set (for overfitting detection)
+y_train_pred = model.predict(X_train)
+
+# Step 1.6: Make predictions on full dataset
 full_predictions = model.predict(X)
 
-# Step 2: Calculate all regression metrics
+# Step 2: Calculate TEST set regression metrics
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import numpy as np
 
@@ -2672,11 +2697,24 @@ delta = 1.35
 residual = np.abs(y_test - y_pred)
 huber_loss = np.where(residual <= delta, 0.5*residual**2, delta*residual - 0.5*delta**2).mean()
 
+# Step 2.5: Calculate TRAINING set regression metrics (for overfitting detection)
+n_train, k_train = X_train.shape
+r2_train = r2_score(y_train, y_train_pred)
+adj_r2_train = 1 - (1-r2_train)*(n_train-1)/(n_train-k_train-1)
+
+# Calculate MAPE safely for training set
+mape_train = np.mean(np.abs((y_train - y_train_pred) / np.where(y_train != 0, y_train, 1))) * 100
+
+# Calculate Huber loss for training set
+residual_train = np.abs(y_train - y_train_pred)
+huber_loss_train = np.where(residual_train <= delta, 0.5*residual_train**2, delta*residual_train - 0.5*delta**2).mean()
+
 # Step 3: Save the model
 model_path = safe_joblib_dump(model, 'regression_model.joblib')
 
 # Step 4: Create result dictionary (MANDATORY!)
 result = {
+    # TEST SET METRICS
     'mae': float(mean_absolute_error(y_test, y_pred)),
     'mse': float(mean_squared_error(y_test, y_pred)),
     'rmse': float(np.sqrt(mean_squared_error(y_test, y_pred))),
@@ -2684,6 +2722,17 @@ result = {
     'r2': float(r2),
     'adjusted_r2': float(adj_r2),
     'huber_loss': float(huber_loss),
+    
+    # TRAINING SET METRICS (for overfitting detection)
+    'train_mae': float(mean_absolute_error(y_train, y_train_pred)),
+    'train_mse': float(mean_squared_error(y_train, y_train_pred)),
+    'train_rmse': float(np.sqrt(mean_squared_error(y_train, y_train_pred))),
+    'train_mape': float(mape_train),
+    'train_r2': float(r2_train),
+    'train_adjusted_r2': float(adj_r2_train),
+    'train_huber_loss': float(huber_loss_train),
+    
+    # OTHER METADATA
     'model': model,
     'model_path': model_path,
     'full_predictions': full_predictions.tolist()
@@ -3326,57 +3375,165 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             # Format header with model name (clean style like original)
             response_parts = [f"✅ {model_emoji} {model_type} Model Training Completed Successfully!"]
             
-            if is_classification:
-                response_parts.append(f"📊 Classification Performance:")
-            elif is_regression:
-                response_parts.append(f"📊 Regression Performance:")
+            # Check if we have both training and test metrics for overfitting detection
+            has_train_metrics = any(key.startswith('train_') for key in result.keys())
+            
+            if has_train_metrics:
+                if is_classification:
+                    response_parts.append(f"📊 Classification Performance (Train vs Test):")
+                    response_parts.append(f"*Compare metrics to detect overfitting*")
+                elif is_regression:
+                    response_parts.append(f"📊 Regression Performance (Train vs Test):")
+                    response_parts.append(f"*Compare metrics to detect overfitting*")
+                else:
+                    response_parts.append(f"📊 Model Performance (Train vs Test):")
+                    response_parts.append(f"*Compare metrics to detect overfitting*")
+                
+                # Classification metrics with train vs test comparison
+                if 'accuracy' in result and 'train_accuracy' in result:
+                    train_acc = result['train_accuracy']
+                    test_acc = result['accuracy']
+                    diff = train_acc - test_acc
+                    flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
+                    response_parts.append(f"• **Accuracy**: Train: {train_acc:.4f} | Test: {test_acc:.4f} | Diff: {diff:+.4f} {flag}")
+                
+                if 'f1_score' in result and 'train_f1_score' in result:
+                    train_f1 = result['train_f1_score']
+                    test_f1 = result['f1_score']
+                    diff = train_f1 - test_f1
+                    flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
+                    response_parts.append(f"• **F1 Score**: Train: {train_f1:.4f} | Test: {test_f1:.4f} | Diff: {diff:+.4f} {flag}")
+                
+                if 'roc_auc' in result and 'train_roc_auc' in result:
+                    train_auc = result['train_roc_auc']
+                    test_auc = result['roc_auc']
+                    diff = train_auc - test_auc
+                    flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
+                    response_parts.append(f"• **ROC AUC**: Train: {train_auc:.4f} | Test: {test_auc:.4f} | Diff: {diff:+.4f} {flag}")
+                
+                if 'precision' in result and 'train_precision' in result:
+                    response_parts.append(f"• **Precision**: Train: {result['train_precision']:.4f} | Test: {result['precision']:.4f}")
+                
+                if 'recall' in result and 'train_recall' in result:
+                    response_parts.append(f"• **Recall**: Train: {result['train_recall']:.4f} | Test: {result['recall']:.4f}")
+                
+                # Regression metrics with train vs test comparison
+                if 'r2' in result and 'train_r2' in result:
+                    train_r2 = result['train_r2']
+                    test_r2 = result['r2']
+                    diff = train_r2 - test_r2
+                    flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
+                    response_parts.append(f"• **R² Score**: Train: {train_r2:.4f} | Test: {test_r2:.4f} | Diff: {diff:+.4f} {flag}")
+                
+                if 'mae' in result and 'train_mae' in result:
+                    train_mae = result['train_mae']
+                    test_mae = result['mae']
+                    diff = test_mae - train_mae  # For error metrics, higher test error indicates overfitting
+                    flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
+                    response_parts.append(f"• **MAE**: Train: {train_mae:.4f} | Test: {test_mae:.4f} | Diff: {diff:+.4f} {flag}")
+                
+                if 'rmse' in result and 'train_rmse' in result:
+                    train_rmse = result['train_rmse']
+                    test_rmse = result['rmse']
+                    diff = test_rmse - train_rmse  # For error metrics, higher test error indicates overfitting
+                    flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
+                    response_parts.append(f"• **RMSE**: Train: {train_rmse:.4f} | Test: {test_rmse:.4f} | Diff: {diff:+.4f} {flag}")
+                
+                # Additional metrics without comparison
+                if 'specificity' in result:
+                    response_parts.append(f"• **Specificity** (Test): {result['specificity']:.4f}")
+                if 'log_loss' in result:
+                    response_parts.append(f"• **Log Loss** (Test): {result['log_loss']:.4f}")
+                
             else:
-                response_parts.append(f"📊 {model_emoji} {model_type} Model Performance:")
+                # Fallback to original display if no training metrics available
+                if is_classification:
+                    response_parts.append(f"📊 Classification Performance:")
+                elif is_regression:
+                    response_parts.append(f"📊 Regression Performance:")
+                else:
+                    response_parts.append(f"📊 {model_emoji} {model_type} Model Performance:")
+                
+                # Add classification metrics (clean format)
+                if 'accuracy' in result:
+                    response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
+                if 'precision' in result:
+                    response_parts.append(f"• Precision: {result['precision']:.4f}")
+                if 'recall' in result:
+                    response_parts.append(f"• Recall: {result['recall']:.4f}")
+                if 'f1_score' in result:
+                    response_parts.append(f"• F1 Score: {result['f1_score']:.4f}")
+                if 'roc_auc' in result:
+                    response_parts.append(f"• ROC AUC: {result['roc_auc']:.4f}")
+                if 'specificity' in result:
+                    response_parts.append(f"• Specificity: {result['specificity']:.4f}")
+                
+                # Add regression metrics (clean format)
+                if 'r2' in result:
+                    response_parts.append(f"• R² Score: {result['r2']:.4f} ({result['r2']*100:.2f}% variance explained)")
+                elif 'r2_score' in result:
+                    response_parts.append(f"• R² Score: {result['r2_score']:.4f} ({result['r2_score']*100:.2f}% variance explained)")
+                if 'mae' in result:
+                    response_parts.append(f"• Mean Absolute Error (MAE): {result['mae']:.4f}")
+                elif 'mean_absolute_error' in result:
+                    response_parts.append(f"• Mean Absolute Error (MAE): {result['mean_absolute_error']:.4f}")
+                if 'rmse' in result:
+                    response_parts.append(f"• Root Mean Squared Error (RMSE): {result['rmse']:.4f}")
+                elif 'mean_squared_error' in result:
+                    # Calculate RMSE if not provided
+                    import math
+                    rmse = math.sqrt(result['mean_squared_error'])
+                    response_parts.append(f"• Root Mean Squared Error (RMSE): {rmse:.4f}")
+                if 'mape' in result:
+                    response_parts.append(f"• Mean Absolute Percentage Error (MAPE): {result['mape']:.4f}%")
+                elif 'mean_absolute_percentage_error' in result:
+                    response_parts.append(f"• Mean Absolute Percentage Error (MAPE): {result['mean_absolute_percentage_error']:.4f}%")
             
-            # Add classification metrics (clean format)
-            if 'accuracy' in result:
-                response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
-            if 'precision' in result:
-                response_parts.append(f"• Precision: {result['precision']:.4f}")
-            if 'recall' in result:
-                response_parts.append(f"• Recall: {result['recall']:.4f}")
-            if 'f1_score' in result:
-                response_parts.append(f"• F1 Score: {result['f1_score']:.4f}")
-            if 'roc_auc' in result:
-                response_parts.append(f"• ROC AUC: {result['roc_auc']:.4f}")
-            if 'specificity' in result:
-                response_parts.append(f"• Specificity: {result['specificity']:.4f}")
-            
-            # Add regression metrics (clean format)
-            if 'r2_score' in result:
-                response_parts.append(f"• R² Score: {result['r2_score']:.4f} ({result['r2_score']*100:.2f}% variance explained)")
-            if 'mean_absolute_error' in result:
-                response_parts.append(f"• Mean Absolute Error (MAE): {result['mean_absolute_error']:.4f}")
-            if 'mean_squared_error' in result:
-                response_parts.append(f"• Mean Squared Error (MSE): {result['mean_squared_error']:.4f}")
-            if 'root_mean_squared_error' in result:
-                response_parts.append(f"• Root Mean Squared Error (RMSE): {result['root_mean_squared_error']:.4f}")
-            elif 'mean_squared_error' in result:
-                # Calculate RMSE if not provided
-                import math
-                rmse = math.sqrt(result['mean_squared_error'])
-                response_parts.append(f"• Root Mean Squared Error (RMSE): {rmse:.4f}")
-            if 'mean_absolute_percentage_error' in result:
-                response_parts.append(f"• Mean Absolute Percentage Error (MAPE): {result['mean_absolute_percentage_error']:.4f}%")
-            
-            # Add confusion matrix if available (clean format)
+            # Add confusion matrices if available (enhanced format with train vs test)
             if 'confusion_matrix' in result:
-                cm = result['confusion_matrix']
-                if isinstance(cm, list) and len(cm) == 2 and len(cm[0]) == 2:
-                    tn, fp = cm[0]
-                    fn, tp = cm[1]
-                    response_parts.append(f"\n📋 Confusion Matrix:")
-                    response_parts.append(f"```")
-                    response_parts.append(f"         Predicted")
-                    response_parts.append(f"Actual   0     1")
-                    response_parts.append(f"   0   {tn:4}  {fp:4}")
-                    response_parts.append(f"   1   {fn:4}  {tp:4}")
-                    response_parts.append(f"```")
+                cm_test = result['confusion_matrix']
+                cm_train = result.get('train_confusion_matrix')
+                
+                if isinstance(cm_test, list) and len(cm_test) == 2 and len(cm_test[0]) == 2:
+                    if cm_train and isinstance(cm_train, list) and len(cm_train) == 2 and len(cm_train[0]) == 2:
+                        # Show both training and test confusion matrices
+                        response_parts.append(f"\n📋 **Confusion Matrices (Train vs Test):**")
+                        
+                        tn_test, fp_test = cm_test[0]
+                        fn_test, tp_test = cm_test[1]
+                        tn_train, fp_train = cm_train[0]
+                        fn_train, tp_train = cm_train[1]
+                        
+                        response_parts.append(f"```")
+                        response_parts.append(f"🏋️ TRAINING SET:          📊 TEST SET:")
+                        response_parts.append(f"         Predicted                Predicted")
+                        response_parts.append(f"Actual   0     1           Actual   0     1")
+                        response_parts.append(f"   0   {tn_train:4}  {fp_train:4}             0   {tn_test:4}  {fp_test:4}")
+                        response_parts.append(f"   1   {fn_train:4}  {tp_train:4}             1   {fn_test:4}  {tp_test:4}")
+                        response_parts.append(f"```")
+                        
+                        # Calculate and show key differences
+                        train_accuracy = (tp_train + tn_train) / (tp_train + tn_train + fp_train + fn_train)
+                        test_accuracy = (tp_test + tn_test) / (tp_test + tn_test + fp_test + fn_test)
+                        acc_diff = train_accuracy - test_accuracy
+                        
+                        if acc_diff > 0.05:
+                            response_parts.append(f"⚠️ **Overfitting Alert**: Training accuracy ({train_accuracy:.3f}) significantly higher than test ({test_accuracy:.3f})")
+                        elif acc_diff > 0.02:
+                            response_parts.append(f"�� **Monitor**: Small gap between train ({train_accuracy:.3f}) and test ({test_accuracy:.3f}) accuracy")
+                        else:
+                            response_parts.append(f"✅ **Good Fit**: Similar performance on train ({train_accuracy:.3f}) and test ({test_accuracy:.3f})")
+                    else:
+                        # Show only test confusion matrix if training not available
+                        tn_test, fp_test = cm_test[0]
+                        fn_test, tp_test = cm_test[1]
+                        response_parts.append(f"\n📋 **Confusion Matrix (Test Set):**")
+                        response_parts.append(f"```")
+                        response_parts.append(f"         Predicted")
+                        response_parts.append(f"Actual   0     1")
+                        response_parts.append(f"   0   {tn_test:4}  {fp_test:4}")
+                        response_parts.append(f"   1   {fn_test:4}  {tp_test:4}")
+                        response_parts.append(f"```")
             
             # Add model save information (clean format)
             if 'model_path' in result and result['model_path']:
