@@ -3515,14 +3515,14 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                         # Calculate and show key differences
                         train_accuracy = (tp_train + tn_train) / (tp_train + tn_train + fp_train + fn_train)
                         test_accuracy = (tp_test + tn_test) / (tp_test + tn_test + fp_test + fn_test)
-                        acc_diff = train_accuracy - test_accuracy
+                        auc_diff = train_auc - test_auc
                         
-                        if acc_diff > 0.05:
-                            response_parts.append(f"⚠️ Overfitting Alert: Training accuracy ({train_accuracy:.3f}) significantly higher than test ({test_accuracy:.3f})")
-                        elif acc_diff > 0.02:
-                            response_parts.append(f"�� Monitor: Small gap between train ({train_accuracy:.3f}) and test ({test_accuracy:.3f}) accuracy")
+                        if auc_diff > 0.05:
+                            response_parts.append(f"⚠️ Overfitting Alert: Training AUC ({train_auc:.3f}) significantly higher than test ({test_auc:.3f})")
+                        elif auc_diff > 0.025:
+                            response_parts.append(f"�� Mild Overfitting: Small gap between train ({train_auc:.3f}) and test ({test_auc:.3f}) auc")
                         else:
-                            response_parts.append(f"✅ Good Fit: Similar performance on train ({train_accuracy:.3f}) and test ({test_accuracy:.3f})")
+                            response_parts.append(f"✅ Good Fit: Similar performance on train ({train_auc:.3f}) and test ({test_auc:.3f})")
                     else:
                         # Show only test confusion matrix if training not available
                         tn_test, fp_test = cm_test[0]
