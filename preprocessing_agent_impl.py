@@ -391,7 +391,7 @@ Column: {col}
 
 OUTLIER TREATMENT OPTIONS:
 - "keep": Keep all outliers (if they are legitimate values)
-- "winsorize": Cap at 1st/99th percentiles (for income, amounts, skewed data, bounded data)
+- "winsorize": Cap at 1st/99th percentiles (RECOMMENDED for financial data - preserves important extremes)
 - "remove": Remove outliers (if they are measurement errors)
 - "mark_missing": Convert outliers to NaN for later imputation
 
@@ -2856,12 +2856,12 @@ def apply_outliers_treatment(df: pd.DataFrame, recommendations: Dict[str, Any]) 
             print_to_log(f"⚠️ Column '{col}' is not numeric, skipping outlier treatment '{treatment}'")
             continue
         
-        if treatment == 'winsorize' or treatment == 'winsorize_5th_95th':
-            # Winsorize at 5th and 95th percentiles
-            q05 = df_processed[col].quantile(0.05)
-            q95 = df_processed[col].quantile(0.95)
+        if treatment == 'winsorize' or treatment == 'winsorize_1st_99th':
+            # Winsorize at 1st and 99th percentiles (better for financial data)
+            q05 = df_processed[col].quantile(0.01)
+            q95 = df_processed[col].quantile(0.99)
             df_processed[col] = df_processed[col].clip(lower=q05, upper=q95)
-            print_to_log(f"   • {col}: Winsorized at 5th-95th percentiles (bounds: {q05:.2f}, {q95:.2f})")
+            print_to_log(f"   • {col}: Winsorized at 1st-99th percentiles (bounds: {q05:.2f}, {q95:.2f})")
         
         elif treatment == 'winsorize_1st_99th':
             # Winsorize at 1st and 99th percentiles
