@@ -3395,27 +3395,27 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     test_acc = result['accuracy']
                     diff = train_acc - test_acc
                     flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
-                    response_parts.append(f"• **Accuracy**: Train: {train_acc:.4f} | Test: {test_acc:.4f} | Diff: {diff:+.4f} {flag}")
+                    response_parts.append(f"• Accuracy: Train: {train_acc:.4f} | Test: {test_acc:.4f} | Diff: {diff:+.4f} {flag}")
                 
                 if 'f1_score' in result and 'train_f1_score' in result:
                     train_f1 = result['train_f1_score']
                     test_f1 = result['f1_score']
                     diff = train_f1 - test_f1
                     flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
-                    response_parts.append(f"• **F1 Score**: Train: {train_f1:.4f} | Test: {test_f1:.4f} | Diff: {diff:+.4f} {flag}")
+                    response_parts.append(f"• F1 Score: Train: {train_f1:.4f} | Test: {test_f1:.4f} | Diff: {diff:+.4f} {flag}")
                 
                 if 'roc_auc' in result and 'train_roc_auc' in result:
                     train_auc = result['train_roc_auc']
                     test_auc = result['roc_auc']
                     diff = train_auc - test_auc
                     flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
-                    response_parts.append(f"• **ROC AUC**: Train: {train_auc:.4f} | Test: {test_auc:.4f} | Diff: {diff:+.4f} {flag}")
+                    response_parts.append(f"• ROC AUC: Train: {train_auc:.4f} | Test: {test_auc:.4f} | Diff: {diff:+.4f} {flag}")
                 
                 if 'precision' in result and 'train_precision' in result:
-                    response_parts.append(f"• **Precision**: Train: {result['train_precision']:.4f} | Test: {result['precision']:.4f}")
+                    response_parts.append(f"• Precision: Train: {result['train_precision']:.4f} | Test: {result['precision']:.4f}")
                 
                 if 'recall' in result and 'train_recall' in result:
-                    response_parts.append(f"• **Recall**: Train: {result['train_recall']:.4f} | Test: {result['recall']:.4f}")
+                    response_parts.append(f"• Recall: Train: {result['train_recall']:.4f} | Test: {result['recall']:.4f}")
                 
                 # Regression metrics with train vs test comparison
                 if 'r2' in result and 'train_r2' in result:
@@ -3423,27 +3423,27 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                     test_r2 = result['r2']
                     diff = train_r2 - test_r2
                     flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
-                    response_parts.append(f"• **R² Score**: Train: {train_r2:.4f} | Test: {test_r2:.4f} | Diff: {diff:+.4f} {flag}")
+                    response_parts.append(f"• R² Score: Train: {train_r2:.4f} | Test: {test_r2:.4f} | Diff: {diff:+.4f} {flag}")
                 
                 if 'mae' in result and 'train_mae' in result:
                     train_mae = result['train_mae']
                     test_mae = result['mae']
                     diff = test_mae - train_mae  # For error metrics, higher test error indicates overfitting
                     flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
-                    response_parts.append(f"• **MAE**: Train: {train_mae:.4f} | Test: {test_mae:.4f} | Diff: {diff:+.4f} {flag}")
+                    response_parts.append(f"• MAE: Train: {train_mae:.4f} | Test: {test_mae:.4f} | Diff: {diff:+.4f} {flag}")
                 
                 if 'rmse' in result and 'train_rmse' in result:
                     train_rmse = result['train_rmse']
                     test_rmse = result['rmse']
                     diff = test_rmse - train_rmse  # For error metrics, higher test error indicates overfitting
                     flag = "🚨 OVERFITTING!" if diff > 0.05 else "✅ Good" if diff < 0.02 else "⚠️ Monitor"
-                    response_parts.append(f"• **RMSE**: Train: {train_rmse:.4f} | Test: {test_rmse:.4f} | Diff: {diff:+.4f} {flag}")
+                    response_parts.append(f"• RMSE: Train: {train_rmse:.4f} | Test: {test_rmse:.4f} | Diff: {diff:+.4f} {flag}")
                 
                 # Additional metrics without comparison
                 if 'specificity' in result:
-                    response_parts.append(f"• **Specificity** (Test): {result['specificity']:.4f}")
+                    response_parts.append(f"• Specificity (Test): {result['specificity']:.4f}")
                 if 'log_loss' in result:
-                    response_parts.append(f"• **Log Loss** (Test): {result['log_loss']:.4f}")
+                    response_parts.append(f"• Log Loss (Test): {result['log_loss']:.4f}")
                 
             else:
                 # Fallback to original display if no training metrics available
@@ -3497,7 +3497,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                 if isinstance(cm_test, list) and len(cm_test) == 2 and len(cm_test[0]) == 2:
                     if cm_train and isinstance(cm_train, list) and len(cm_train) == 2 and len(cm_train[0]) == 2:
                         # Show both training and test confusion matrices
-                        response_parts.append(f"\n📋 **Confusion Matrices (Train vs Test):**")
+                        response_parts.append(f"\n📋 *Confusion Matrices (Train vs Test):*")
                         
                         tn_test, fp_test = cm_test[0]
                         fn_test, tp_test = cm_test[1]
@@ -3518,16 +3518,16 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                         acc_diff = train_accuracy - test_accuracy
                         
                         if acc_diff > 0.05:
-                            response_parts.append(f"⚠️ **Overfitting Alert**: Training accuracy ({train_accuracy:.3f}) significantly higher than test ({test_accuracy:.3f})")
+                            response_parts.append(f"⚠️ Overfitting Alert: Training accuracy ({train_accuracy:.3f}) significantly higher than test ({test_accuracy:.3f})")
                         elif acc_diff > 0.02:
-                            response_parts.append(f"�� **Monitor**: Small gap between train ({train_accuracy:.3f}) and test ({test_accuracy:.3f}) accuracy")
+                            response_parts.append(f"�� Monitor: Small gap between train ({train_accuracy:.3f}) and test ({test_accuracy:.3f}) accuracy")
                         else:
-                            response_parts.append(f"✅ **Good Fit**: Similar performance on train ({train_accuracy:.3f}) and test ({test_accuracy:.3f})")
+                            response_parts.append(f"✅ Good Fit: Similar performance on train ({train_accuracy:.3f}) and test ({test_accuracy:.3f})")
                     else:
                         # Show only test confusion matrix if training not available
                         tn_test, fp_test = cm_test[0]
                         fn_test, tp_test = cm_test[1]
-                        response_parts.append(f"\n📋 **Confusion Matrix (Test Set):**")
+                        response_parts.append(f"\n📋 Confusion Matrix (Test Set):")
                         response_parts.append(f"```")
                         response_parts.append(f"         Predicted")
                         response_parts.append(f"Actual   0     1")
