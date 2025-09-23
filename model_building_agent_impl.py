@@ -2960,7 +2960,7 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
             if sample_data is not None:
                 print_to_log(f"   📊 Sample data available: {sample_data.shape}")
                 print_to_log(f"   🎯 Target column sought: '{target_column if target_column else 'None'}'")
-                print_to_log(f"   📋 Available columns: {list(sample_data.columns)[:5]}... (showing first 5)")
+                print_to_log(f"   📋 Available columns: {list(sample_data.columns)}")
                 if target_column:
                     print_to_log(f"   ❓ Target in columns: {target_column in sample_data.columns}")
             else:
