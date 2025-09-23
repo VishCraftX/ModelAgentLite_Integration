@@ -3799,6 +3799,25 @@ class ModelBuildingAgentWrapper:
             # Load data into the agent if available
             if data_to_use is not None:
                 print_to_log(f"📊 Loading data into model building agent")
+                
+                # CRITICAL: Filter data to use only selected features + target column
+                if features_to_use is not None and state.target_column:
+                    # Create filtered dataset with selected features + target
+                    columns_to_keep = features_to_use.copy()
+                    if state.target_column not in columns_to_keep:
+                        columns_to_keep.append(state.target_column)
+                    
+                    # Filter the data to only include selected columns
+                    filtered_data = data_to_use[columns_to_keep]
+                    print_to_log(f"🎯 FEATURE FILTERING: {data_to_use.shape} → {filtered_data.shape}")
+                    print_to_log(f"   📊 Selected features: {len(features_to_use)}")
+                    print_to_log(f"   🎯 Target column: {state.target_column}")
+                    print_to_log(f"   📋 Total columns for modeling: {len(columns_to_keep)}")
+                    
+                    data_to_use = filtered_data
+                else:
+                    print_to_log("⚠️ No feature filtering applied - using all columns")
+                
                 self.agent.load_data(data_to_use, state.chat_session)
                 
                 # Set target column if available
