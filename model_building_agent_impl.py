@@ -2948,15 +2948,23 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
         problem_type = "classification"
         
         # If we have access to the data, detect the actual problem type
-        if sample_data is not None and 'target' in sample_data.columns:
-            y = sample_data["target"]
+        target_column = extract_target_column_from_prompt(prompt) or global_info.get('target_column')
+        if sample_data is not None and target_column and target_column in sample_data.columns:
+            y = sample_data[target_column]
             problem_type = detect_problem_type(y)
             print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
-            print_to_log(f"   📊 Target column found: {y.nunique()} unique values")
+            print_to_log(f"   📊 Target column '{target_column}' found: {y.nunique()} unique values")
             print_to_log(f"   🎯 Detected problem type: {problem_type}")
         else:
             print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
-            print_to_log(f"   ⚠️ No sample_data or target column found")
+            if sample_data is not None:
+                print_to_log(f"   📊 Sample data available: {sample_data.shape}")
+                print_to_log(f"   🎯 Target column sought: '{target_column if target_column else 'None'}'")
+                print_to_log(f"   📋 Available columns: {list(sample_data.columns)[:5]}... (showing first 5)")
+                if target_column:
+                    print_to_log(f"   ❓ Target in columns: {target_column in sample_data.columns}")
+            else:
+                print_to_log(f"   ⚠️ No sample_data available")
             print_to_log(f"   🎯 Defaulting to: {problem_type}")
     except Exception as e:
         print_to_log(f"🔍 PROBLEM TYPE DETECTION:")
@@ -3219,6 +3227,7 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
     print_to_log(f"🔍 FINAL PROMPT STATS:")
     print_to_log(f"   📏 Total system prompt length: {len(system_prompt)} characters")
     print_to_log(f"   📝 User prompt length: {len(prompt)} characters")
+    print_to_log(f"   📊 Sample data shape: {sample_data.shape}")
 
     # Call LLM with much smaller, focused prompt
     try:
