@@ -1535,7 +1535,20 @@ Generate Python code to fulfill this request:"""
                 
                 # Save result and return
                 self._save_session_state(session_id, result_state)
-                return self._prepare_response(result_state, "Automated pipeline completed!")
+                
+                # CRITICAL: Process pending file uploads for automated pipeline (normal flow handles this in slack_bot.py)
+                if hasattr(result_state, 'process_pending_file_uploads'):
+                    pending_uploads = getattr(result_state, 'pending_file_uploads', None)
+                    if pending_uploads and pending_uploads.get('files'):
+                        print_to_log(f"🔍 [Automated Pipeline] Processing {len(pending_uploads['files'])} pending file uploads...")
+                        uploads_processed = result_state.process_pending_file_uploads()
+                        if uploads_processed:
+                            print_to_log("✅ [Automated Pipeline] Pending file uploads processed successfully")
+                        else:
+                            print_to_log("⚠️ [Automated Pipeline] No pending file uploads were processed")
+                
+                # CRITICAL: Don't override the model building agent's comprehensive response with generic message
+                return self._prepare_response(result_state)
                 
             elif 'slow' in query_lower:
                 print_to_log("🎛️ [Early Interception] Slow mode selected")
