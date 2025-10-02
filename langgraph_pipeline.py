@@ -1333,7 +1333,23 @@ Generate Python code to fulfill this request:"""
                     
                     state.interactive_session['target_column'] = target_col
                     state.interactive_session['needs_target'] = False
-                    state.interactive_session['needs_mode_selection'] = True
+                    
+                    # CRITICAL: Use existing skip pattern detection system instead of duplicate logic
+                    from orchestrator import Orchestrator
+                    orchestrator = Orchestrator()
+                    
+                    # Check if user wants to skip using the existing sophisticated system
+                    skip_result = orchestrator._classify_skip_patterns(query)
+                    
+                    if skip_result and skip_result != "no_skip":
+                        # User explicitly wants to skip - clear interactive session and let orchestrator handle
+                        print_to_log(f"🎯 [Early Interception] Skip pattern detected: {skip_result} - bypassing mode selection")
+                        print_to_log(f"🔀 [Early Interception] Clearing interactive session and routing to orchestrator")
+                        state.interactive_session = None  # Clear interactive session
+                        # Let the query continue to orchestrator for skip pattern routing
+                    else:
+                        # User needs preprocessing - ask fast or slow mode
+                        state.interactive_session['needs_mode_selection'] = True
                     
                     # Log the fuzzy matching result
                     if match_type == 'exact':
@@ -1400,18 +1416,18 @@ Generate Python code to fulfill this request:"""
                 
                 self.slack_manager.send_message(session_id, "⚡ **Fast Mode Selected** - Starting automated ML pipeline...")
                 
-                # Directly call fast model agent
-                from fast_model_agent import fast_model_agent
+                # Call automated pipeline agent (preprocessing + feature selection + model building)
+                from automated_pipeline_agent import automated_pipeline_agent
                 
-                # Save state before calling fast agent
+                # Save state before calling automated pipeline agent
                 self._save_session_state(session_id, state)
                 
-                # Call fast model agent directly
-                result_state = fast_model_agent(state)
+                # Call automated pipeline agent directly
+                result_state = automated_pipeline_agent(state)
                 
                 # Save result and return
                 self._save_session_state(session_id, result_state)
-                return self._prepare_response(result_state, "Fast mode pipeline completed!")
+                return self._prepare_response(result_state, "Automated pipeline completed!")
                 
             elif 'slow' in query_lower:
                 print_to_log("🎛️ [Early Interception] Slow mode selected")

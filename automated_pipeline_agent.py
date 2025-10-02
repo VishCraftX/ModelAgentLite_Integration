@@ -3,46 +3,16 @@ from print_to_log import print_to_log
 import pandas as pd
 import numpy as np
 
-class FastModelAgent:
-    """Agent for automated ML pipeline execution using the same intelligent analysis as manual flow"""
+class AutomatedPipelineAgent:
+    """Agent for automated ML pipeline execution including preprocessing, feature selection, and model building"""
     
     def __init__(self):
-        print_to_log("🚀 FastModelAgent initialized - using intelligent LLM + rule-based analysis")
+        print_to_log("🚀 AutomatedPipelineAgent initialized - using intelligent LLM + rule-based analysis")
     
-    def _extract_model_request_from_query(self, original_query: str) -> str:
-        """Extract model building request from original user query"""
-        query_lower = original_query.lower()
-        
-        # Check for specific model types in user query
-        if "xgboost" in query_lower or "xgb" in query_lower:
-            return "build an XGBoost model"
-        elif "random forest" in query_lower or "randomforest" in query_lower or "rf" in query_lower:
-            return "build a Random Forest model"
-        elif "decision tree" in query_lower or "tree" in query_lower:
-            return "build a Decision Tree model"
-        elif "lightgbm" in query_lower or "lgbm" in query_lower:
-            return "build a LightGBM model"
-        elif "logistic regression" in query_lower or "logistic" in query_lower:
-            return "build a Logistic Regression model"
-        elif "svm" in query_lower or "support vector" in query_lower:
-            return "build an SVM model"
-        elif "neural network" in query_lower or "mlp" in query_lower:
-            return "build a Neural Network model"
-        elif "gradient boosting" in query_lower or "gbm" in query_lower:
-            return "build a Gradient Boosting model"
-        elif "adaboost" in query_lower:
-            return "build an AdaBoost model"
-        elif "naive bayes" in query_lower:
-            return "build a Naive Bayes model"
-        else:
-            # 🎯 IMPROVED DEFAULT: Use Random Forest for generic prompts
-            # This handles cases like "build me a model", "clean my data", "fast", etc.
-            print_to_log("🤖 No specific model mentioned - defaulting to Random Forest (best for general use)")
-            return "build a Random Forest model"
 
-    def handle_fast_model_request(self, state: PipelineState, target_column: str = None) -> PipelineState:
-        """Handle fast model request with target column setting"""
-        print_to_log("🚀 FastModelAgent: Starting intelligent automated pipeline")
+    def handle_automated_pipeline_request(self, state: PipelineState, target_column: str = None) -> PipelineState:
+        """Handle automated pipeline request with target column setting"""
+        print_to_log("🚀 AutomatedPipelineAgent: Starting intelligent automated pipeline")
         
         # CRITICAL: Preserve original user query at the very beginning
         if not hasattr(state, "preprocessing_state") or state.preprocessing_state is None:
@@ -51,7 +21,7 @@ class FastModelAgent:
         # Store original intent if not already stored
         if "original_user_intent" not in state.preprocessing_state and state.user_query:
             state.preprocessing_state["original_user_intent"] = state.user_query
-            print_to_log(f"🔍 [FastModelAgent] Preserved original user intent: '{state.user_query}'")
+            print_to_log(f"🔍 [AutomatedPipelineAgent] Preserved original user intent: '{state.user_query}'")
                 # Set target column if provided
         if target_column:
             state.target_column = target_column
@@ -373,158 +343,70 @@ Reply with the target column name (e.g., 'f_segment')"""
                 state.cleaned_data = df_working  # CRITICAL: Model agent looks for cleaned_data            
             send_progress("✅ **Final features selected**")
             
-            # Phase 7: Model Building (following actual flow with comprehensive results)
+            # Phase 7: Route to Model Building Agent
             send_progress("🤖 **Started modeling**")
-            print_to_log("🤖 Phase 7: Model Building - Training with comprehensive metrics like actual flow")
+            print_to_log("🤖 Phase 7: Routing to Model Building Agent")
             
+            # Prepare original query for model building agent
+            original_query = ""
+            if hasattr(state, "preprocessing_state") and state.preprocessing_state and "original_user_intent" in state.preprocessing_state:
+                original_query = state.preprocessing_state["original_user_intent"]
+                print_to_log(f"🔍 Using preserved original intent: '{original_query}'")
+            elif hasattr(state, "user_query") and state.user_query:
+                original_query = state.user_query
+                print_to_log(f"🔍 Using current user query: '{original_query}'")
+            else:
+                original_query = "build a machine learning model with comprehensive metrics and visualizations"
+                print_to_log(f"🔍 Using default query: '{original_query}'")
+            
+            # Only add target column info if it's not already in the query
+            if state.target_column and f"target column '{state.target_column}'" not in original_query.lower():
+                model_query = f"{original_query} with target column '{state.target_column}'"
+                print_to_log(f"🎯 Enhanced query with target column: '{model_query}'")
+            else:
+                model_query = original_query
+                print_to_log(f"🔍 Using original query as-is: '{model_query}'")
+            
+            # Set the model building query - let model building agent decide the model type
+            state.user_query = model_query
+            
+            # Update global model states for model building agent
+            try:
+                from model_building_agent_impl import global_model_states
+                user_id = state.chat_session or "automated_mode"
+                if user_id not in global_model_states:
+                    global_model_states[user_id] = {}
+                
+                global_model_states[user_id]["target_column"] = state.target_column
+                global_model_states[user_id]["sample_data"] = state.cleaned_data
+                print_to_log(f"🎯 Updated global model states for model building agent")
+            except Exception as e:
+                print_to_log(f"⚠️ Could not update global model states: {e}")
+            
+            # Use the model building agent wrapper to handle the model building
             try:
                 from agents_wrapper import ModelBuildingAgentWrapper
-                
-                # Use the actual model building agent for comprehensive results
                 model_agent = ModelBuildingAgentWrapper()
                 
                 if model_agent.available:
-                    print_to_log("🔧 Using actual model building agent with user prompt-based model selection")
+                    print_to_log("🔧 Routing to model building agent...")
+                    result_state = model_agent.run(state)
                     
-                    # Ensure selected features are properly set
-                    if not hasattr(state, "selected_features") or state.selected_features is None:
-                        # Fallback: use processed data features
-                        if hasattr(state, "processed_data") and state.processed_data is not None:
-                            feature_columns = [col for col in state.processed_data.columns if col != state.target_column]
-                            state.selected_features = state.processed_data[feature_columns].copy()
-                        else:
-                            print_to_log("❌ No processed data available for model building")
-                            raise Exception("No data available for model building")
-                    
-                    print_to_log(f"🔧 Model building with {len(state.selected_features) if hasattr(state.selected_features, '__len__') else 0} selected features")
-                    
-                    # 🎯 CRITICAL: Extract model type from original user query for prompt-based model selection
-                    # Use preserved original intent if available, otherwise fallback to current user_query
-                    original_query = ""
-                    if hasattr(state, "preprocessing_state") and state.preprocessing_state and "original_user_intent" in state.preprocessing_state:
-                        original_query = state.preprocessing_state["original_user_intent"]
-                        print_to_log(f"🔍 Using preserved original intent: '{original_query}'")
-                    elif hasattr(state, "user_query") and state.user_query:
-                        original_query = state.user_query
-                        print_to_log(f"🔍 Using current user query: '{original_query}'")
-                    else:
-                        original_query = "build a machine learning model with comprehensive metrics and visualizations"
-                        print_to_log(f"🔍 Using default query: '{original_query}'")                    
-                    # Parse model type from user query or use default
-                    base_model_query = self._extract_model_request_from_query(original_query)
-                    
-                    # CRITICAL: Merge original intent with target column for complete prompt
-                    # This solves the target column detection issue by including it in the prompt
-                    if state.target_column:
-                        model_query = f"{base_model_query} with target column '{state.target_column}'"
-                        print_to_log(f"🎯 Enhanced model query with target: '{model_query}'")
-                    else:
-                        model_query = base_model_query
-                        print_to_log(f"🤖 Base model query: '{model_query}'")                    
-                    # Set the model building query so the agent knows what model to build
-                    state.user_query = model_query
-                    
-                    # Run the actual model building agent (provides metrics, confusion matrix, rank ordering)
-                    # CRITICAL: Ensure target column is set in model agent's global state
-                    # The model agent looks for target in global_model_states, not just user_states
-                    try:
-                        # Import the global states that the model agent uses
-                        from model_building_agent_impl import global_model_states
-                        
-                        # Ensure the user exists in global_model_states
-                        user_id = state.chat_session or "fast_mode"
-                        if user_id not in global_model_states:
-                            global_model_states[user_id] = {}
-                        
-                        # Set the target column in the global state where generate_model_code looks for it
-                        global_model_states[user_id]["target_column"] = state.target_column
-                        print_to_log(f"🎯 Set target column in global_model_states: {state.target_column}")
-                        
-                        # Also ensure sample_data includes the target column
-                        if hasattr(state, "cleaned_data") and state.cleaned_data is not None:
-                            if state.target_column in state.cleaned_data.columns:
-                                global_model_states[user_id]["sample_data"] = state.cleaned_data
-                                print_to_log(f"📊 Updated sample_data with target column included: {state.cleaned_data.shape}")
-                            else:
-                                print_to_log(f"⚠️ Target column {state.target_column} not found in cleaned_data columns")
-                        
-                    except Exception as e:
-                        print_to_log(f"⚠️ Error setting target in global_model_states: {e}")
-                    
-                    # Run the actual model building agent (provides metrics, confusion matrix, rank ordering)
-                    result_state = model_agent.run(state)                    
-                    # Update our state with comprehensive results
+                    # Update our state with results from model building agent
                     state.trained_model = result_state.trained_model
                     state.model_building_state = result_state.model_building_state
                     state.last_response = result_state.last_response
                     
-                    # CRITICAL: Send detailed metrics to Slack immediately and return
-                    # This prevents the generic summary from overwriting the detailed metrics
-                    if result_state.last_response:
-                        print_to_log("✅ Using detailed model building response with all classification metrics")
-                        
-                        # Send detailed metrics to Slack immediately
-                        slack_manager = getattr(self, "slack_manager", None)
-                        if not slack_manager:
-                            from toolbox import slack_manager as global_slack_manager
-                            slack_manager = global_slack_manager
-                        
-                        if slack_manager and state.chat_session:
-                            try:
-                                print_to_log("📤 Sending detailed classification metrics to Slack")
-                                slack_manager.send_message(state.chat_session, result_state.last_response)
-                                print_to_log("✅ Detailed metrics sent to Slack successfully")
-                            except Exception as e:
-                                print_to_log(f"⚠️ Error sending detailed metrics to Slack: {e}")
-                        else:
-                            print_to_log("⚠️ No Slack manager available - detailed metrics not sent")
-                        
-                        print_to_log("🎉 INTELLIGENT automated ML pipeline completed successfully!")
-                        return state
-                    
-                    if state.trained_model:
-                        print_to_log("✅ Model trained with comprehensive results (metrics, confusion matrix, rank ordering)")
-                        if hasattr(state, "model_building_state") and state.model_building_state:
-                            if "metrics" in state.model_building_state:
-                                metrics = state.model_building_state["metrics"]
-                                print_to_log(f"📊 Model metrics available: {list(metrics.keys()) if isinstance(metrics, dict) else 'Available'}")
-                    else:
-                        print_to_log("⚠️ Model training completed but no model object returned")
-                
+                    print_to_log("✅ Model building agent completed successfully")
                 else:
-                    print_to_log("⚠️ Model building agent not available, using simple fallback")
-                    # Simple fallback model training
-                    model_data = state.processed_data if hasattr(state, "processed_data") and state.processed_data is not None else df_working
+                    print_to_log("⚠️ Model building agent not available")
+                    state.last_response = "⚠️ Model building agent not available"
                     
-                    if state.target_column in model_data.columns:
-                        X = model_data.drop(columns=[state.target_column])
-                        y = model_data[state.target_column]
-                        
-                        # Basic model training
-                        from sklearn.ensemble import RandomForestClassifier
-                        from sklearn.model_selection import train_test_split
-                        from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-                        
-                        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-                        model = RandomForestClassifier(n_estimators=100, random_state=42)
-                        model.fit(X_train, y_train)
-                        
-                        y_pred = model.predict(X_test)
-                        accuracy = accuracy_score(y_test, y_pred)
-                        
-                        state.trained_model = model
-                        state.preprocessing_state["model_metrics"] = {"accuracy": accuracy}
-                        
-                        print_to_log(f"✅ Fallback model trained - Accuracy: {accuracy:.3f}")
-                    else:
-                        print_to_log(f"❌ Target column {state.target_column} not found in processed data")
-
             except Exception as e:
-                print_to_log(f"⚠️ Model building failed: {e}")
-                import traceback
-                traceback.print_exc()
+                print_to_log(f"⚠️ Error calling model building agent: {e}")
+                state.last_response = f"⚠️ Model building failed: {str(e)}"
             
-            send_progress("✅ **Final modeling results completed**")
+            send_progress("✅ **Modeling completed**")
             
             # Generate final success message
             final_shape = state.processed_data.shape if state.processed_data is not None else state.cleaned_data.shape
@@ -578,19 +460,19 @@ Reply with the target column name (e.g., 'f_segment')"""
             state.last_response = f"❌ **Pipeline Error:** {error_msg}"
             return state
 
-def fast_model_agent(state: PipelineState) -> PipelineState:
-    """Main entry point for fast model agent - called by langgraph_pipeline.py"""
-    print_to_log("🚀 [Fast Model Agent] Starting intelligent fast model pipeline")
+def automated_pipeline_agent(state: PipelineState) -> PipelineState:
+    """Main entry point for automated pipeline agent - called by langgraph_pipeline.py"""
+    print_to_log("🚀 [Automated Pipeline Agent] Starting intelligent automated pipeline")
     
-    agent = FastModelAgent()
+    agent = AutomatedPipelineAgent()
     
     # Check if this is a target column response
     if state.target_column is None and state.user_query and state.raw_data is not None:
         # Check if user query looks like a column name
         if state.user_query.strip() in state.raw_data.columns:
-            print_to_log(f"🎯 [Fast Model Agent] Setting target column: {state.user_query.strip()}")
-            return agent.handle_fast_model_request(state, state.user_query.strip())
+            print_to_log(f"🎯 [Automated Pipeline Agent] Setting target column: {state.user_query.strip()}")
+            return agent.handle_automated_pipeline_request(state, state.user_query.strip())
     
     # Otherwise start the normal flow
-    print_to_log("🚀 [Fast Model Agent] Starting intelligent automated pipeline")
-    return agent.handle_fast_model_request(state)
+    print_to_log("🚀 [Automated Pipeline Agent] Starting intelligent automated pipeline")
+    return agent.handle_automated_pipeline_request(state)
