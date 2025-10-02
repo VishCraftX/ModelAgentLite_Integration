@@ -283,7 +283,8 @@ class MultiAgentMLPipeline:
             'target_column': getattr(state, 'target_column', None),
             'current_phase': 'overview',
             'needs_target': not (hasattr(state, 'target_column') and state.target_column),
-            'needs_mode_selection': True
+            'needs_mode_selection': True,
+            'original_query': state.user_query  # CRITICAL: Store original query for fast pipeline
         }
         
         # Show mode selection message

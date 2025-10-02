@@ -607,8 +607,11 @@ def get_library_fallback_code(original_code: str, missing_library: str) -> str:
     # Define fallback replacements
     fallbacks = {
         "lightgbm": {
+            "import lightgbm as lgb": "# lightgbm not available - using sklearn GradientBoosting\nfrom sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor\nclass lgb:\n    LGBMClassifier = GradientBoostingClassifier\n    LGBMRegressor = GradientBoostingRegressor",
             "from lightgbm import LGBMClassifier": "from sklearn.ensemble import GradientBoostingClassifier as LGBMClassifier",
             "from lightgbm import LGBMRegressor": "from sklearn.ensemble import GradientBoostingRegressor as LGBMRegressor",
+            "lgb.LGBMClassifier(": "GradientBoostingClassifier(",
+            "lgb.LGBMRegressor(": "GradientBoostingRegressor(",
             "LGBMClassifier(": "GradientBoostingClassifier(",
             "LGBRegressor(": "GradientBoostingRegressor("
         },
@@ -2675,7 +2678,7 @@ MANDATORY STRUCTURE:
 4. Model training: model = [UserRequestedModel](); model.fit(X_train, y_train)
    ✅ FOLLOW USER'S SPECIFIC REQUEST for model type and parameters
    ✅ FOR DECISION TREES: Use max_depth=5 as default if user doesn't specify depth
-5. Predictions: y_pred = model.predict(X_test)
+5. Predictions: y_pred = model.predict(X_test); y_proba = model.predict_proba(X_test)
 6. Metrics calculation
 7. Model saving: model_path = safe_joblib_dump(model, 'model.joblib') (Not required for existing models)
 8. Result dictionary: result = {'model': model, 'model_path': model_path, ...}
@@ -2863,47 +2866,57 @@ result = {
 RANK_ORDERING_PROMPT = """
 🚨 MANDATORY: Add rank ordering/segmentation analysis:
 
+🚨 CRITICAL: Use TEST SET ONLY for rank ordering (NEVER mix test and full dataset sizes!)
+
 COMPLETE STEP-BY-STEP PROCESS:
 
-# Step 1: Get predictions for segmentation (use test set only)
-y_proba = model.predict_proba(X_test)[:,1]  # Get positive class probabilities
+# Step 1: Get predictions for segmentation (TEST SET ONLY)
+if hasattr(model, 'predict_proba'):
+    test_proba = model.predict_proba(X_test)
+    if test_proba.shape[1] == 2:
+        test_probabilities = test_proba[:, 1]  # Binary classification - positive class
+    else:
+        test_probabilities = np.max(test_proba, axis=1)  # Multi-class - max probability
+else:
+    test_probabilities = model.predict(X_test)  # For regression or models without predict_proba
 
-# Step 2: Create segmentation dataframe
-    test_df = pd.DataFrame({
-        'actual': y_test.values,
-        'probability': y_proba
-    })
+# Step 2: Create segmentation dataframe (TEST DATA ONLY)
+rank_df = pd.DataFrame({
+    'actual': y_test.values,
+    'probability': test_probabilities
+})
 
 # Step 3: Create buckets/deciles (CRITICAL: use duplicates='drop')
-    test_df['bucket'] = pd.qcut(test_df['probability'], q=10, labels=False, duplicates='drop')
+rank_df['decile'] = pd.qcut(rank_df['probability'], q=10, labels=False, duplicates='drop') + 1
     
 # Step 4: Calculate rank ordering metrics
-    rank_metrics = test_df.groupby('bucket').agg({
-    'actual': ['sum','count'],
-    'probability': ['mean','min','max']
-    }).reset_index()
-rank_metrics.columns = ['bucket','numBads','totalUsersCount','avg_probability','min_threshold','max_threshold']
+rank_ordering = rank_df.groupby('decile').agg({
+    'actual': ['sum', 'count'],
+    'probability': ['mean', 'min', 'max']
+}).reset_index()
+
+rank_ordering.columns = ['decile', 'bad_count', 'total_count', 'avg_probability', 'min_threshold', 'max_threshold']
 
 # Step 5: Calculate rates and cumulative metrics
-rank_metrics['badrate'] = rank_metrics['numBads'] / rank_metrics['totalUsersCount']
-rank_metrics['bucket'] = rank_metrics['bucket'] + 1  # Start from 1, not 0
-    rank_metrics = rank_metrics.sort_values('bucket')
+rank_ordering['badrate'] = rank_ordering['bad_count'] / rank_ordering['total_count']
+rank_ordering = rank_ordering.sort_values('decile')
 
 # Cumulative calculations
-    rank_metrics['cum_numBads'] = rank_metrics['numBads'].cumsum()
-    rank_metrics['cum_totalUsers'] = rank_metrics['totalUsersCount'].cumsum()
-    rank_metrics['cum_badrate'] = rank_metrics['cum_numBads'] / rank_metrics['cum_totalUsers']
-rank_metrics['coverage'] = (rank_metrics['cum_totalUsers']/len(test_df))*100
+rank_ordering['cum_bad_count'] = rank_ordering['bad_count'].cumsum()
+rank_ordering['cum_total_count'] = rank_ordering['total_count'].cumsum()
+rank_ordering['cum_badrate'] = rank_ordering['cum_bad_count'] / rank_ordering['cum_total_count']
+rank_ordering['coverage'] = (rank_ordering['cum_total_count'] / len(rank_df)) * 100
     
 # Step 6: Format results (round to appropriate decimal places)
-for col in ['badrate','cum_badrate','avg_probability','min_threshold','max_threshold']:
-        rank_metrics[col] = rank_metrics[col].round(4)
-    rank_metrics['coverage'] = rank_metrics['coverage'].round(2)
+for col in ['badrate', 'cum_badrate', 'avg_probability', 'min_threshold', 'max_threshold']:
+    rank_ordering[col] = rank_ordering[col].round(4)
+rank_ordering['coverage'] = rank_ordering['coverage'].round(2)
     
 # Step 7: Add to result dictionary
-    result['rank_ordering_table'] = rank_metrics.to_dict('records')
+result['rank_ordering'] = rank_ordering.to_dict('records')
 
-🚨 CRITICAL: Always add rank_ordering_table to the existing result dictionary!
+🚨 CRITICAL: Always add rank_ordering to the existing result dictionary!
+🚨 CRITICAL: NEVER assign test predictions to full dataset - they have different sizes!
 """
 
 DECISION_TREE_PLOT_PROMPT = """

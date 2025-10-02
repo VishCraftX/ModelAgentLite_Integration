@@ -19,9 +19,24 @@ class AutomatedPipelineAgent:
             state.preprocessing_state = {}
         
         # Store original intent if not already stored
-        if "original_user_intent" not in state.preprocessing_state and state.user_query:
-            state.preprocessing_state["original_user_intent"] = state.user_query
-            print_to_log(f"🔍 [AutomatedPipelineAgent] Preserved original user intent: '{state.user_query}'")
+        # CRITICAL: Don't overwrite if already exists - the first query is the real original intent
+        if "original_user_intent" not in state.preprocessing_state:
+            # Try to get the original query from interactive session first
+            original_intent = None
+            if (hasattr(state, 'interactive_session') and 
+                state.interactive_session and 
+                'original_query' in state.interactive_session):
+                original_intent = state.interactive_session['original_query']
+                print_to_log(f"🔍 [AutomatedPipelineAgent] Found original query in interactive session: '{original_intent}'")
+            elif state.user_query and state.user_query.lower().strip() not in ['fast', 'slow']:
+                original_intent = state.user_query
+                print_to_log(f"🔍 [AutomatedPipelineAgent] Using current user query as original: '{original_intent}'")
+            else:
+                original_intent = "build a machine learning model with comprehensive metrics and visualizations"
+                print_to_log(f"🔍 [AutomatedPipelineAgent] Using default original intent")
+            
+            state.preprocessing_state["original_user_intent"] = original_intent
+            print_to_log(f"🔍 [AutomatedPipelineAgent] Preserved original user intent: '{original_intent}'")
                 # Set target column if provided
         if target_column:
             state.target_column = target_column
