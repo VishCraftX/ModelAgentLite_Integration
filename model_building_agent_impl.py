@@ -1781,16 +1781,28 @@ VALIDATION METRICS PROCESS (when user asks for validation metrics, model perform
 5. This ensures proper validation on unseen data
 
 RANK ORDERING/SEGMENTATION PROCESS (when user asks for rank ordering, deciles, buckets):
+🚨 CRITICAL: Check if user specifies "test data" or "test dataset" in their request:
+
+IF USER ASKS FOR RANK ORDERING ON TEST DATA (mentions "test data", "test dataset", "test set"):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
-2. Use current_model.predict_proba(X)[:,1] to get probabilities on FULL dataset
-3. Create test_df with actual and probability columns
-4. Create segments with pd.qcut(probabilities, q=N, duplicates='drop')
+2. Create test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+3. Get TEST probabilities: test_probabilities = current_model.predict_proba(X_test)[:,1]
+4. Create rank_df with TEST data only: pd.DataFrame({'actual': y_test.values, 'probability': test_probabilities})
+5. Create segments with pd.qcut(test_probabilities, q=N, duplicates='drop')
+6. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
+
+IF USER ASKS FOR GENERAL RANK ORDERING (no "test" specification - for business analysis):
+1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
+2. Get FULL dataset probabilities: full_probabilities = current_model.predict_proba(X)[:,1]
+3. Create rank_df with FULL data: pd.DataFrame({'actual': y.values, 'probability': full_probabilities})
+4. Create segments with pd.qcut(full_probabilities, q=N, duplicates='drop')
 5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
-6. Include ALL required columns: bucket, badrate, totalUsersCount, cum_badrate, coverage, avg_probability, min_threshold, max_threshold
+
+ALWAYS include ALL required columns: bucket, badrate, totalUsersCount, cum_badrate, coverage, avg_probability, min_threshold, max_threshold
 
 Your specific task: {query}
 
-REMEMBER: Use 'current_model' for everything. Do not create any new models. Use train_test_split ONLY for validation metrics, not for rank ordering."""
+REMEMBER: Use 'current_model' for everything. Do not create any new models. Use train_test_split for validation metrics AND when user specifically asks for rank ordering on test data."""
         
     elif routing_decision == "no_model_available":
         state["response"] = """❌ You're asking to use an existing model, but no model has been built yet in this session.
