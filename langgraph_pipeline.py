@@ -264,12 +264,69 @@ class MultiAgentMLPipeline:
         return state
     
     def _preprocessing_node(self, state: PipelineState) -> PipelineState:
-        """Preprocessing node"""
-        # Lazy import to avoid circular dependencies
-        from agents_wrapper import preprocessing_agent
-        
+        """Preprocessing node - Ask for fast/slow mode selection before starting preprocessing"""
         print_to_log(f"\n🧹 [Preprocessing] Starting data preprocessing")
-        return preprocessing_agent.run(state)
+        
+        # CRITICAL: Always ask for fast/slow mode selection when preprocessing is triggered
+        # This ensures user can choose between automated (fast) or interactive (slow) pipeline
+        
+        # Check if target column is set, if not, we need to handle that first
+        if not hasattr(state, 'target_column') or not state.target_column:
+            print_to_log(f"🎯 [Preprocessing] Target column not set - will prompt user during preprocessing")
+        
+        # Create interactive session for mode selection
+        state.interactive_session = {
+            'agent_type': 'preprocessing',
+            'session_active': True,
+            'session_id': state.chat_session,
+            'phase': 'need_target' if not (hasattr(state, 'target_column') and state.target_column) else 'mode_selection',
+            'target_column': getattr(state, 'target_column', None),
+            'current_phase': 'overview',
+            'needs_target': not (hasattr(state, 'target_column') and state.target_column),
+            'needs_mode_selection': True
+        }
+        
+        # Show mode selection message
+        if hasattr(state, 'target_column') and state.target_column:
+            mode_choice_msg = f"""✅ **Target column set:** `{state.target_column}`
+
+🚀 **Choose Your ML Pipeline Mode**
+
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target:** {state.target_column}
+
+**⚡ Fast Mode (Automated):** 
+• Complete ML pipeline without interaction
+• AI handles all preprocessing decisions
+• Get results in 2-3 minutes
+
+**🎛️ Slow Mode (Interactive):** 
+• Step-by-step guided process
+• Review and approve each phase
+• Full control over decisions
+
+💬 **Choose:** Type `fast` or `slow`"""
+        else:
+            mode_choice_msg = f"""🎯 **Target Column & Pipeline Mode Selection**
+
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+
+**First, please specify your target column, then choose pipeline mode.**
+
+Available columns: {', '.join(list(state.raw_data.columns)[:5])}{'...' if len(state.raw_data.columns) > 5 else ''}
+
+💬 **Step 1:** Type your target column name"""
+        
+        # Send mode selection message to Slack
+        self.slack_manager.send_message(state.chat_session, mode_choice_msg)
+        
+        # Set response and return - user will respond with fast/slow choice
+        if hasattr(state, 'target_column') and state.target_column:
+            state.last_response = f"Target column '{state.target_column}' confirmed. Please choose your pipeline mode."
+        else:
+            state.last_response = "Please specify your target column first, then choose pipeline mode."
+        
+        return state
     
     def _feature_selection_node(self, state: PipelineState) -> PipelineState:
         """Feature selection node"""
