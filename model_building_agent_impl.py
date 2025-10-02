@@ -1757,7 +1757,6 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
 
 ABSOLUTELY FORBIDDEN - DO NOT DO ANY OF THESE:
 - DO NOT create DecisionTreeClassifier() or any new model
-- DO NOT use train_test_split() 
 - DO NOT use .fit() method
 - DO NOT import or use any model creation code
 - DO NOT retrain anything
@@ -1766,13 +1765,24 @@ ABSOLUTELY FORBIDDEN - DO NOT DO ANY OF THESE:
 REQUIRED - YOU MUST DO THIS:
 - Use the variable 'current_model' which contains the already trained model
 - For any predictions: current_model.predict() or current_model.predict_proba()
-- For rank ordering/deciles: Use current_model.predict_proba() with sample_data
-- For segmentation: Create buckets using qcut() with predicted probabilities
 - The model is already fitted and ready to use
 
-CRITICAL: If user asks for rank ordering, deciles, or buckets, follow the EXACT process:
+🚨 CRITICAL VALIDATION METRICS REQUIREMENTS:
+- For VALIDATION METRICS: MUST use train_test_split() to get proper test data
+- For RANK ORDERING/SEGMENTATION: Can use full dataset for business analysis
+- NEVER calculate validation metrics on training data or full dataset
+- Validation metrics measure model performance on UNSEEN data
+
+VALIDATION METRICS PROCESS (when user asks for validation metrics, model performance, accuracy, etc.):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
-2. Use current_model.predict_proba(X)[:,1] to get probabilities  
+2. Create test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+3. Use current_model.predict(X_test) and current_model.predict_proba(X_test) for test predictions
+4. Calculate metrics ONLY on test data: accuracy_score(y_test, y_pred), etc.
+5. This ensures proper validation on unseen data
+
+RANK ORDERING/SEGMENTATION PROCESS (when user asks for rank ordering, deciles, buckets):
+1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
+2. Use current_model.predict_proba(X)[:,1] to get probabilities on FULL dataset
 3. Create test_df with actual and probability columns
 4. Create segments with pd.qcut(probabilities, q=N, duplicates='drop')
 5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
@@ -1780,7 +1790,7 @@ CRITICAL: If user asks for rank ordering, deciles, or buckets, follow the EXACT 
 
 Your specific task: {query}
 
-REMEMBER: Use 'current_model' for everything. Do not create any new models. Do not generate plots unless explicitly requested."""
+REMEMBER: Use 'current_model' for everything. Do not create any new models. Use train_test_split ONLY for validation metrics, not for rank ordering."""
         
     elif routing_decision == "no_model_available":
         state["response"] = """❌ You're asking to use an existing model, but no model has been built yet in this session.
@@ -3987,13 +3997,33 @@ class LangGraphModelAgent:
                 print_to_log(f"🔍 Found {len(root_models)} model(s) in root directory")
             
             if recent_models:
-                user_model_path = max(recent_models, key=os.path.getctime)
-                print_to_log(f"🔍 Selected most recent model: {user_model_path}")
+                # PRIORITY 1: Check if we have best model info from previous multi-model result
+                best_model_path = None
+                last_result = global_model_info.get('last_result', {})
+                
+                if isinstance(last_result, dict) and 'best_model' in last_result:
+                    best_model_info = last_result['best_model']
+                    if isinstance(best_model_info, dict) and 'model_path' in best_model_info:
+                        candidate_path = best_model_info['model_path']
+                        if candidate_path in recent_models and os.path.exists(candidate_path):
+                            best_model_path = candidate_path
+                            best_model_name = best_model_info.get('name', 'Unknown')
+                            print_to_log(f"🏆 Found best model from previous multi-model result: {best_model_name}")
+                            print_to_log(f"🔍 Selected best model: {best_model_path}")
+                
+                # PRIORITY 2: If no best model info, fall back to most recent
+                if not best_model_path:
+                    user_model_path = max(recent_models, key=os.path.getctime)
+                    print_to_log(f"🔍 No best model info found - selected most recent model: {user_model_path}")
+                else:
+                    user_model_path = best_model_path
+                
                 # Update global state (preserve existing data)
                 if user_id not in global_model_states:
                     global_model_states[user_id] = {}
                 global_model_states[user_id]['model_path'] = user_model_path
-                global_model_states[user_id]['last_result'] = {}
+                if 'last_result' not in global_model_states[user_id]:
+                    global_model_states[user_id]['last_result'] = {}
                 # Preserve sample_data if it exists
         
         has_model = bool(user_model_path) or self.user_states.get(user_id, {}).get("has_existing_model", False)
@@ -4068,11 +4098,31 @@ class LangGraphModelAgent:
             })
         
         # Also sync with global model states for consistency (preserve existing data)
-        if final_state.get("model_path"):
+        execution_result = final_state.get("execution_result")
+        
+        # SPECIAL HANDLING: Multi-model results need different storage logic
+        if isinstance(execution_result, dict) and 'models' in execution_result and 'best_model' in execution_result:
+            # This is a multi-model result - store the entire result and use best model path
+            if user_id not in global_model_states:
+                global_model_states[user_id] = {}
+            
+            best_model_info = execution_result.get('best_model', {})
+            best_model_path = best_model_info.get('model_path')
+            
+            if best_model_path:
+                global_model_states[user_id]['model_path'] = best_model_path
+                print_to_log(f"🏆 Synced best model from multi-model result: {best_model_info.get('name', 'Unknown')}")
+            
+            # Store the complete multi-model result for future "use best model" queries
+            global_model_states[user_id]['last_result'] = execution_result
+            print_to_log(f"🔄 Stored complete multi-model result for {user_id}")
+            
+        elif final_state.get("model_path"):
+            # Regular single model result
             if user_id not in global_model_states:
                 global_model_states[user_id] = {}
             global_model_states[user_id]['model_path'] = final_state["model_path"]
-            global_model_states[user_id]['last_result'] = final_state.get("execution_result")
+            global_model_states[user_id]['last_result'] = execution_result
             # Preserve sample_data if it exists
             print_to_log(f"🔄 Synced model state for {user_id}: {final_state['model_path']}")
         
