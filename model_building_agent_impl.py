@@ -3279,9 +3279,8 @@ def generate_model_code(prompt: str, user_id: str, original_query: str = "") -> 
     
     # Tree plot detection logic
     tree_in_prompt = is_decision_tree_request  # Use the robust detection
-    wants_tree_plot = tree_in_prompt and any(keyword in detection_text for keyword in [
-        "plot", "show", "visualize", "display", "draw", "chart", "graph"
-    ])
+    # AUTOMATIC DECISION TREE PLOTTING: Always generate plots for decision trees (as per BASE_SYSTEM_PROMPT line 2700)
+    wants_tree_plot = tree_in_prompt  # Auto-generate plots for all decision tree requests
     using_existing_tree = any(phrase in detection_text for phrase in [
         "use this tree", "use the tree", "with this tree", "for this tree",
         "existing tree", "current tree", "saved tree"
