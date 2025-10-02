@@ -1721,6 +1721,12 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     matplotlib.use('Agg')
                     import matplotlib.pyplot as plt
                     from sklearn.tree import plot_tree
+                    
+                    # Set high-quality matplotlib parameters for crisp plots
+                    plt.rcParams['figure.dpi'] = 600
+                    plt.rcParams['savefig.dpi'] = 600
+                    plt.rcParams['font.size'] = 8
+                    plt.rcParams['axes.linewidth'] = 0.5
 
                     # Dynamic sizing
                     tree_depth = current_model.get_depth() if hasattr(current_model, 'get_depth') else current_model.tree_.max_depth
@@ -1745,7 +1751,14 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     )
                     plt.tight_layout(pad=2.0)
                     ts = int(time.time())
-                    plot_path = safe_plt_savefig(f"decision_tree_{user_id}_{ts}.png", bbox_inches='tight', dpi=300, facecolor='white')
+                    # High resolution settings for crisp decision tree plots
+                    plot_path = safe_plt_savefig(f"decision_tree_{user_id}_{ts}.png", 
+                                               bbox_inches='tight', 
+                                               dpi=600,  # Increased from 300 to 600 for ultra-high resolution
+                                               facecolor='white', 
+                                               edgecolor='none',
+                                               format='png',
+                                               pad_inches=0.2)
 
                     state["execution_result"] = {"plot_path": plot_path}
                     state["artifacts"] = {"files": [plot_path]}
@@ -2924,9 +2937,15 @@ DECISION_TREE_PLOT_PROMPT = """
 
 COMPLETE STEP-BY-STEP PROCESS:
 
-# Step 1: Import required plotting libraries
+# Step 1: Import required plotting libraries and set high-quality parameters
 import matplotlib.pyplot as plt
 from sklearn.tree import plot_tree
+
+# Set high-quality matplotlib parameters for crisp plots
+plt.rcParams['figure.dpi'] = 600
+plt.rcParams['savefig.dpi'] = 600
+plt.rcParams['font.size'] = 8
+plt.rcParams['axes.linewidth'] = 0.5
 
 # Step 2: Calculate dynamic sizing parameters
 tree_depth = model.get_depth()
@@ -2947,8 +2966,14 @@ plot_tree(model, filled=True, feature_names=X.columns.tolist(),
           max_depth=max_depth_plot)
 plt.tight_layout(pad=2.0)
 
-# Step 5: Save plot and add to result dictionary
-plot_path = safe_plt_savefig('decision_tree.png', bbox_inches='tight', dpi=300, facecolor='white')
+# Step 5: Save plot with high resolution settings and add to result dictionary
+plot_path = safe_plt_savefig('decision_tree.png', 
+                           bbox_inches='tight', 
+                           dpi=600,  # Ultra-high resolution for crisp plots
+                           facecolor='white', 
+                           edgecolor='none',
+                           format='png',
+                           pad_inches=0.2)
 result['plot_path'] = plot_path
 
 🚨 CRITICAL: Always add plot_path to the existing result dictionary!
