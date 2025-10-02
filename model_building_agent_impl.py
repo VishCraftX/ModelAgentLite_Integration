@@ -1729,7 +1729,8 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                     nodes_at_max_level = 2 ** safe_tree_depth
                     width = int(max(25, min(100, nodes_at_max_level * 0.1 * max_feature_len)))
                     height = int(max(15, min(50, safe_tree_depth * 3)))
-                    font_size = int(max(6, min(12, 80 / (safe_tree_depth + (max_feature_len or 10)/10))))
+                    # Ensure minimum readable font size
+                    font_size = max(10, min(16, 120 / max(1, safe_tree_depth)))  # Larger minimum font size
                     max_depth_plot = min(5, safe_tree_depth)
 
                     plt.figure(figsize=(width, height))
@@ -1742,6 +1743,9 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                         rounded=True,
                         precision=2,
                         max_depth=max_depth_plot,
+                        fontcolor='black',  # Ensure text is black and visible
+                        impurity=True,      # Show impurity values
+                        class_names=True    # Show class names
                     )
                     plt.tight_layout(pad=2.0)
                     ts = int(time.time())
@@ -2935,7 +2939,8 @@ safe_tree_depth = min(tree_depth, 15)  # Cap at 15 to prevent huge plots
 nodes_at_max_level = 2 ** safe_tree_depth
 width = int(max(25, min(100, nodes_at_max_level * 0.1 * max_feature_len)))
 height = int(max(15, min(50, safe_tree_depth * 3)))
-font_size = int(max(6, min(12, 80 / (safe_tree_depth + max_feature_len/10))))
+# Ensure minimum readable font size
+font_size = max(10, min(16, 120 / max(1, safe_tree_depth)))  # Larger minimum font size
 
 # Step 3: Set plot depth (limit for readability)
 max_depth_plot = min(5, safe_tree_depth)
@@ -2944,7 +2949,7 @@ max_depth_plot = min(5, safe_tree_depth)
 plt.figure(figsize=(width, height))
 plot_tree(model, filled=True, feature_names=X.columns.tolist(),
           fontsize=font_size, proportion=True, rounded=True, precision=2,
-          max_depth=max_depth_plot)
+          max_depth=max_depth_plot, fontcolor='black', impurity=True, class_names=True)
 plt.tight_layout(pad=2.0)
 
 # Step 5: Save plot and add to result dictionary
