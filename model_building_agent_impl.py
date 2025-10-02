@@ -1116,6 +1116,7 @@ PRIORITY CLASSIFICATION RULES (check in this order):
 
 HIGHEST PRIORITY - "use_existing" if query contains:
 - "use this model", "use the model", "with this model", "for this model" (explicit model reference)
+- "use the best model", "use best model", "apply the best model", "apply best model" (best model reference)
 - "use this tree", "use the tree", "with this tree", "for this tree" (tree model reference)  
 - "use this tree model", "use this decision tree", "apply this model", "apply existing model"
 - "existing model", "current model", "built model", "trained model", "saved model"
@@ -1123,6 +1124,7 @@ HIGHEST PRIORITY - "use_existing" if query contains:
 - "build segments", "build deciles", "build buckets", "build rankings" (these use existing models)
 - "rank ordering", "score", "predict", "classify" with existing model context
 - ANY combination of "use" + "this" + model terms (tree, model, classifier, etc.)
+- ANY combination of "use" + "best" + model terms (use best model, use the best model, etc.)
 
 SECOND PRIORITY - "multi_model" if query contains:
 - "build multiple models", "train several models", "create multiple", "build three models", "build 3 models"
@@ -1205,7 +1207,7 @@ def semantic_classify_model_intent(query: str) -> str:
         
         # Define model-specific intent definitions
         model_intent_definitions = {
-            "use_existing": "Use existing model, apply current model, utilize trained model, work with built model, use this model, apply this classifier, use previous model, existing model analysis, current model evaluation, built model application, trained model usage, model reuse, apply saved model, show plot, visualize tree, display tree, build segments, build deciles, build buckets, build rankings, rank ordering, score, predict, classify, create rank order table, create segments, create buckets, generate rankings, generate segments, generate buckets, generate rank order, create deciles, build rank order, create ranking table, generate decile table, score data, predict outcomes, classify records, apply model for scoring, use model for ranking, apply for segmentation, use this tree model, use this tree, use the tree, with this model, for this model, with this tree, for this tree, apply this model, apply existing model, use this decision tree, utilize this model, employ this model, leverage this model, work with this model, operate this model, run this model, execute this model",
+            "use_existing": "Use existing model, apply current model, utilize trained model, work with built model, use this model, apply this classifier, use previous model, existing model analysis, current model evaluation, built model application, trained model usage, model reuse, apply saved model, use the best model, use best model, apply the best model, apply best model, show plot, visualize tree, display tree, build segments, build deciles, build buckets, build rankings, rank ordering, score, predict, classify, create rank order table, create segments, create buckets, generate rankings, generate segments, generate buckets, generate rank order, create deciles, build rank order, create ranking table, generate decile table, score data, predict outcomes, classify records, apply model for scoring, use model for ranking, apply for segmentation, use this tree model, use this tree, use the tree, with this model, for this model, with this tree, for this tree, apply this model, apply existing model, use this decision tree, utilize this model, employ this model, leverage this model, work with this model, operate this model, run this model, execute this model",
             "multi_model": "Build multiple models, train several models, create multiple models, build three models, build 3 models, compare models, model comparison, best model, choose best model, pick best model, select best model, multiple algorithms, lgbm random forest xgboost, decision tree lgbm, all models, different models, various models, several algorithms, comparison plot, compare performance, roc curves, model metrics, benchmark models, evaluate models, test multiple models, try different models, multi model training, ensemble comparison, algorithm comparison, model benchmarking, performance comparison, multiple classifier training, various algorithm testing, comprehensive model evaluation, model selection process, algorithm evaluation, cross model comparison",
             "new_model": "Train single new model, build single new classifier, create single new predictor, develop single new algorithm, train fresh model, build from scratch, new model training, create classifier, develop predictor, train algorithm, build new, create new, fresh training, single machine learning model, single model development, single algorithm training, train fresh algorithm, develop fresh model, build brand new model, create entirely new model, individual model training, single predictor development"
         }
@@ -1286,6 +1288,7 @@ def fallback_classify_intent_keywords(query: str) -> str:
     # Use existing patterns for existing models (ENHANCED)
     use_existing_patterns = [
         "use this model", "use the model", "with this model", "for this model",
+        "use the best model", "use best model", "apply the best model", "apply best model",
         "use this tree", "use the tree", "with this tree", "for this tree",
         "use this tree model", "use this decision tree", "apply this model",
         "existing model", "current model", "built model", "trained model",
