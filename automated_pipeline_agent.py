@@ -359,15 +359,12 @@ Reply with the target column name (e.g., 'f_segment')"""
                 original_query = "build a machine learning model with comprehensive metrics and visualizations"
                 print_to_log(f"🔍 Using default query: '{original_query}'")
             
-            # Only add target column info if it's not already in the query
-            if state.target_column and f"target column '{state.target_column}'" not in original_query.lower():
-                model_query = f"{original_query} with target column '{state.target_column}'"
-                print_to_log(f"🎯 Enhanced query with target column: '{model_query}'")
-            else:
-                model_query = original_query
-                print_to_log(f"🔍 Using original query as-is: '{model_query}'")
+            # CRITICAL: Do NOT enhance the query - pass original user intent directly
+            # The model building agent already has access to target column via global state
+            model_query = original_query
+            print_to_log(f"🔍 Using original query without enhancement: '{model_query}'")
             
-            # Set the model building query - let model building agent decide the model type
+            # Set the original user query - let model building agent decide the model type
             state.user_query = model_query
             
             # Update global model states for model building agent
@@ -383,70 +380,28 @@ Reply with the target column name (e.g., 'f_segment')"""
             except Exception as e:
                 print_to_log(f"⚠️ Could not update global model states: {e}")
             
-            # Use the model building agent wrapper to handle the model building
+            # CRITICAL: Route to model building agent and let it handle ALL outputs
+            # Automated pipeline agent's job is DONE after preprocessing + feature selection
             try:
                 from agents_wrapper import ModelBuildingAgentWrapper
                 model_agent = ModelBuildingAgentWrapper()
                 
                 if model_agent.available:
                     print_to_log("🔧 Routing to model building agent...")
-                    result_state = model_agent.run(state)
+                    print_to_log("✅ Automated pipeline work complete - handing over to model building agent")
                     
-                    # Update our state with results from model building agent
-                    state.trained_model = result_state.trained_model
-                    state.model_building_state = result_state.model_building_state
-                    state.last_response = result_state.last_response
+                    # Let model building agent handle everything from here
+                    return model_agent.run(state)
                     
-                    print_to_log("✅ Model building agent completed successfully")
                 else:
                     print_to_log("⚠️ Model building agent not available")
                     state.last_response = "⚠️ Model building agent not available"
+                    return state
                     
             except Exception as e:
                 print_to_log(f"⚠️ Error calling model building agent: {e}")
                 state.last_response = f"⚠️ Model building failed: {str(e)}"
-            
-            send_progress("✅ **Modeling completed**")
-            
-            # Generate final success message
-            final_shape = state.processed_data.shape if state.processed_data is not None else state.cleaned_data.shape
-            feature_count = len(state.selected_features) if state.selected_features is not None and hasattr(state.selected_features, '__len__') else final_shape[1] - 1
-            model_status = "✅ Trained Successfully" if state.trained_model else "⚠️ Training Attempted"
-            
-            accuracy_text = ""
-            if state.trained_model and 'model_metrics' in state.preprocessing_state:
-                accuracy = state.preprocessing_state['model_metrics']['accuracy']
-                accuracy_text = f" (Accuracy: {accuracy:.1%})"
-            
-            # Count intelligent recommendations applied
-            total_recommendations = 0
-            if 'outlier_results' in state.preprocessing_state:
-                total_recommendations += len(state.preprocessing_state['outlier_results'].get('llm_recommendations', {}))
-            if 'missing_results' in state.preprocessing_state:
-                total_recommendations += len(state.preprocessing_state['missing_results'].get('llm_recommendations', {}))
-            if 'encoding_results' in state.preprocessing_state:
-                total_recommendations += len(state.preprocessing_state['encoding_results'].get('llm_recommendations', {}))
-            if 'transformation_results' in state.preprocessing_state:
-                total_recommendations += len(state.preprocessing_state['transformation_results'].get('llm_recommendations', {}))
-            
-            state.last_response = f"""🎉 **Intelligent Fast ML Pipeline Complete!**
-
-🎯 **Target:** {state.target_column}
-📊 **Data Shape:** {state.raw_data.shape} → {final_shape}
-🔍 **Features:** {feature_count} selected
-🤖 **Model:** {model_status}{accuracy_text}
-🧠 **LLM Recommendations:** {total_recommendations} applied
-
-✅ **Completed Phases (with LLM Analysis):**
-• 📊 Overview - Dataset structure analyzed
-• 🚨 Outliers - LLM + rule-based outlier analysis
-• 🗑️ Missing Values - LLM + rule-based imputation strategy
-• 🏷️ Encoding - LLM + rule-based encoding strategy
-
-• 🔍 Feature Selection - All features used
-• 🤖 Model Building - Classification model trained
-
-**Same intelligent analysis as manual mode - fully automated!**"""
+                return state
 
             print_to_log("🎉 INTELLIGENT automated ML pipeline completed successfully!")
             return state

@@ -1306,6 +1306,33 @@ Generate Python code to fulfill this request:"""
         # Update user query (always use the new query, not the saved one)
         state.user_query = query
         
+        # ===== AUTOMATIC TARGET COLUMN DETECTION =====
+        # If dataset has a 'target' column and no target is set, automatically use it
+        if (state.raw_data is not None and 
+            not hasattr(state, 'target_column') or not state.target_column):
+            
+            available_columns = list(state.raw_data.columns)
+            
+            # Check if dataset has a 'target' column
+            if 'target' in available_columns:
+                state.target_column = 'target'
+                print_to_log(f"🎯 [Auto Detection] Found 'target' column in dataset - automatically set as target")
+                
+                # Save the automatically detected target column
+                try:
+                    state_manager.save_state(state)
+                    print_to_log(f"💾 Automatically saved target column 'target' to session state")
+                except Exception as e:
+                    print_to_log(f"⚠️ Could not save automatically detected target column: {e}")
+                
+                # If there's an interactive session waiting for target, clear it
+                if (hasattr(state, 'interactive_session') and 
+                    state.interactive_session is not None and 
+                    state.interactive_session.get('needs_target', False)):
+                    
+                    print_to_log(f"🔀 [Auto Detection] Clearing interactive session - target automatically detected")
+                    state.interactive_session = None
+        
         # ===== EARLY INTERCEPTION: TARGET COLUMN & MODE SELECTION =====
         # Handle target column specification (before any orchestrator routing)
         if (hasattr(state, 'interactive_session') and 
@@ -1313,6 +1340,29 @@ Generate Python code to fulfill this request:"""
             state.interactive_session.get('needs_target', False)):
             
             print_to_log(f"🎯 [Early Interception] Target column needed, checking query: '{query}'")
+            
+            # CRITICAL: Check if target column is already set - if so, skip target detection
+            if hasattr(state, 'target_column') and state.target_column:
+                print_to_log(f"🎯 [Early Interception] Target column already set: '{state.target_column}' - skipping detection")
+                state.interactive_session['target_column'] = state.target_column
+                state.interactive_session['needs_target'] = False
+                
+                # Check if user wants to skip using the existing sophisticated system
+                from orchestrator import Orchestrator
+                orchestrator = Orchestrator()
+                skip_result = orchestrator._classify_skip_patterns(query)
+                
+                if skip_result and skip_result != "no_skip":
+                    print_to_log(f"🎯 [Early Interception] Skip pattern detected: {skip_result} - bypassing mode selection")
+                    print_to_log(f"🔀 [Early Interception] Clearing interactive session and routing to orchestrator")
+                    state.interactive_session = None  # Clear interactive session
+                else:
+                    # User needs preprocessing - ask fast or slow mode
+                    state.interactive_session['needs_mode_selection'] = True
+                
+                # Continue to mode selection or orchestrator routing
+            else:
+                print_to_log(f"🎯 [Early Interception] No target column set - proceeding with detection")
             
             # Check if query looks like a column name with FUZZY MATCHING
             if state.raw_data is not None:
