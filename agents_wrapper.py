@@ -3866,6 +3866,36 @@ class ModelBuildingAgentWrapper:
                         "metrics": result['metrics']
                     }
                 
+                # CRITICAL: Extract and persist target column from model building agent's internal state
+                # This ensures target column is available for subsequent queries
+                if state.chat_session and state.chat_session in self.agent.user_states:
+                    agent_target = self.agent.user_states[state.chat_session].get("target_column")
+                    if agent_target and not state.target_column:
+                        state.target_column = agent_target
+                        print_to_log(f"🎯 Extracted target column from model agent: {agent_target}")
+                        
+                        # IMMEDIATE SAVE: Persist target column to session state for future queries
+                        try:
+                            from state_management import state_manager
+                            state_manager.save_state(state)
+                            print_to_log(f"💾 Persisted target column '{agent_target}' to session state")
+                        except Exception as e:
+                            print_to_log(f"⚠️ Could not persist target column: {e}")
+                
+                # CRITICAL: Clear interactive session after successful model building
+                # This prevents future queries from getting stuck in preprocessing mode
+                if hasattr(state, 'interactive_session') and state.interactive_session is not None:
+                    print_to_log(f"🔄 Clearing interactive session after successful model building")
+                    state.interactive_session = None
+                    
+                    # Save the cleared session state
+                    try:
+                        from state_management import state_manager
+                        state_manager.save_state(state)
+                        print_to_log(f"💾 Saved cleared interactive session to prevent future conflicts")
+                    except Exception as e:
+                        print_to_log(f"⚠️ Could not save cleared session: {e}")
+                
                 # Store execution result for later file uploads (after response processing)
                 execution_result = result.get('execution_result') if isinstance(result, dict) else None
             
