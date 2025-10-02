@@ -1367,7 +1367,7 @@ Generate Python code to fulfill this request:"""
         # ===== AUTOMATIC TARGET COLUMN DETECTION =====
         # If dataset has a 'target' column and no target is set, automatically use it
         if (state.raw_data is not None and 
-            not hasattr(state, 'target_column') or not state.target_column):
+            (not hasattr(state, 'target_column') or not state.target_column)):
             
             available_columns = list(state.raw_data.columns)
             
