@@ -1973,18 +1973,19 @@ else:
 Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
-        # Generate multi-model comparison code
+        # Generate multi-model comparison code with enhanced robustness
         multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
 
 USER REQUEST: {query}
 
-CRITICAL REQUIREMENTS:
+🚨 CRITICAL SUCCESS REQUIREMENTS:
 1. Build multiple ML models based on USER'S SPECIFIC REQUEST (minimum 2 models)
 2. Train all models with identical train/test splits 
 3. Generate comprehensive metrics for each model
 4. Create comparison visualizations (ROC curves, metric comparison table)
 5. Automatically select the best model based on USER-SPECIFIED or default metric
 6. Return detailed results for all models + best model selection
+7. MANDATORY: Code must be complete, executable, and return the exact result format specified
 
 DYNAMIC USER INPUT PARSING:
 - MODELS: Extract specific model names from user query. If none specified, use: RandomForest, DecisionTree, LightGBM
@@ -1998,17 +1999,26 @@ DATA REQUIREMENTS:
 - Assume data is preprocessed (no scalers/encoders needed)
 - Use train_test_split with user-specified test_size or default 0.2, random_state=42
 
-🚨 CRITICAL IMPORT FIX: Include roc_curve import to prevent NameError:
+🚨 MANDATORY IMPORTS (include ALL of these):
 ```python
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
                            roc_auc_score, confusion_matrix, log_loss, roc_curve)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+import warnings
+warnings.filterwarnings('ignore')
 ```
 
-ROBUST LIBRARY HANDLING:
+ROBUST LIBRARY HANDLING WITH FALLBACKS:
 1. Import libraries with try-except blocks
 2. If a model library is missing, skip that model with warning message
 3. Continue with available models (minimum 2 required)
-4. Example:
+4. ALWAYS ensure at least 2 models are available
+5. Example:
 ```python
 models = {{}}
 try:
@@ -2044,15 +2054,23 @@ FLEXIBLE BEST MODEL SELECTION:
 - Common metrics: accuracy, precision, recall, f1, roc_auc, r2, mse, mae
 - Default: accuracy (classification) or r2 (regression)
 
+🚨 CRITICAL ARTIFACT PATH HANDLING:
+- Use safe_joblib_dump() for model saving (automatically handles paths)
+- Use safe_plt_savefig() for plot saving (automatically handles paths)
+- DO NOT use hardcoded paths like '/path/to/model.joblib'
+- Let the safe functions handle proper directory structure
+- Example: model_path = safe_joblib_dump(model, f'{{model_name}}_model.joblib')
+- Example: plot_path = safe_plt_savefig('roc_comparison.png')
+
 MANDATORY CODE STRUCTURE:
 1. Import libraries with error handling
 2. Parse user requirements (models, test_size, metric)
 3. Data splitting (X/y, train/test with dynamic test_size)
 4. Build dynamic models dictionary based on user input
 5. Train all available models and collect metrics
-6. Create comparison visualizations
+6. Create comparison visualizations with safe_plt_savefig()
 7. Select best model based on user-specified or default metric
-8. Save all artifacts (models + plots)
+8. Save all artifacts using safe functions (models + plots)
 
 🚨 CRITICAL ARRAY HANDLING FIX: For ROC curve generation, convert probabilities to numpy array:
 ```python
@@ -2116,14 +2134,51 @@ result = {{
     'detailed_comparison': 'Comprehensive textual comparison of all models with strengths/weaknesses'
 }}
 
+🚨 MANDATORY RESULT FORMAT VALIDATION:
+Your code MUST end with this exact structure (no exceptions):
+
+```python
+# Validate result format before returning
+required_keys = ['user_config', 'models', 'best_model', 'comparison_plots', 'model_ranking', 'summary', 'detailed_comparison']
+for key in required_keys:
+    if key not in result:
+        print(f"ERROR: Missing required key: {{key}}")
+        result[key] = {{}} if key != 'detailed_comparison' else "Analysis not available"
+
+# Ensure models dictionary has the right structure
+if 'models' in result and isinstance(result['models'], dict):
+    for model_name, model_data in result['models'].items():
+        required_model_keys = ['model', 'model_path', 'metrics', 'predictions', 'probabilities', 'training_time', 'model_type']
+        for model_key in required_model_keys:
+            if model_key not in model_data:
+                print(f"WARNING: Missing {{model_key}} for {{model_name}}")
+                if model_key == 'model_type':
+                    model_data[model_key] = 'classification'
+                elif model_key == 'training_time':
+                    model_data[model_key] = 0.0
+                else:
+                    model_data[model_key] = None
+
+print("✅ Multi-model comparison result format validated")
+```
+
 ENHANCED RESPONSE FORMATTING:
 - Print detailed model performance table to console
 - Show training time for each model
 - Display model ranking with scores
 - Include recommendation for model selection
 - Show performance improvement percentages
+- CRITICAL: Always validate result format before returning
 
-Generate complete, executable Python code that implements this dynamic multi-model comparison system."""
+🚨 EXECUTION ROBUSTNESS REQUIREMENTS:
+1. Use try-except blocks around model training
+2. If a model fails, continue with other models
+3. Ensure at least 2 models succeed
+4. Always return the complete result dictionary
+5. Include error handling for plotting
+6. Validate all required keys exist in result
+
+Generate complete, executable Python code that implements this dynamic multi-model comparison system with robust error handling."""
 
         try:
             print_to_log("🤔 Generating multi-model comparison code...")
@@ -2173,6 +2228,13 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             
             # Store results and format comprehensive response
             state["execution_result"] = result
+            
+            # Enhanced result validation and diagnostic logging
+            print_to_log(f"🔍 Multi-model result type: {type(result)}")
+            if isinstance(result, dict):
+                print_to_log(f"🔍 Multi-model result keys: {list(result.keys())}")
+            else:
+                print_to_log(f"🔍 Multi-model result content: {str(result)[:200]}...")
             
             if isinstance(result, dict) and 'models' in result:
                 # Format comprehensive multi-model response
@@ -2276,8 +2338,40 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                         state["artifacts"]["files"] = plot_files
                         result["artifacts"] = {"files": plot_files}
                         print_to_log(f"📊 {len(plot_files)} comparison plots ready for upload")
+            elif isinstance(result, dict):
+                # Result is a dict but missing 'models' key - provide detailed diagnostic
+                available_keys = list(result.keys())
+                print_to_log(f"⚠️ Multi-model result missing 'models' key. Available keys: {available_keys}")
+                
+                # Try to extract any useful information from the result
+                error_info = result.get('error', 'Unknown execution error')
+                execution_status = result.get('execution_status', 'unknown')
+                
+                state["response"] = f"""❌ Multi-model comparison failed: Result format issue
+
+🔍 **Diagnostic Information:**
+• Result type: Dictionary
+• Available keys: {', '.join(available_keys)}
+• Missing required key: 'models'
+• Execution status: {execution_status}
+• Error details: {error_info}
+
+💡 **This suggests the generated code didn't complete successfully or didn't return the expected result format.**"""
+                
             else:
-                state["response"] = f"❌ Multi-model comparison failed: {result if isinstance(result, str) else 'Unexpected result format'}"
+                # Result is not a dict at all
+                result_type = type(result).__name__
+                result_preview = str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
+                print_to_log(f"⚠️ Multi-model result is not a dictionary. Type: {result_type}")
+                
+                state["response"] = f"""❌ Multi-model comparison failed: Unexpected result format
+
+🔍 **Diagnostic Information:**
+• Expected: Dictionary with 'models' key
+• Received: {result_type}
+• Content preview: {result_preview}
+
+💡 **This suggests the code execution failed or returned an unexpected data type.**"""
             
             return state
             
