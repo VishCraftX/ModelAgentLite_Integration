@@ -3656,6 +3656,24 @@ def handle_multi_model_orchestrator(query: str, sample_data, user_id: str, progr
     print_to_log("🎯 Starting modular multi-model orchestrator...")
     
     try:
+        # Step 0: Create artifacts directory
+        artifacts_dir = None
+        try:
+            if "_" in user_id:
+                from agent_utils import get_username_for_user_id
+                user, thread_ts = user_id.split("_", 1)
+                username = get_username_for_user_id(user)
+                thread_dir = os.path.join("user_data", username, thread_ts)
+                artifacts_dir = os.path.join(thread_dir, "artifacts")
+                if not os.path.exists(artifacts_dir):
+                    os.makedirs(artifacts_dir, exist_ok=True)
+                    print_to_log(f"📁 Created artifacts directory: {artifacts_dir}")
+                else:
+                    print_to_log(f"📁 Using artifacts directory: {artifacts_dir}")
+        except Exception as e:
+            print_to_log(f"⚠️ Failed to create artifacts directory: {e}")
+            artifacts_dir = "."  # Fallback to current directory
+        
         # Step A: Config parsing using focused LLM prompt
         print_to_log("📋 Step A: Parsing configuration...")
         if progress_callback:
@@ -3787,6 +3805,7 @@ print(f"Final models to build: {{list(models_to_train.keys())}}")
 import numpy as np
 import pandas as pd
 import time
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
                            roc_auc_score, confusion_matrix, log_loss, roc_curve)
@@ -3817,7 +3836,10 @@ for model_name, model in models_to_train.items():
             'roc_auc': roc_auc_score(y_test, y_proba[:, 1]) if y_proba is not None and y_proba.shape[1] == 2 else None,
         }}
 
-        model_path = safe_joblib_dump(model, f'{{model_name}}_model.joblib')
+        # Save model to artifacts directory with full path
+        model_filename = f'{{model_name.replace(" ", "_")}}_model.joblib'
+        model_full_path = os.path.join(artifacts_dir, model_filename)
+        model_path = safe_joblib_dump(model, model_full_path)
 
         models_results[model_name] = {{
             'model': model,
@@ -3839,7 +3861,12 @@ print(f"✅ Trained {{len(models_results)}} models successfully")
 """
         
         # Execute training code
-        env_c = {'sample_data': sample_data, 'models_to_train': models_to_train, 'safe_joblib_dump': safe_joblib_dump}
+        env_c = {
+            'sample_data': sample_data, 
+            'models_to_train': models_to_train, 
+            'safe_joblib_dump': safe_joblib_dump,
+            'artifacts_dir': artifacts_dir
+        }
         exec(training_code, env_c)
         models_results = env_c['models_results']
         X_test = env_c['X_test']
@@ -3854,6 +3881,7 @@ print(f"✅ Trained {{len(models_results)}} models successfully")
         plotting_code = """
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 from sklearn.metrics import roc_curve
 
 comparison_plots = {}
@@ -3881,8 +3909,13 @@ try:
         plt.ylabel('True Positive Rate')
         plt.title('Receiver Operating Characteristic (ROC) Curves')
         plt.legend(loc="lower right")
-        roc_plot_path = safe_plt_savefig('roc_comparison.png')
+        
+        # Save to artifacts directory with full path
+        roc_filename = 'roc_comparison.png'
+        roc_full_path = os.path.join(artifacts_dir, roc_filename)
+        roc_plot_path = safe_plt_savefig(roc_full_path)
         comparison_plots['roc_curves'] = roc_plot_path
+        print(f"✅ Saved ROC curves to: {roc_plot_path}")
         
 except Exception as e:
     print(f"Error creating ROC curves: {e}")
@@ -3916,8 +3949,13 @@ try:
     table.scale(1, 2)
     
     plt.title('Model Performance Comparison', fontsize=14, pad=20)
-    metrics_plot_path = safe_plt_savefig('metrics_table.png')
+    
+    # Save to artifacts directory with full path
+    metrics_filename = 'metrics_table.png'
+    metrics_full_path = os.path.join(artifacts_dir, metrics_filename)
+    metrics_plot_path = safe_plt_savefig(metrics_full_path)
     comparison_plots['metrics_table'] = metrics_plot_path
+    print(f"✅ Saved metrics table to: {metrics_plot_path}")
     
 except Exception as e:
     print(f"Error creating metrics table: {e}")
@@ -3931,7 +3969,8 @@ print(f"✅ Created {len(comparison_plots)} visualizations")
             'models_results': models_results,
             'X_test': X_test,
             'y_test': y_test,
-            'safe_plt_savefig': safe_plt_savefig
+            'safe_plt_savefig': safe_plt_savefig,
+            'artifacts_dir': artifacts_dir
         }
         exec(plotting_code, env_d)
         comparison_plots = env_d['comparison_plots']
