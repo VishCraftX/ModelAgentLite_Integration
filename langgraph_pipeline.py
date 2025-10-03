@@ -1505,6 +1505,8 @@ Generate Python code to fulfill this request:"""
               state.interactive_session is not None and 
               state.interactive_session.get('needs_mode_selection', False)):
             
+            # CRITICAL FIX: Clear stale last_response from previous preprocessing node
+            state.last_response = None
             print_to_log(f"🎯 [Early Interception] Mode selection needed, checking query: '{query}'")
             query_lower = query.lower().strip()
             
