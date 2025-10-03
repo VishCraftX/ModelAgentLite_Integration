@@ -2022,6 +2022,38 @@ DYNAMIC USER INPUT PARSING:
 - BEST MODEL METRIC: Look for "best based on", "select by", "choose using". Default: accuracy for classification, r2 for regression                                                                                     
 - Handle ANY model names user mentions (LogisticRegression, SVM, XGBoost, Neural Network, etc.)
 
+🚨 CRITICAL: USE THIS EXACT MODEL PARSING CODE (DO NOT MODIFY):
+```python
+# MANDATORY: Use this exact model parsing approach - DO NOT use split() or regex
+user_request = "{query}"
+user_request_lower = user_request.lower()
+models_requested = []
+
+# Define model aliases and keywords - EXACTLY as shown
+model_keywords = {{
+    'lgbm': ['lgbm', 'lightgbm', 'light gbm'],
+    'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting'],
+    'random_forest': ['random forest', 'randomforest', 'rf'],
+    'decision_tree': ['decision tree', 'decisiontree', 'dt'],
+    'neural_network': ['neural network', 'nn', 'mlp', 'neural net'],
+    'logistic_regression': ['logistic regression', 'logistic', 'lr'],
+    'svm': ['svm', 'support vector machine']
+}}
+
+# Extract models mentioned in query - EXACTLY as shown
+for model_name, keywords in model_keywords.items():
+    if any(keyword in user_request_lower for keyword in keywords):
+        models_requested.append(model_name)
+
+# If no models found, use defaults - EXACTLY as shown
+if not models_requested:
+    models_requested = ['random_forest', 'xgboost', 'lgbm']
+
+print(f"Models requested: {{models_requested}}")
+```
+
+🚨 FORBIDDEN: DO NOT use user_request.split('models') or .split('and') - these approaches are broken!
+
 DATA REQUIREMENTS:
 - Use 'sample_data' DataFrame (already loaded)
 - Target column: 'target'
