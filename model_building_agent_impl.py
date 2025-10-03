@@ -2054,6 +2054,88 @@ print(f"Models requested: {{models_requested}}")
 
 🚨 FORBIDDEN: DO NOT use user_request.split('models') or .split('and') - these approaches are broken!
 
+🚨 CRITICAL: USE THIS EXACT MODEL AVAILABILITY CODE (DO NOT MODIFY):
+```python
+# Build available models dictionary - EXACTLY as shown
+available_models = {{}}
+
+try:
+    from sklearn.ensemble import RandomForestClassifier
+    available_models['Random Forest'] = RandomForestClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn RandomForest not available")
+
+try:
+    from lightgbm import LGBMClassifier
+    available_models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
+except ImportError:
+    print("Warning: LightGBM not available")
+
+try:
+    from xgboost import XGBClassifier
+    available_models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
+except ImportError:
+    print("Warning: XGBoost not available")
+
+try:
+    from sklearn.neural_network import MLPClassifier
+    available_models['Neural Network'] = MLPClassifier(random_state=42, max_iter=500)
+except ImportError:
+    print("Warning: Neural Network not available")
+
+try:
+    from sklearn.tree import DecisionTreeClassifier
+    available_models['Decision Tree'] = DecisionTreeClassifier(max_depth=5, random_state=42)
+except ImportError:
+    print("Warning: Decision Tree not available")
+
+try:
+    from sklearn.linear_model import LogisticRegression
+    available_models['Logistic Regression'] = LogisticRegression(random_state=42, max_iter=1000)
+except ImportError:
+    print("Warning: Logistic Regression not available")
+
+try:
+    from sklearn.svm import SVC
+    available_models['SVM'] = SVC(random_state=42, probability=True)
+except ImportError:
+    print("Warning: SVM not available")
+
+print(f"Available models: {{list(available_models.keys())}}")
+```
+
+🚨 CRITICAL: USE THIS EXACT MODEL MAPPING CODE (DO NOT MODIFY):
+```python
+# Map requested models to available models - EXACTLY as shown
+model_name_mapping = {{
+    'lgbm': 'LightGBM',
+    'xgboost': 'XGBoost',
+    'random_forest': 'Random Forest',
+    'decision_tree': 'Decision Tree',
+    'neural_network': 'Neural Network',
+    'logistic_regression': 'Logistic Regression',
+    'svm': 'SVM'
+}}
+
+# Build final models to train - EXACTLY as shown
+models_to_train = {{}}
+for requested_model in models_requested:
+    mapped_name = model_name_mapping.get(requested_model)
+    if mapped_name and mapped_name in available_models:
+        models_to_train[mapped_name] = available_models[mapped_name]
+    else:
+        print(f"Warning: {{requested_model}} -> {{mapped_name}} not available")
+
+# Check if we have enough models for comparison
+if len(models_to_train) < 2:
+    available_list = list(available_models.keys())
+    requested_list = models_requested
+    error_msg = f"Insufficient Models for Comparison. Requested: {{requested_list}}, Available: {{available_list}}, Found: {{len(models_to_train)}} (need minimum 2)"
+    raise ValueError(error_msg)
+
+print(f"Final models to build: {{list(models_to_train.keys())}}")
+```
+
 DATA REQUIREMENTS:
 - Use 'sample_data' DataFrame (already loaded)
 - Target column: 'target'
