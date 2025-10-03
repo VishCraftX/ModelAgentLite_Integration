@@ -2031,15 +2031,27 @@ user_request_lower = user_request.lower()
 models_requested = []
 
 # Define model aliases and keywords - EXACTLY as shown
-model_keywords = {
-    'lgbm': ['lgbm', 'lightgbm', 'light gbm'],
-    'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting'],
-    'random_forest': ['random forest', 'randomforest', 'rf'],
-    'decision_tree': ['decision tree', 'decisiontree', 'dt'],
-    'neural_network': ['neural network', 'nn', 'mlp', 'neural net'],
-    'logistic_regression': ['logistic regression', 'logistic', 'lr'],
-    'svm': ['svm', 'support vector machine']
-}
+model_keywords = {{
+    'lgbm': ['lgbm', 'lightgbm', 'light gbm', 'lightgradientboosting'],
+    'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting', 'xgb classifier', 'xgb regressor'],
+    'random_forest': ['random forest', 'randomforest', 'rf', 'random forest classifier', 'random forest regressor'],
+    'decision_tree': ['decision tree', 'decisiontree', 'dt', 'tree', 'decision tree classifier', 'decision tree regressor'],
+    'neural_network': ['neural network', 'nn', 'mlp', 'neural net', 'multilayer perceptron', 'deep learning', 'tensorflow', 'keras'],
+    'logistic_regression': ['logistic regression', 'logistic', 'lr', 'logit', 'linear classifier'],
+    'svm': ['svm', 'support vector machine', 'support vector classifier', 'svc', 'svr'],
+    'gradient_boosting': ['gradient boosting', 'gbm', 'gradient boost', 'sklearn gradient boosting'],
+    'adaboost': ['adaboost', 'ada boost', 'adaptive boosting', 'ada'],
+    'extra_trees': ['extra trees', 'extratrees', 'extremely randomized trees', 'et'],
+    'knn': ['knn', 'k nearest neighbors', 'k-nn', 'nearest neighbors', 'kneighbors'],
+    'naive_bayes': ['naive bayes', 'nb', 'gaussian nb', 'multinomial nb', 'bernoulli nb'],
+    'linear_regression': ['linear regression', 'linear', 'ols', 'ordinary least squares'],
+    'ridge_regression': ['ridge', 'ridge regression', 'l2 regression'],
+    'lasso_regression': ['lasso', 'lasso regression', 'l1 regression'],
+    'elastic_net': ['elastic net', 'elasticnet', 'elastic net regression'],
+    'catboost': ['catboost', 'cat boost', 'categorical boosting'],
+    'voting_classifier': ['voting', 'voting classifier', 'ensemble voting'],
+    'bagging': ['bagging', 'bagging classifier', 'bootstrap aggregating']
+}}
 
 # Extract models mentioned in query - EXACTLY as shown
 for model_name, keywords in model_keywords.items():
@@ -2100,6 +2112,60 @@ try:
 except ImportError:
     print("Warning: sklearn DecisionTree not available")
 
+try:
+    from sklearn.linear_model import LogisticRegression
+    available_models['Logistic Regression'] = LogisticRegression(random_state=42, max_iter=1000)
+except ImportError:
+    print("Warning: sklearn Logistic Regression not available")
+
+try:
+    from sklearn.svm import SVC
+    available_models['SVM'] = SVC(random_state=42, probability=True)
+except ImportError:
+    print("Warning: sklearn SVM not available")
+
+try:
+    from sklearn.ensemble import GradientBoostingClassifier
+    available_models['Gradient Boosting'] = GradientBoostingClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn Gradient Boosting not available")
+
+try:
+    from sklearn.ensemble import AdaBoostClassifier
+    available_models['AdaBoost'] = AdaBoostClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn AdaBoost not available")
+
+try:
+    from sklearn.ensemble import ExtraTreesClassifier
+    available_models['Extra Trees'] = ExtraTreesClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn Extra Trees not available")
+
+try:
+    from sklearn.neighbors import KNeighborsClassifier
+    available_models['KNN'] = KNeighborsClassifier()
+except ImportError:
+    print("Warning: sklearn KNN not available")
+
+try:
+    from sklearn.naive_bayes import GaussianNB
+    available_models['Naive Bayes'] = GaussianNB()
+except ImportError:
+    print("Warning: sklearn Naive Bayes not available")
+
+try:
+    from sklearn.neural_network import MLPClassifier
+    available_models['Neural Network'] = MLPClassifier(random_state=42, max_iter=500)
+except ImportError:
+    print("Warning: sklearn Neural Network not available")
+
+try:
+    from sklearn.ensemble import BaggingClassifier
+    available_models['Bagging'] = BaggingClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn Bagging not available")
+
 # Optional external libraries
 try:
     from lightgbm import LGBMClassifier
@@ -2113,13 +2179,28 @@ try:
 except ImportError:
     print("Warning: XGBoost not available")
 
+try:
+    import catboost
+    available_models['CatBoost'] = catboost.CatBoostClassifier(random_state=42, verbose=False)
+except ImportError:
+    print("Warning: CatBoost not available")
+
 # Map requested models to available models
 model_mapping = {{
     'lgbm': 'LightGBM',
     'xgboost': 'XGBoost', 
     'random_forest': 'Random Forest',
     'decision_tree': 'Decision Tree',
-    'neural_network': 'Neural Network'  # Handle separately if needed
+    'neural_network': 'Neural Network',
+    'logistic_regression': 'Logistic Regression',
+    'svm': 'SVM',
+    'gradient_boosting': 'Gradient Boosting',
+    'adaboost': 'AdaBoost',
+    'extra_trees': 'Extra Trees',
+    'knn': 'KNN',
+    'naive_bayes': 'Naive Bayes',
+    'bagging': 'Bagging',
+    'catboost': 'CatBoost'
 }}
 
 # Select models to build
