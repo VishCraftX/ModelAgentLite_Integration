@@ -2006,6 +2006,8 @@ Once you upload your data, I can build multiple models and compare them! 🎯"""
 
 USER REQUEST: {query}
 
+🚨 CRITICAL: Follow the EXACT code templates provided below. DO NOT improvise or use different parsing approaches!
+
 🚨 CRITICAL SUCCESS REQUIREMENTS:
 1. Build multiple ML models based on USER'S SPECIFIC REQUEST (minimum 2 models)
 2. Train all models with identical train/test splits 
@@ -2020,6 +2022,38 @@ DYNAMIC USER INPUT PARSING:
 - TEST SIZE: Look for "test", "split", "validation" mentions. Default: 0.2 (20%)
 - BEST MODEL METRIC: Look for "best based on", "select by", "choose using". Default: accuracy for classification, r2 for regression
 - Handle ANY model names user mentions (LogisticRegression, SVM, XGBoost, Neural Network, etc.)
+
+🚨 CRITICAL: USE THIS EXACT MODEL PARSING CODE (DO NOT MODIFY):
+```python
+# MANDATORY: Use this exact model parsing approach - DO NOT use split() or regex
+user_request = "{query}"
+user_request_lower = user_request.lower()
+models_requested = []
+
+# Define model aliases and keywords - EXACTLY as shown
+model_keywords = {
+    'lgbm': ['lgbm', 'lightgbm', 'light gbm'],
+    'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting'],
+    'random_forest': ['random forest', 'randomforest', 'rf'],
+    'decision_tree': ['decision tree', 'decisiontree', 'dt'],
+    'neural_network': ['neural network', 'nn', 'mlp', 'neural net'],
+    'logistic_regression': ['logistic regression', 'logistic', 'lr'],
+    'svm': ['svm', 'support vector machine']
+}
+
+# Extract models mentioned in query - EXACTLY as shown
+for model_name, keywords in model_keywords.items():
+    if any(keyword in user_request_lower for keyword in keywords):
+        models_requested.append(model_name)
+
+# If no models found, use defaults - EXACTLY as shown
+if not models_requested:
+    models_requested = ['random_forest', 'decision_tree', 'lgbm']
+
+print(f"Models requested: {models_requested}")
+```
+
+🚨 FORBIDDEN: DO NOT use user_request.split('models') or .split('and') - these approaches are broken!
 
 DATA REQUIREMENTS:
 - Use 'sample_data' DataFrame (already loaded)
@@ -2041,12 +2075,75 @@ import warnings
 warnings.filterwarnings('ignore')
 ```
 
-ROBUST LIBRARY HANDLING WITH FALLBACKS:
+ROBUST LIBRARY HANDLING:
 1. Import libraries with try-except blocks
 2. If a model library is missing, skip that model with warning message
-3. Continue with available models (minimum 2 required)
-4. ALWAYS ensure at least 2 models are available
-5. Example:
+3. Check if minimum 2 models are available for comparison
+4. If insufficient models, provide helpful error message with installation guidance
+5. DO NOT automatically add fallback models - inform user instead
+
+🚨 COMPLETE MODEL MAPPING AND AVAILABILITY CHECK:
+```python
+# Build models dictionary based on available libraries
+available_models = {{}}
+
+# Always available sklearn models
+try:
+    from sklearn.ensemble import RandomForestClassifier
+    available_models['Random Forest'] = RandomForestClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn RandomForest not available")
+
+try:
+    from sklearn.tree import DecisionTreeClassifier
+    available_models['Decision Tree'] = DecisionTreeClassifier(max_depth=5, random_state=42)
+except ImportError:
+    print("Warning: sklearn DecisionTree not available")
+
+# Optional external libraries
+try:
+    from lightgbm import LGBMClassifier
+    available_models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
+except ImportError:
+    print("Warning: LightGBM not available")
+
+try:
+    from xgboost import XGBClassifier
+    available_models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
+except ImportError:
+    print("Warning: XGBoost not available")
+
+# Map requested models to available models
+model_mapping = {{
+    'lgbm': 'LightGBM',
+    'xgboost': 'XGBoost', 
+    'random_forest': 'Random Forest',
+    'decision_tree': 'Decision Tree',
+    'neural_network': 'Neural Network'  # Handle separately if needed
+}}
+
+# Select models to build
+models_to_build = []
+for requested in models_requested:
+    mapped_name = model_mapping.get(requested, requested.title())
+    if mapped_name in available_models:
+        models_to_build.append(mapped_name)
+    else:
+        print(f"Warning: {{requested}} not available")
+
+# Check if we have enough models for comparison
+if len(models_to_build) < 2:
+    available_list = list(available_models.keys())
+    requested_list = models_requested
+    
+    error_msg = f"Insufficient Models for Comparison. Requested: {{requested_list}}, Available: {{available_list}}, Found: {{len(models_to_build)}} (need minimum 2). Install missing libraries: pip install lightgbm xgboost tensorflow"
+    
+    raise ValueError(error_msg)
+
+print(f"Final models to build: {{models_to_build}}")
+```
+
+6. Example:
 ```python
 models = {{}}
 try:
@@ -3680,8 +3777,8 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                 response_parts.append(f"\n💾 Model saved: {result['model_path'].split('/')[-1]}")
             
             # Check for rank ordering table (SAME logic as use_existing_model)
-            if 'rank_ordering_table' in result:
-                rank_table = result['rank_ordering_table']
+            if 'rank_ordering' in result:
+                rank_table = result['rank_ordering']
                 if isinstance(rank_table, list) and len(rank_table) > 0:
                     response_parts.append(f"\n📊 *Rank Ordering Table:*")
                     
@@ -3773,8 +3870,8 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
                         response_parts.append(f"```")
             
             # Check if there's a rank ordering table to display
-            if 'rank_ordering_table' in result:
-                rank_table = result['rank_ordering_table']
+            if 'rank_ordering' in result:
+                rank_table = result['rank_ordering']
                 if isinstance(rank_table, list) and len(rank_table) > 0:
                     if response_parts:  # Add spacing if validation metrics were shown above
                         response_parts.append("\n")
