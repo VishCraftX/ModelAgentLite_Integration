@@ -3031,7 +3031,7 @@ user_query_lower = "{query}".lower()
 num_segments = 10  # Default to 10 deciles
 import re
 if "segment" in user_query_lower:
-    segments_match = re.search(r'(\d+)\s*segment', user_query_lower)
+    segments_match = re.search(r'(\\d+)\\s*segment', user_query_lower)
     if segments_match:
         num_segments = int(segments_match.group(1))
 

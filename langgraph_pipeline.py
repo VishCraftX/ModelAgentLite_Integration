@@ -1566,8 +1566,16 @@ Generate Python code to fulfill this request:"""
                 
                 self.slack_manager.send_message(session_id, "🎛️ **Slow Mode Selected** - Starting interactive preprocessing...")
                 
-                # Continue to normal interactive flow below
+                # CRITICAL: Start slow mode preprocessing immediately instead of going through orchestrator again
+                print_to_log("🐌 Starting slow mode preprocessing workflow directly...")
                 self._save_session_state(session_id, state)
+                
+                # Route directly to preprocessing agent with "proceed" command
+                from agents_wrapper import PreprocessingAgentWrapper
+                preprocessing_agent = PreprocessingAgentWrapper()
+                result_state = preprocessing_agent.handle_interactive_command(state, "proceed")
+                self._save_session_state(session_id, result_state)
+                return self._prepare_response(result_state)
                 
             else:
                 self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
