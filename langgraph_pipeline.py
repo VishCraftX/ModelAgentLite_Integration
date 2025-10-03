@@ -213,47 +213,8 @@ class MultiAgentMLPipeline:
             slack_manager = self.slack_manager
             if slack_manager and state.chat_session:
                 if selected_agent == 'preprocessing':
-                    # Preprocessing is complex and always needs interactive menu
-                    preprocessing_menu = f"""🧹 **Sequential Preprocessing Agent**
-
-📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target Column:** {state.target_column if state.target_column else '❌ Not detected'}
-
-**🔄 Preprocessing Phases Overview:**
-
-**Phase 1: 📊 Overview** - Dataset analysis and summary
-• Analyze data types, distributions, and patterns
-• Identify preprocessing needs across all columns
-
-**Phase 2: 🚨 Outliers** - Detect and handle outliers  
-• Use IQR and Z-score methods for detection
-• Recommend winsorize/clip/keep strategies
-
-**Phase 3: 🗑️ Missing Values** - Handle missing data
-• Identify missing data patterns
-• Apply mean/median/mode imputation strategies
-
-**Phase 4: 🏷️ Encoding** - Categorical variable encoding
-• Convert categorical to numeric (one-hot, label, target)
-• Handle high-cardinality categories
-
-**Phase 5: 🔄 Transformations** - Feature transformations
-• Apply log/sqrt/standardization for skewed data
-• Improve model convergence and performance
-
-**💬 Your Options:**
-• `proceed` - Start preprocessing workflow (begins with Overview)
-• `skip overview` - Skip directly to outlier detection
-• `explain [phase]` - Learn about specific phase (e.g., `explain outliers`)
-• `summary` - Show current preprocessing status
-• `help` - Get detailed guidance
-
-💡 **Smart Approach:** Each phase shows exactly what will be applied to which columns, then waits for your approval.
-
-💬 **What would you like to do?**"""
-                    
-                    self.slack_manager.send_message(state.chat_session, preprocessing_menu)
-                    print_to_log("✅ Sent comprehensive preprocessing menu to Slack")
+                    # Don't send preprocessing intro here - it will be shown after mode selection
+                    print_to_log("⏭️ Skipping preprocessing intro - will show after mode selection")
                 
                 # For all other agents (model_building, feature_selection, code_execution, etc.):
                 # Don't send ANY additional messages - the agents will handle their own responses
@@ -2084,30 +2045,28 @@ I'll detect extreme values that might affect your model and recommend handling s
                     state.interactive_session['target_column'] = target_col
                     state.interactive_session['phase'] = 'waiting_input'
                     
+                    # After target is set, show mode selection instead of preprocessing intro
                     response_msg = f"""✅ **Target column set:** `{target_col}`
 
-🧹 **Sequential Preprocessing Agent**
+🚀 **Choose Your ML Pipeline Mode**
 
-📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target Column:** {target_col}
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 **Target:** {target_col}
 
-**🔄 Preprocessing Phases:**
-• `Overview` - Dataset analysis and summary
-• `Outliers` - Detect and handle outliers  
-• `Missing Values` - Handle missing data
-• `Encoding` - Categorical variable encoding
-• `Transformations` - Feature transformations
+**⚡ Fast Mode (Automated):** 
+• Complete ML pipeline without interaction
+• AI handles all preprocessing decisions
+• Get results in 2-3 minutes
 
-**💬 Your Options:**
-• `proceed` - Start preprocessing workflow
-• `skip overview` - Skip to outlier detection
-• `explain outliers` - Learn about outlier handling
-• `summary` - Show current status
+**🎛️ Slow Mode (Interactive):** 
+• Step-by-step guided process
+• Review and approve each phase
+• Full control over decisions
 
-💬 **What would you like to do?**"""
+💬 **Choose:** Type `fast` or `slow`"""
                     
                     self.slack_manager.send_message(state.chat_session, response_msg)
-                    return self._prepare_response(state, f"Target column set to '{target_col}'. Ready for preprocessing!")
+                    return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
                 else:
                     available_cols = list(state.raw_data.columns)
                     error_msg = f"""❌ **Column '{target_col}' not found.**
@@ -2314,32 +2273,8 @@ What would you like to do?"""
                 "current_phase": "overview"
             }
             
-            # Send preprocessing menu via Slack
-            # Use the pipeline's slack_manager instead of the global one
-            slack_manager = self.slack_manager
-            if slack_manager and state.chat_session:
-                menu_msg = f"""🧹 **Sequential Preprocessing Agent**
-
-📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target Column:** {state.target_column} (auto-detected)
-
-**🔄 Preprocessing Phases:**
-• `Overview` - Dataset analysis and summary
-• `Outliers` - Detect and handle outliers  
-• `Missing Values` - Handle missing data
-• `Encoding` - Categorical variable encoding
-• `Transformations` - Feature transformations
-
-**💬 Your Options:**
-• `proceed` - Start preprocessing workflow
-• `skip overview` - Skip to outlier detection
-• `explain outliers` - Learn about outlier handling
-• `summary` - Show current status
-
-💬 **What would you like to do?**"""
-                
-                self.slack_manager.send_message(state.chat_session, menu_msg)
-                print_to_log("✅ Auto-sent preprocessing menu to Slack")
+            # Don't send preprocessing intro here - it will be shown after mode selection
+            print_to_log("⏭️ Skipping preprocessing intro for auto-detected target - will show after mode selection")
             
             state_manager.save_state(state)
     
