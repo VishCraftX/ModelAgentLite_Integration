@@ -1551,9 +1551,15 @@ Generate Python code to fulfill this request:"""
                 # Send a message asking the user to proceed with outliers
                 self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
 
-We'll clean your data step-by-step: outliers → missing values → encoding → transformations.
+📋 **Preprocessing Workflow:**
+**Phase 1:** 🚨 Outliers - Handle extreme values
+**Phase 2:** 🗑️ Missing Values - Impute or remove nulls
+**Phase 3:** 🏷️ Encoding - Convert categorical to numeric
+**Phase 4:** 🔄 Transformations - Normalize and scale features
 
-📊 **Phase 1: Outlier Analysis**
+---
+
+📊 **Current Phase: Outlier Analysis**
 I'll detect extreme values that might affect your model and recommend handling strategies.
 
 **💬 Your Options:**
