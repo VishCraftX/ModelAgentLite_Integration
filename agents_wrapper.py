@@ -2453,7 +2453,12 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 if slack_manager and state.chat_session:
                     if next_phase == 'completion':
                         # ✅ COMPLETION MESSAGE WITH FEATURE SELECTION PROMPT
-                        final_data_shape = state.cleaned_data.shape if state.cleaned_data is not None else state.raw_data.shape
+                        if state.cleaned_data is not None:
+                            final_data_shape = state.cleaned_data.shape
+                        elif state.raw_data is not None:
+                            final_data_shape = state.raw_data.shape
+                        else:
+                            final_data_shape = (0, 0)
                         message = f"""🎉 **Preprocessing Complete!**
 
 **✅ Skipped transformations - preprocessing finished!**
@@ -2494,8 +2499,10 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 
                 if state.cleaned_data is not None:
                     summary_parts.append(f"• **Data Shape:** {state.cleaned_data.shape[0]:,} rows × {state.cleaned_data.shape[1]} columns")
-                else:
+                elif state.raw_data is not None:
                     summary_parts.append(f"• **Data Shape:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns")
+                else:
+                    summary_parts.append(f"• **Data Shape:** No data available")
                 
                 # Add phase-specific information
                 if current_phase == 'outliers' and state.preprocessing_state.get('outlier_results'):

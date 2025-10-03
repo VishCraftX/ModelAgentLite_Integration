@@ -267,6 +267,12 @@ class MultiAgentMLPipeline:
         """Preprocessing node - Ask for fast/slow mode selection before starting preprocessing"""
         print_to_log(f"\n🧹 [Preprocessing] Starting data preprocessing")
         
+        # CRITICAL: Check if we have raw data before proceeding
+        if state.raw_data is None:
+            print_to_log(f"❌ [Preprocessing] No raw data available - cannot start preprocessing")
+            state.response = "❌ No data available for preprocessing. Please upload a dataset first."
+            return state
+        
         # CRITICAL: Always ask for fast/slow mode selection when preprocessing is triggered
         # This ensures user can choose between automated (fast) or interactive (slow) pipeline
         
