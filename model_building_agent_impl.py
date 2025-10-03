@@ -2006,20 +2006,30 @@ Once you upload your data, I can build multiple models and compare them! 🎯"""
             result = handle_multi_model_orchestrator(query, data, user_id, progress_callback)
             
             if result and isinstance(result, dict):
-                # Create simple success response with key metrics
-                models_count = len(result.get('models', {}))
-                best_model = result.get('best_model', {}).get('name', 'Unknown')
-                selection_metric = result.get('user_config', {}).get('selection_metric', 'accuracy')
-                
-                state["response"] = f"""🎯 **Multi-Model Comparison Completed Successfully!**
-
-📊 **Models Trained:** {models_count}
-🏆 **Best Model:** {best_model}
-📈 **Selection Metric:** {selection_metric}
-
-✅ **All models, metrics, and visualizations have been generated and saved to artifacts!**"""
-                
+                # Use format_multi_model_response for rich, detailed output
+                response = format_multi_model_response(result, query)
+                state["response"] = response
                 state["model_building_state"] = result
+                state["execution_result"] = result
+                
+                # Handle plot uploads for multi-model comparison
+                plots = result.get('comparison_plots', {})
+                if plots:
+                    plot_files = []
+                    for plot_type, plot_path in plots.items():
+                        if plot_path and os.path.exists(plot_path):
+                            plot_files.append({
+                                "path": plot_path, 
+                                "title": f"Multi-Model {plot_type.replace('_', ' ').title()}", 
+                                "type": "comparison_plot"
+                            })
+                    
+                    if plot_files:
+                        state["artifacts"] = state.get("artifacts", {})
+                        state["artifacts"]["files"] = plot_files
+                        result["artifacts"] = {"files": plot_files}
+                        print_to_log(f"📊 {len(plot_files)} comparison plots ready for upload")
+                
                 return state
             else:
                 state["response"] = "❌ Multi-model comparison failed: Orchestrator returned no results"
@@ -4009,6 +4019,98 @@ print("✅ Best model selection completed")
         import traceback
         print_to_log(f"💥 Traceback: {traceback.format_exc()}")
         return None
+
+def format_multi_model_response(result: Dict, query: str) -> str:
+    """Format comprehensive multi-model comparison response with rich details"""
+    try:
+        response_parts = ["✅ 🎯 **Multi-Model Comparison Completed Successfully!**\n"]
+        
+        # User configuration
+        user_config = result.get('user_config', {})
+        if user_config:
+            response_parts.append("⚙️ **Configuration:**")
+            models_req = user_config.get('models_requested', [])
+            response_parts.append(f"   • Models Requested: {', '.join([m.title() for m in models_req])}")
+            response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
+            response_parts.append(f"   • Selection Metric: {user_config.get('selection_metric', 'accuracy')}")
+            response_parts.append(f"   • Models Built: {user_config.get('total_models_built', 0)}\n")
+        
+        # Model performance summary
+        models = result.get('models', {})
+        if models:
+            response_parts.append("📊 **Model Performance Summary:**")
+            for model_name, model_data in models.items():
+                metrics = model_data.get('metrics', {})
+                training_time = model_data.get('training_time', 0)
+                model_type = model_data.get('model_type', 'classification')
+                
+                # Show relevant metrics based on problem type
+                if model_type == 'classification':
+                    acc = metrics.get('accuracy', 0)
+                    auc = metrics.get('roc_auc', 0)
+                    f1 = metrics.get('f1', 0)
+                    response_parts.append(f"   🤖 **{model_name}**: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
+                else:  # regression
+                    r2 = metrics.get('r2_score', 0)
+                    mae = metrics.get('mae', 0)
+                    rmse = metrics.get('rmse', 0)
+                    response_parts.append(f"   🤖 **{model_name}**: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
+        
+        # Model ranking
+        ranking = result.get('model_ranking', [])
+        if ranking and len(ranking) > 1:
+            response_parts.append("\n🏅 **Model Ranking:**")
+            for rank_info in ranking:
+                rank = rank_info.get('rank', 0)
+                model_name = rank_info.get('model_name', 'Unknown')
+                score = rank_info.get('score', 0)
+                metric = rank_info.get('metric_used', 'score')
+                response_parts.append(f"   #{rank}. **{model_name}**: {metric.upper()} = {score:.3f}")
+        
+        # Best model details
+        best_model = result.get('best_model', {})
+        if best_model:
+            response_parts.append(f"\n🏆 **Winner: {best_model.get('name', 'Unknown')}**")
+            response_parts.append(f"   📈 **Selection:** {best_model.get('selection_criteria', 'Not specified')}")
+            improvement = best_model.get('improvement_over_worst', '')
+            if improvement:
+                response_parts.append(f"   📊 **Performance:** {improvement}")
+        
+        # Summary insights
+        summary_data = result.get('summary', {})
+        if isinstance(summary_data, dict):
+            response_parts.append("\n📋 **Analysis:**")
+            response_parts.append(f"   • Best: **{summary_data.get('best_model', 'Unknown')}** ({summary_data.get('best_score', 0):.3f})")
+            response_parts.append(f"   • Worst: **{summary_data.get('worst_model', 'Unknown')}** ({summary_data.get('worst_score', 0):.3f})")
+            spread = summary_data.get('performance_spread', '')
+            if spread:
+                response_parts.append(f"   • Performance Spread: {spread}")
+            
+            recommendation = summary_data.get('recommendation', '')
+            if recommendation:
+                response_parts.append(f"\n💡 **Recommendation:** {recommendation}")
+        
+        # Visualizations
+        plots = result.get('comparison_plots', {})
+        if plots:
+            response_parts.append("\n📊 **Visualizations Generated:**")
+            if plots.get('roc_curves'):
+                response_parts.append("   • ROC Curves Comparison Plot")
+            if plots.get('metrics_table'):
+                response_parts.append("   • Metrics Comparison Table")
+        
+        # Detailed comparison
+        detailed_comparison = result.get('detailed_comparison', '')
+        if detailed_comparison:
+            response_parts.append("\n🔍 **Detailed Analysis:**")
+            response_parts.append(f"Comprehensive textual comparison of all models with strengths/weaknesses")
+            response_parts.append(detailed_comparison)
+        
+        return "\n".join(response_parts)
+        
+    except Exception as e:
+        print_to_log(f"⚠️ Error formatting multi-model response: {e}")
+        return f"✅ Multi-model comparison completed with {len(result.get('models', {}))} models"
 
 def format_model_response(result: Dict, routing_decision: str, query: str) -> str:
     """Format detailed response with model metrics for Slack display"""
