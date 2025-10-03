@@ -2002,7 +2002,10 @@ Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
         # Generate multi-model comparison code with enhanced robustness
-        multi_model_prompt = """You are building a comprehensive multi-model comparison system. 
+        # Build the prompt using simple string concatenation - NO TEMPLATES
+        user_request_line = f'user_request = "{query}"'
+        
+        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
 
 USER REQUEST: {query}
 
@@ -2026,12 +2029,12 @@ DYNAMIC USER INPUT PARSING:
 🚨 CRITICAL: USE THIS EXACT MODEL PARSING CODE (DO NOT MODIFY):
 ```python
 # MANDATORY: Use this exact model parsing approach - DO NOT use split() or regex
-user_request = "{query}"
+{user_request_line}
 user_request_lower = user_request.lower()
 models_requested = []
 
 # Define model aliases and keywords - EXACTLY as shown
-model_keywords = {
+model_keywords = {{
     'lgbm': ['lgbm', 'lightgbm', 'light gbm', 'lightgradientboosting'],
     'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting', 'xgb classifier', 'xgb regressor'],
     'random_forest': ['random forest', 'randomforest', 'rf', 'random forest classifier', 'random forest regressor'],
@@ -2051,7 +2054,7 @@ model_keywords = {
     'catboost': ['catboost', 'cat boost', 'categorical boosting'],
     'voting_classifier': ['voting', 'voting classifier', 'ensemble voting'],
     'bagging': ['bagging', 'bagging classifier', 'bootstrap aggregating']
-}
+}}
 
 # Extract models mentioned in query - EXACTLY as shown
 for model_name, keywords in model_keywords.items():
@@ -2062,7 +2065,7 @@ for model_name, keywords in model_keywords.items():
 if not models_requested:
     models_requested = ['random_forest', 'decision_tree', 'lgbm']
 
-print(f"Models requested: {models_requested}")
+print(f"Models requested: {{models_requested}}")
 ```
 
 🚨 FORBIDDEN: DO NOT use user_request.split('models') or .split('and') - these approaches are broken!
@@ -2391,7 +2394,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             if progress_callback:
                 progress_callback("🤔 Generating code...", "Code Generation")
             
-            reply, code, system_prompt = generate_model_code(multi_model_prompt.format(query=query), user_id, query)
+            reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id, query)
             
             if not code.strip():
                 state["response"] = f"❌ Failed to generate multi-model code: {reply}"
