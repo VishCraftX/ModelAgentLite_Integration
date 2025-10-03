@@ -1608,7 +1608,7 @@ def model_building_agent(state: AgentState) -> AgentState:
             # For model-specific requests, ask for data
             state["response"] = """📊 I need data to work with! Please upload a data file first.
 
-**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+Supported formats: CSV, Excel (.xlsx/.xls), JSON, TSV
 
 Once you upload your data, I can help you build models and analyze it! 🎯"""
             return state
@@ -2005,7 +2005,7 @@ else:
         if data is None:
             state["response"] = """📊 I need data to work with! Please upload a data file first.
 
-**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+Supported formats: CSV, Excel (.xlsx/.xls), JSON, TSV
 
 Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
@@ -2468,7 +2468,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 # User configuration
                 user_config = result.get('user_config', {})
                 if user_config:
-                    response_parts.append(f"⚙️ **Configuration:**")
+                    response_parts.append(f"⚙️ Configuration:")
                     response_parts.append(f"   • Models Requested: {', '.join(user_config.get('models_requested', []))}")
                     response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
                     response_parts.append(f"   • Selection Metric: {user_config.get('selection_metric', 'accuracy')}")
@@ -2476,7 +2476,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 
                 # Model performance summary
                 models = result.get('models', {})
-                response_parts.append(f"📊 **Model Performance Summary:**")
+                response_parts.append(f"📊 Model Performance Summary:")
                 for model_name, model_data in models.items():
                     metrics = model_data.get('metrics', {})
                     training_time = model_data.get('training_time', 0)
@@ -2487,53 +2487,53 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                         acc = metrics.get('accuracy', 0)
                         auc = metrics.get('roc_auc', 0)
                         f1 = metrics.get('f1_score', 0)
-                        response_parts.append(f"   🤖 **{model_name}**: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
+                        response_parts.append(f"   🤖 {model_name}: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
                     else:  # regression
                         r2 = metrics.get('r2_score', 0)
                         mae = metrics.get('mae', 0)
                         rmse = metrics.get('rmse', 0)
-                        response_parts.append(f"   🤖 **{model_name}**: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
+                        response_parts.append(f"   🤖 {model_name}: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
                 
                 # Model ranking
                 ranking = result.get('model_ranking', [])
                 if ranking and len(ranking) > 1:
-                    response_parts.append(f"\n🏅 **Model Ranking:**")
+                    response_parts.append(f"\n🏅 Model Ranking:")
                     for rank_info in ranking[:3]:  # Show top 3
                         rank = rank_info.get('rank', 0)
                         model_name = rank_info.get('model_name', 'Unknown')
                         score = rank_info.get('score', 0)
                         metric = rank_info.get('metric_used', 'score')
-                        response_parts.append(f"   #{rank}. **{model_name}**: {metric.upper()} = {score:.3f}")
+                        response_parts.append(f"   #{rank}. {model_name}: {metric.upper()} = {score:.3f}")
                 
                 # Best model details
                 best_model = result.get('best_model', {})
                 if best_model:
-                    response_parts.append(f"\n🏆 **Winner: {best_model.get('name', 'Unknown')}**")
-                    response_parts.append(f"   📈 **Selection:** {best_model.get('selection_criteria', 'Not specified')}")
+                    response_parts.append(f"\n🏆 Winner: {best_model.get('name', 'Unknown')}")
+                    response_parts.append(f"   📈 Selection: {best_model.get('selection_criteria', 'Not specified')}")
                     improvement = best_model.get('improvement_over_worst', '')
                     if improvement:
-                        response_parts.append(f"   📊 **Performance:** {improvement}")
+                        response_parts.append(f"   📊 Performance: {improvement}")
                 
                 # Summary insights
                 summary_data = result.get('summary', {})
                 if isinstance(summary_data, dict):
-                    response_parts.append(f"\n📋 **Analysis:**")
-                    response_parts.append(f"   • Best: **{summary_data.get('best_model', 'Unknown')}** ({summary_data.get('best_score', 0):.3f})")
-                    response_parts.append(f"   • Worst: **{summary_data.get('worst_model', 'Unknown')}** ({summary_data.get('worst_score', 0):.3f})")
+                    response_parts.append(f"\n📋 Analysis:")
+                    response_parts.append(f"   • Best: {summary_data.get('best_model', 'Unknown')} ({summary_data.get('best_score', 0):.3f})")
+                    response_parts.append(f"   • Worst: {summary_data.get('worst_model', 'Unknown')} ({summary_data.get('worst_score', 0):.3f})")
                     spread = summary_data.get('performance_spread', '')
                     if spread:
                         response_parts.append(f"   • Performance Spread: {spread}")
                     
                     recommendation = summary_data.get('recommendation', '')
                     if recommendation:
-                        response_parts.append(f"\n💡 **Recommendation:** {recommendation}")
+                        response_parts.append(f"\n💡 Recommendation: {recommendation}")
                 elif isinstance(summary_data, str) and summary_data:
-                    response_parts.append(f"\n📋 **Summary:** {summary_data}")
+                    response_parts.append(f"\n📋 Summary: {summary_data}")
                 
                 # Visualizations
                 plots = result.get('comparison_plots', {})
                 if plots:
-                    response_parts.append(f"\n📊 **Visualizations Generated:**")
+                    response_parts.append(f"\n📊 Visualizations Generated:")
                     if plots.get('roc_curves'):
                         response_parts.append(f"   • ROC Curves Comparison Plot")
                     if plots.get('metrics_table'):
@@ -2542,7 +2542,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 # Detailed comparison
                 detailed_comparison = result.get('detailed_comparison', '')
                 if detailed_comparison:
-                    response_parts.append(f"\n🔍 **Detailed Analysis:**")
+                    response_parts.append(f"\n🔍 Detailed Analysis:")
                     response_parts.append(f"{detailed_comparison}")
                 
                 state["response"] = "\n".join(response_parts)
@@ -2574,14 +2574,14 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 
                 state["response"] = f"""❌ Multi-model comparison failed: Result format issue
 
-🔍 **Diagnostic Information:**
+🔍 Diagnostic Information:
 • Result type: Dictionary
 • Available keys: {', '.join(available_keys)}
 • Missing required key: 'models'
 • Execution status: {execution_status}
 • Error details: {error_info}
 
-💡 **This suggests the generated code didn't complete successfully or didn't return the expected result format.**"""
+💡 This suggests the generated code didn't complete successfully or didn't return the expected result format."""
                 
             else:
                 # Result is not a dict at all
@@ -2591,12 +2591,12 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 
                 state["response"] = f"""❌ Multi-model comparison failed: Unexpected result format
 
-🔍 **Diagnostic Information:**
+🔍 Diagnostic Information:
 • Expected: Dictionary with 'models' key
 • Received: {result_type}
 • Content preview: {result_preview}
 
-💡 **This suggests the code execution failed or returned an unexpected data type.**"""
+💡 This suggests the code execution failed or returned an unexpected data type."""
             
             return state
             
@@ -2613,7 +2613,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             # For model building requests without data, ask for data upload
             state["response"] = """📊 I need data to work with! Please upload a data file first.
 
-**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+Supported formats: CSV, Excel (.xlsx/.xls), JSON, TSV
 
 Once you upload your data, I can help you build models and analyze it! 🎯"""
             return state
@@ -4084,12 +4084,12 @@ print("✅ Best model selection completed")
 def format_multi_model_response(result: Dict, query: str) -> str:
     """Format comprehensive multi-model comparison response with rich details"""
     try:
-        response_parts = ["✅ 🎯 **Multi-Model Comparison Completed Successfully!**\n"]
+        response_parts = ["✅ 🎯 Multi-Model Comparison Completed Successfully!\n"]
         
         # User configuration
         user_config = result.get('user_config', {})
         if user_config:
-            response_parts.append("⚙️ **Configuration:**")
+            response_parts.append("⚙️ Configuration:")
             models_req = user_config.get('models_requested', [])
             response_parts.append(f"   • Models Requested: {', '.join([m.title() for m in models_req])}")
             response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
@@ -4099,7 +4099,7 @@ def format_multi_model_response(result: Dict, query: str) -> str:
         # Model performance summary
         models = result.get('models', {})
         if models:
-            response_parts.append("📊 **Model Performance Summary:**")
+            response_parts.append("📊 Model Performance Summary:")
             for model_name, model_data in models.items():
                 metrics = model_data.get('metrics', {})
                 training_time = model_data.get('training_time', 0)
@@ -4110,51 +4110,51 @@ def format_multi_model_response(result: Dict, query: str) -> str:
                     acc = metrics.get('accuracy', 0)
                     auc = metrics.get('roc_auc', 0)
                     f1 = metrics.get('f1', 0)
-                    response_parts.append(f"   🤖 **{model_name}**: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
+                    response_parts.append(f"   🤖 {model_name}: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
                 else:  # regression
                     r2 = metrics.get('r2_score', 0)
                     mae = metrics.get('mae', 0)
                     rmse = metrics.get('rmse', 0)
-                    response_parts.append(f"   🤖 **{model_name}**: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
+                    response_parts.append(f"   🤖 {model_name}: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
         
         # Model ranking
         ranking = result.get('model_ranking', [])
         if ranking and len(ranking) > 1:
-            response_parts.append("\n🏅 **Model Ranking:**")
+            response_parts.append("\n🏅 Model Ranking:")
             for rank_info in ranking:
                 rank = rank_info.get('rank', 0)
                 model_name = rank_info.get('model_name', 'Unknown')
                 score = rank_info.get('score', 0)
                 metric = rank_info.get('metric_used', 'score')
-                response_parts.append(f"   #{rank}. **{model_name}**: {metric.upper()} = {score:.3f}")
+                response_parts.append(f"   #{rank}. {model_name}: {metric.upper()} = {score:.3f}")
         
         # Best model details
         best_model = result.get('best_model', {})
         if best_model:
-            response_parts.append(f"\n🏆 **Winner: {best_model.get('name', 'Unknown')}**")
-            response_parts.append(f"   📈 **Selection:** {best_model.get('selection_criteria', 'Not specified')}")
+            response_parts.append(f"\n🏆 Winner: {best_model.get('name', 'Unknown')}")
+            response_parts.append(f"   📈 Selection: {best_model.get('selection_criteria', 'Not specified')}")
             improvement = best_model.get('improvement_over_worst', '')
             if improvement:
-                response_parts.append(f"   📊 **Performance:** {improvement}")
+                response_parts.append(f"   📊 Performance: {improvement}")
         
         # Summary insights
         summary_data = result.get('summary', {})
         if isinstance(summary_data, dict):
-            response_parts.append("\n📋 **Analysis:**")
-            response_parts.append(f"   • Best: **{summary_data.get('best_model', 'Unknown')}** ({summary_data.get('best_score', 0):.3f})")
-            response_parts.append(f"   • Worst: **{summary_data.get('worst_model', 'Unknown')}** ({summary_data.get('worst_score', 0):.3f})")
+            response_parts.append("\n📋 Analysis:")
+            response_parts.append(f"   • Best: {summary_data.get('best_model', 'Unknown')} ({summary_data.get('best_score', 0):.3f})")
+            response_parts.append(f"   • Worst: {summary_data.get('worst_model', 'Unknown')} ({summary_data.get('worst_score', 0):.3f})")
             spread = summary_data.get('performance_spread', '')
             if spread:
                 response_parts.append(f"   • Performance Spread: {spread}")
             
             recommendation = summary_data.get('recommendation', '')
             if recommendation:
-                response_parts.append(f"\n💡 **Recommendation:** {recommendation}")
+                response_parts.append(f"\n💡 Recommendation: {recommendation}")
         
         # Visualizations
         plots = result.get('comparison_plots', {})
         if plots:
-            response_parts.append("\n📊 **Visualizations Generated:**")
+            response_parts.append("\n📊 Visualizations Generated:")
             if plots.get('roc_curves'):
                 response_parts.append("   • ROC Curves Comparison Plot")
             if plots.get('metrics_table'):
@@ -4163,7 +4163,7 @@ def format_multi_model_response(result: Dict, query: str) -> str:
         # Detailed comparison
         detailed_comparison = result.get('detailed_comparison', '')
         if detailed_comparison:
-            response_parts.append("\n🔍 **Detailed Analysis:**")
+            response_parts.append("\n🔍 Detailed Analysis:")
             response_parts.append(f"Comprehensive textual comparison of all models with strengths/weaknesses")
             response_parts.append(detailed_comparison)
         
@@ -4183,13 +4183,13 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
         if result.get("execution_status") == "failed_missing_library":
             missing_lib = result.get("error", "").replace("Missing library: ", "")
             response_parts = [
-                f"📦 **Missing Library: {missing_lib}**",
+                f"📦 Missing Library: {missing_lib}",
                 f"",
-                f"🔒 **For System Administrator:**",
+                f"🔒 For System Administrator:",
                 f"• {result.get('admin_message', 'Please install the required library')}",
                 f"• Description: {result.get('description', 'External library required')}",
                 f"",
-                f"🔄 **Available Alternatives:**"
+                f"🔄 Available Alternatives:"
             ]
             
             alternatives = result.get('alternatives', [])
@@ -4201,7 +4201,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             
             response_parts.extend([
                 f"",
-                f"💡 **Next Steps:**",
+                f"💡 Next Steps:",
                 f"1. Contact your system administrator to install the library",
                 f"2. Or ask me to try a different approach using available libraries",
                 f"3. Or specify which libraries you have available"
@@ -4485,8 +4485,8 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             
             # Check if there are validation metrics to display
             if any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score']):
-                response_parts.append("✅ **Existing Model Analysis Completed!**\n")
-                response_parts.append("📊 **Model Performance:**")
+                response_parts.append("✅ Existing Model Analysis Completed!\n")
+                response_parts.append("📊 Model Performance:")
                 
                 if 'accuracy' in result:
                     response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")

@@ -1194,34 +1194,34 @@ Respond naturally and conversationally. Be helpful and mention that you can hand
         
         status = "\n".join(status_parts) if status_parts else "📝 No data uploaded yet"
         
-        return f"""🤖 **Multi-Agent ML Integration System**
+        return f"""🤖 Multi-Agent ML Integration System
 
-**Current Status:**
+Current Status:
 {status}
 
-**My Capabilities:**
+My Capabilities:
 
-🔧 **Data Preprocessing**
+🔧 Data Preprocessing
 • Clean and validate data
 • Handle missing values and outliers
 • Normalize and encode features
 
-🎯 **Feature Selection**
+🎯 Feature Selection
 • Information Value (IV) analysis
 • Correlation and VIF analysis
 • PCA and dimensionality reduction
 
-🤖 **Model Building**
+🤖 Model Building
 • Train classification/regression models
 • LightGBM, XGBoost, Random Forest
 • Model evaluation and optimization
 
-🎛️ **Pipeline Management**
+🎛️ Pipeline Management
 • Full end-to-end ML workflows
 • Intelligent query routing
 • Session persistence and resume
 
-**Example queries:**
+Example queries:
 • "Build a complete ML pipeline"
 • "Clean this data and select features"
 • "Train a LightGBM classifier"
@@ -1275,29 +1275,29 @@ How can I help you with your ML workflow today?"""
 
     def _generate_status_response(self, state: PipelineState) -> str:
         """Generate pipeline status response"""
-        status_parts = ["📊 **Pipeline Status:**"]
+        status_parts = ["📊 Pipeline Status:"]
         
         # Data status
         if state.raw_data is not None:
-            status_parts.append(f"✅ **Raw Data**: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns")
+            status_parts.append(f"✅ Raw Data: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns")
         else:
-            status_parts.append("❌ **Raw Data**: Not loaded")
+            status_parts.append("❌ Raw Data: Not loaded")
         
         if state.cleaned_data is not None:
-            status_parts.append(f"✅ **Cleaned Data**: {state.cleaned_data.shape[0]:,} rows × {state.cleaned_data.shape[1]} columns")
+            status_parts.append(f"✅ Cleaned Data: {state.cleaned_data.shape[0]:,} rows × {state.cleaned_data.shape[1]} columns")
         else:
-            status_parts.append("❌ **Cleaned Data**: Not processed")
+            status_parts.append("❌ Cleaned Data: Not processed")
         
         if state.selected_features is not None:
-            status_parts.append(f"✅ **Selected Features**: {len(state.selected_features)} features")
+            status_parts.append(f"✅ Selected Features: {len(state.selected_features)} features")
         else:
-            status_parts.append("❌ **Selected Features**: Not selected")
+            status_parts.append("❌ Selected Features: Not selected")
         
         if state.trained_model is not None:
             model_type = type(state.trained_model).__name__
-            status_parts.append(f"✅ **Trained Model**: {model_type}")
+            status_parts.append(f"✅ Trained Model: {model_type}")
         else:
-            status_parts.append("❌ **Trained Model**: Not trained")
+            status_parts.append("❌ Trained Model: Not trained")
         
         # Progress indicator
         progress_steps = [
@@ -1308,19 +1308,19 @@ How can I help you with your ML workflow today?"""
         ]
         completed_steps = sum(progress_steps)
         progress_bar = "🟢" * completed_steps + "⚪" * (4 - completed_steps)
-        status_parts.append(f"\n**Progress**: {progress_bar} ({completed_steps}/4 steps)")
+        status_parts.append(f"\nProgress: {progress_bar} ({completed_steps}/4 steps)")
         
         # Next step suggestion
         if completed_steps == 0:
-            status_parts.append("\n💡 **Next**: Upload data to get started")
+            status_parts.append("\n💡 Next: Upload data to get started")
         elif completed_steps == 1:
-            status_parts.append("\n💡 **Next**: Clean and preprocess the data")
+            status_parts.append("\n💡 Next: Clean and preprocess the data")
         elif completed_steps == 2:
-            status_parts.append("\n💡 **Next**: Select important features")
+            status_parts.append("\n💡 Next: Select important features")
         elif completed_steps == 3:
-            status_parts.append("\n💡 **Next**: Train a machine learning model")
+            status_parts.append("\n💡 Next: Train a machine learning model")
         else:
-            status_parts.append("\n🎉 **Pipeline Complete!** You can now make predictions or try different models.")
+            status_parts.append("\n🎉 Pipeline Complete! You can now make predictions or try different models.")
         
         return "\n".join(status_parts)
 

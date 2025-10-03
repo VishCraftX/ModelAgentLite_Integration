@@ -120,12 +120,12 @@ class PreprocessingMenuGenerator:
         current_phase_name = session.current_phase.replace('_', ' ').title()
         completed_count = len(session.completed_phases)
         
-        menu = f"""🧹 **Sequential Preprocessing Agent**
+        menu = f"""🧹 Sequential Preprocessing Agent
 
-📊 **Current Dataset:** {session.current_df.shape if session.current_df is not None else 'Loading...'}
-📈 **Progress:** {current_phase_name} ({completed_count} phases completed)
+📊 Current Dataset: {session.current_df.shape if session.current_df is not None else 'Loading...'}
+📈 Progress: {current_phase_name} ({completed_count} phases completed)
 
-**🔄 Preprocessing Phases:**
+🔄 Preprocessing Phases:
 • `Overview` - Dataset analysis and summary
 • `Outliers` - Detect and handle outliers  
 • `Missing Values` - Handle missing data
@@ -133,19 +133,19 @@ class PreprocessingMenuGenerator:
 • `Transformations` - Feature transformations
 • `Completion` - Finalize preprocessing
 
-**💬 Your Options:**
+💬 Your Options:
 • `proceed` or `yes` - Continue with recommended approach
 • `skip` - Skip current phase
 • `modify [details]` - Change the approach
 • `explain` or `what` - Get more information about current phase
 • `summary` - Show current preprocessing strategies
 
-**❓ Ask Me Anything:**
+❓ Ask Me Anything:
 • Phase questions: `what are outliers?`, `explain missing value strategies`
 • Current state: `show current strategies`, `what's the current plan`
 • Navigation: `jump to missing values`, `go to encoding phase`
 
-💬 **What would you like to do next?**"""
+💬 What would you like to do next?"""
         
         return menu
     
@@ -153,7 +153,7 @@ class PreprocessingMenuGenerator:
     def generate_phase_summary(session: PreprocessingSession, phase: str) -> str:
         """Generate summary for a specific phase"""
         if phase == PreprocessingPhase.OVERVIEW:
-            return f"""📊 **Dataset Overview Phase**
+            return f"""📊 Dataset Overview Phase
 
 Current dataset: {session.current_df.shape if session.current_df is not None else 'Not loaded'}
 Target column: {session.target_column or 'Not specified'}
@@ -161,41 +161,41 @@ Target column: {session.target_column or 'Not specified'}
 This phase analyzes your dataset structure, identifies data types, and provides initial insights."""
 
         elif phase == PreprocessingPhase.OUTLIERS:
-            return f"""🎯 **Outliers Detection Phase**
+            return f"""🎯 Outliers Detection Phase
 
 This phase identifies and handles outliers in your numeric columns using statistical methods.
 
-**Options:**
+Options:
 • Remove outliers beyond 3 standard deviations
 • Cap outliers using IQR method
 • Keep outliers (no changes)"""
 
         elif phase == PreprocessingPhase.MISSING_VALUES:
-            return f"""🔍 **Missing Values Handling Phase**
+            return f"""🔍 Missing Values Handling Phase
 
 This phase handles missing data in your dataset.
 
-**Options:**
+Options:
 • Drop columns with >50% missing values
 • Impute numeric columns (mean/median/mode)
 • Impute categorical columns (mode/forward fill)"""
 
         elif phase == PreprocessingPhase.ENCODING:
-            return f"""🔤 **Categorical Encoding Phase**
+            return f"""🔤 Categorical Encoding Phase
 
 This phase encodes categorical variables for machine learning.
 
-**Options:**
+Options:
 • One-hot encoding for low cardinality
 • Label encoding for ordinal variables
 • Target encoding for high cardinality"""
 
         elif phase == PreprocessingPhase.TRANSFORMATIONS:
-            return f"""⚡ **Feature Transformations Phase**
+            return f"""⚡ Feature Transformations Phase
 
 This phase applies mathematical transformations to improve model performance.
 
-**Options:**
+Options:
 • Log transformation for skewed data
 • Scaling/normalization
 • Polynomial features"""
@@ -250,7 +250,7 @@ class SlackPreprocessingBot:
                 return
             
             # Show immediate welcome message
-            say(f"👋 **Welcome to Sequential Preprocessing!**\n🔄 **Processing your file:** {file_info['name']}...")
+            say(f"👋 Welcome to Sequential Preprocessing!\n🔄 Processing your file: {file_info['name']}...")
             
             # Download file
             import requests
@@ -264,7 +264,7 @@ class SlackPreprocessingBot:
                 f.write(response.content)
             
             # Show data scanning message
-            say("🔍 **Scanning dataset and preparing for preprocessing...**")
+            say("🔍 Scanning dataset and preparing for preprocessing...")
             
             # Load and analyze data
             df = pd.read_csv(file_path)
@@ -284,18 +284,18 @@ class SlackPreprocessingBot:
             
             # Show target column selection
             columns = list(df.columns)
-            say(f"""📁 **File uploaded:** {file_info['name']}
-📊 **Dataset:** {df.shape[0]:,} rows × {df.shape[1]} columns
+            say(f"""📁 File uploaded: {file_info['name']}
+📊 Dataset: {df.shape[0]:,} rows × {df.shape[1]} columns
 
-🎯 **Target Column Selection**
+🎯 Target Column Selection
 
 Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
 
-📝 **Please specify your target column:**
+📝 Please specify your target column:
 • Type the column name directly (e.g., `target`)  
 • Or use: `target column_name`
 
-**Example:** `target` or `target my_target_column`""")
+Example: `target` or `target my_target_column`""")
                 
         except Exception as e:
             say(f"❌ Error processing file: {str(e)}")
@@ -355,9 +355,9 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
             session.target_column = target_column
             session.phase = "waiting_input"
             
-            say(f"""✅ **Target column set:** `{target_column}`
+            say(f"""✅ Target column set: `{target_column}`
 
-🚀 **Ready to start preprocessing!**
+🚀 Ready to start preprocessing!
 
 {PreprocessingMenuGenerator.generate_main_menu(session)}""")
             
@@ -365,9 +365,9 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
             
         else:
             available_cols = list(session.current_df.columns)
-            say(f"""❌ **Column '{target_column}' not found.**
+            say(f"""❌ Column '{target_column}' not found.
 
-**Available columns:** {', '.join(available_cols[:10])}{'...' if len(available_cols) > 10 else ''}
+Available columns: {', '.join(available_cols[:10])}{'...' if len(available_cols) > 10 else ''}
 
 Please specify a valid column name.""")
     
@@ -409,7 +409,7 @@ Please specify a valid column name.""")
         """Handle proceed command - execute current phase"""
         try:
             current_phase = session.current_phase
-            say(f"⚙️ **Processing {current_phase.replace('_', ' ').title()} phase...**")
+            say(f"⚙️ Processing {current_phase.replace('_', ' ').title()} phase...")
             
             # Convert to sequential state
             sequential_state = self._convert_to_sequential_state(session)
@@ -423,11 +423,11 @@ Please specify a valid column name.""")
                 session.column_analysis = updated_state.column_analysis
                 session.phase_results[current_phase] = updated_state.phase_results.get(current_phase, {})
                 
-                say(f"""📊 **Dataset Overview Complete**
+                say(f"""📊 Dataset Overview Complete
 
 {overview_summary}
 
-**Next Phase:** Outlier Detection
+Next Phase: Outlier Detection
 """)
                 
                 # Move to next phase
@@ -447,12 +447,12 @@ Please specify a valid column name.""")
                 session.current_df = processed_df
                 session.phase_results[current_phase] = analysis_result
                 
-                say(f"""🎯 **Outlier Detection Complete**
+                say(f"""🎯 Outlier Detection Complete
 
-**Outliers handled in numeric columns**
+Outliers handled in numeric columns
 • Dataset shape: {session.current_df.shape[0]:,} rows × {session.current_df.shape[1]} columns
 
-**Next Phase:** Missing Values Handling
+Next Phase: Missing Values Handling
 """)
                 
                 # Move to next phase
@@ -472,12 +472,12 @@ Please specify a valid column name.""")
                 session.current_df = processed_df
                 session.phase_results[current_phase] = analysis_result
                 
-                say(f"""🔍 **Missing Values Handling Complete**
+                say(f"""🔍 Missing Values Handling Complete
 
-**Missing data processed**
+Missing data processed
 • Dataset shape: {session.current_df.shape[0]:,} rows × {session.current_df.shape[1]} columns
 
-**Next Phase:** Categorical Encoding
+Next Phase: Categorical Encoding
 """)
                 
                 # Move to next phase
@@ -497,12 +497,12 @@ Please specify a valid column name.""")
                 session.current_df = processed_df
                 session.phase_results[current_phase] = analysis_result
                 
-                say(f"""🔤 **Categorical Encoding Complete**
+                say(f"""🔤 Categorical Encoding Complete
 
-**Categorical variables encoded**
+Categorical variables encoded
 • Dataset shape: {session.current_df.shape[0]:,} rows × {session.current_df.shape[1]} columns
 
-**Next Phase:** Feature Transformations
+Next Phase: Feature Transformations
 """)
                 
                 # Move to next phase
@@ -522,12 +522,12 @@ Please specify a valid column name.""")
                 session.current_df = processed_df
                 session.phase_results[current_phase] = analysis_result
                 
-                say(f"""⚡ **Feature Transformations Complete**
+                say(f"""⚡ Feature Transformations Complete
 
-**Transformations applied**
+Transformations applied
 • Final dataset shape: {session.current_df.shape[0]:,} rows × {session.current_df.shape[1]} columns
 
-**Preprocessing Complete!** ✅
+Preprocessing Complete! ✅
 """)
                 
                 # Move to completion
@@ -552,7 +552,7 @@ Please specify a valid column name.""")
     def handle_skip(self, session: PreprocessingSession, say):
         """Handle skip command - skip current phase"""
         current_phase = session.current_phase
-        say(f"⏭️ **Skipping {current_phase.replace('_', ' ').title()} phase**")
+        say(f"⏭️ Skipping {current_phase.replace('_', ' ').title()} phase")
         
         # Move to next phase without processing
         if current_phase == PreprocessingPhase.OVERVIEW:
@@ -587,24 +587,24 @@ Please specify a valid column name.""")
         completed_phases = len(session.completed_phases)
         total_phases = 5  # Overview, Outliers, Missing, Encoding, Transformations
         
-        summary = f"""📋 **Preprocessing Progress Summary**
+        summary = f"""📋 Preprocessing Progress Summary
 
-**Current Phase:** {session.current_phase.replace('_', ' ').title()}
-**Completed Phases:** {completed_phases}/{total_phases}
-**Dataset Shape:** {session.current_df.shape if session.current_df is not None else 'Not loaded'}
-**Target Column:** {session.target_column or 'Not set'}
+Current Phase: {session.current_phase.replace('_', ' ').title()}
+Completed Phases: {completed_phases}/{total_phases}
+Dataset Shape: {session.current_df.shape if session.current_df is not None else 'Not loaded'}
+Target Column: {session.target_column or 'Not set'}
 
-**Completed Steps:**
+Completed Steps:
 {chr(10).join([f"✅ {phase.replace('_', ' ').title()}" for phase in session.completed_phases])}
 
-**Remaining Steps:**
+Remaining Steps:
 {chr(10).join([f"⏳ {phase.replace('_', ' ').title()}" for phase in [PreprocessingPhase.OVERVIEW, PreprocessingPhase.OUTLIERS, PreprocessingPhase.MISSING_VALUES, PreprocessingPhase.ENCODING, PreprocessingPhase.TRANSFORMATIONS] if phase not in session.completed_phases and phase != session.current_phase])}
 """
         say(summary)
     
     def handle_override(self, session: PreprocessingSession, text: str, say):
         """Handle override/modification requests"""
-        say(f"🔧 **Modification Request Noted**\n\nRequest: {text}\n\nCustom modifications will be applied in the current phase.")
+        say(f"🔧 Modification Request Noted\n\nRequest: {text}\n\nCustom modifications will be applied in the current phase.")
         # Store the override for later use
         session.user_overrides[session.current_phase] = {"request": text, "timestamp": datetime.now().isoformat()}
     
@@ -623,7 +623,7 @@ Please specify a valid column name.""")
         elif "transformation" in text_lower:
             session.current_phase = PreprocessingPhase.TRANSFORMATIONS
         
-        say(f"🧭 **Navigated to {session.current_phase.replace('_', ' ').title()} phase**")
+        say(f"🧭 Navigated to {session.current_phase.replace('_', ' ').title()} phase")
         
         # Show current phase menu
         menu = PreprocessingMenuGenerator.generate_main_menu(session)
@@ -632,7 +632,7 @@ Please specify a valid column name.""")
     
     def handle_exit(self, session: PreprocessingSession, say):
         """Handle exit requests"""
-        say("👋 **Preprocessing session ended.**\n\nThank you for using Sequential Preprocessing Agent!")
+        say("👋 Preprocessing session ended.\n\nThank you for using Sequential Preprocessing Agent!")
         session.phase = "completed"
     
     def generate_final_summary(self, session: PreprocessingSession, say):
@@ -640,17 +640,17 @@ Please specify a valid column name.""")
         original_shape = session.original_df.shape if session.original_df is not None else (0, 0)
         final_shape = session.current_df.shape if session.current_df is not None else (0, 0)
         
-        summary = f"""🎉 **Preprocessing Complete!**
+        summary = f"""🎉 Preprocessing Complete!
 
-**📊 Final Results:**
+📊 Final Results:
 • Original dataset: {original_shape[0]:,} rows × {original_shape[1]} columns
 • Processed dataset: {final_shape[0]:,} rows × {final_shape[1]} columns
 • Target column: {session.target_column}
 
-**✅ Completed Phases:**
+✅ Completed Phases:
 {chr(10).join([f"• {phase.replace('_', ' ').title()}" for phase in session.completed_phases])}
 
-**📁 Your preprocessed data is ready for feature selection and model building!**
+📁 Your preprocessed data is ready for feature selection and model building!
 
 Would you like to proceed to feature selection or download the processed dataset?"""
         
