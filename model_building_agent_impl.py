@@ -2595,7 +2595,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                 modified_prompt += "\n\nIMPORTANT: Also generate a visualization plot of the model and add 'plot_path' to the result dictionary."
         
         if should_generate_ranking:
-            modified_prompt += "\n\nIMPORTANT: Generate rank ordering table with 10 deciles showing badrate, coverage, and cumulative metrics for financial analysis. CRITICAL: Use full_probabilities (not y_proba) to assign predicted_proba to sample_data since we need predictions for the ENTIRE dataset, not just test set."
+            modified_prompt += "\n\nIMPORTANT: Generate rank ordering table with 10 deciles showing badrate, coverage, and cumulative metrics for financial analysis. CRITICAL: Use TEST SET predictions (y_proba and y_test) to create the rank ordering table - this evaluates model performance on unseen data."
         
         if should_compare_models:
             modified_prompt += "\n\nIMPORTANT: Compare multiple models (Random Forest, Decision Tree, LightGBM) and provide comprehensive metrics comparison including rank ordering for each model."
