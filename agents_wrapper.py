@@ -285,8 +285,27 @@ class PreprocessingAgentWrapper:
             current_phase = state.preprocessing_state.get('current_phase', 'overview') if state.preprocessing_state else 'overview'
             print_to_log(f"🔧 DEBUG: Current phase: {current_phase}, Command: {command}")
             
+            # 🎯 CRITICAL DEBUG: Check target column status
+            print_to_log(f"🔧 DEBUG TARGET CHECK: state.target_column = '{state.target_column}'")
+            print_to_log(f"🔧 DEBUG TARGET CHECK: hasattr(state, 'target_column') = {hasattr(state, 'target_column')}")
+            if hasattr(state, 'interactive_session') and state.interactive_session:
+                print_to_log(f"🔧 DEBUG TARGET CHECK: interactive_session['target_column'] = '{state.interactive_session.get('target_column', None)}'")
+            
             # 🎯 TARGET SELECTION PHASE - Handle target column selection at the start
-            if not state.target_column and state.raw_data is not None and hasattr(state.raw_data, 'columns'):
+            # CRITICAL FIX: Check both state.target_column AND interactive_session['target_column']
+            target_from_state = getattr(state, 'target_column', None)
+            target_from_session = None
+            if hasattr(state, 'interactive_session') and state.interactive_session:
+                target_from_session = state.interactive_session.get('target_column', None)
+            
+            # Use target from interactive_session if state.target_column is empty
+            if not target_from_state and target_from_session:
+                print_to_log(f"🔧 FIX: Restoring target_column '{target_from_session}' from interactive_session to state")
+                state.target_column = target_from_session
+                target_from_state = target_from_session
+            
+            # Only handle target selection if NO target is set anywhere
+            if not target_from_state and state.raw_data is not None and hasattr(state.raw_data, 'columns'):
                 return self._handle_target_selection(state, command)
             
             # Log phase transition
