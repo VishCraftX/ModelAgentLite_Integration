@@ -1644,20 +1644,8 @@ class PreprocessingAgentWrapper:
                             state.interactive_session["current_phase"] = "completion"
                             state.interactive_session["phase"] = "complete"
                         
-                        # 🔄 PROMPT FOR FEATURE SELECTION
-                        if slack_manager and state.chat_session:
-                            feature_selection_prompt = f"""🎯 **Ready for Next Phase!**
-
-**✅ Preprocessing Complete!**
-• Data has been cleaned and prepared
-• Final dataset: {df.shape[0]:,} rows × {df.shape[1]} columns
-
-**🚀 Would you like to move to feature selection?**
-• `yes` - Start feature selection with cleaned data
-• `no` - Stay in preprocessing for summary/export
-• `summary` - Show complete preprocessing summary"""
-                            
-                            slack_manager.send_message(state.chat_session, feature_selection_prompt)
+                        # Note: Completion message is already stored in pending_slack_message above (line 1624)
+                        # and will be sent after CSV files are saved. No need to send duplicate message here.
                         
                         return state
                     else:
