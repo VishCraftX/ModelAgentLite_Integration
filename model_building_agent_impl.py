@@ -2136,10 +2136,30 @@ if len(models_to_train) < 2:
 print(f"Final models to build: {{list(models_to_train.keys())}}")
 ```
 
+🚨 CRITICAL: USE EXISTING DATA - DO NOT CREATE FAKE DATA:
+```python
+# MANDATORY: Use existing sample_data - DO NOT create fake data
+X = sample_data.drop('target', axis=1)
+y = sample_data['target']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+print(f"Using existing data: {{sample_data.shape}}")
+print(f"Features: {{X.shape[1]}}, Target: {{y.name}}")
+```
+
+🚨 CRITICAL: USE SAFE ARTIFACT FUNCTIONS:
+```python
+# MANDATORY: Use safe functions for saving - DO NOT use plt.savefig directly
+model_path = safe_joblib_dump(model, f'{{model_name}}_model.joblib')
+plot_path = safe_plt_savefig('roc_comparison.png')
+
+# These functions automatically handle artifacts directory structure
+```
+
 DATA REQUIREMENTS:
-- Use 'sample_data' DataFrame (already loaded)
-- Target column: 'target'
-- Assume data is preprocessed (no scalers/encoders needed)
+- Use 'sample_data' DataFrame (already loaded in environment)
+- Target column: 'target'  
+- Data is preprocessed (no scalers/encoders needed)
 - Use train_test_split with user-specified test_size or default 0.2, random_state=42
 
 🚨 MANDATORY IMPORTS (include ALL of these):
@@ -2277,32 +2297,44 @@ result = {{
     'detailed_comparison': 'Comprehensive textual comparison of all models with strengths/weaknesses'
 }}
 
-🚨 MANDATORY RESULT FORMAT VALIDATION:
-Your code MUST end with this exact structure (no exceptions):
-
+🚨 CRITICAL: FINAL RESULT MUST BE NAMED 'result' (NOT 'results'):
 ```python
-# Validate result format before returning
-required_keys = ['user_config', 'models', 'best_model', 'comparison_plots', 'model_ranking', 'summary', 'detailed_comparison']                                                                                          
+# MANDATORY: Create result dictionary with exact structure
+result = {{
+    'user_config': {{
+        'models_requested': models_requested,
+        'test_size': test_size,
+        'selection_metric': selection_metric,
+        'total_models_built': len(models_to_train)
+    }},
+    'models': models_results,  # Dictionary of all trained models
+    'best_model': {{
+        'name': best_model_name,
+        'model': best_model_object,
+        'model_path': best_model_path,
+        'metrics': best_model_metrics,
+        'selection_criteria': f'{{selection_metric}}: {{best_score:.4f}} (user requested)',
+        'improvement_over_worst': f'{{improvement_percentage:.2f}}% better than worst model'
+    }},
+    'comparison_plots': {{
+        'roc_curves': roc_plot_path,
+        'metrics_table': metrics_plot_path
+    }},
+    'model_ranking': ranking_list,
+    'summary': summary_dict,
+    'detailed_comparison': detailed_text
+}}
+
+# MANDATORY: Validate result format before returning
+required_keys = ['user_config', 'models', 'best_model', 'comparison_plots', 'model_ranking', 'summary', 'detailed_comparison']
 for key in required_keys:
     if key not in result:
         print(f"ERROR: Missing required key: {{key}}")
         result[key] = {{}} if key != 'detailed_comparison' else "Analysis not available"
 
-# Ensure models dictionary has the right structure
-if 'models' in result and isinstance(result['models'], dict):
-    for model_name, model_data in result['models'].items():
-        required_model_keys = ['model', 'model_path', 'metrics', 'predictions', 'probabilities', 'training_time', 'model_type']                                                                                         
-        for model_key in required_model_keys:
-            if model_key not in model_data:
-                print(f"WARNING: Missing {{model_key}} for {{model_name}}")
-                if model_key == 'model_type':
-                    model_data[model_key] = 'classification'
-                elif model_key == 'training_time':
-                    model_data[model_key] = 0.0
-                else:
-                    model_data[model_key] = None
-
 print("✅ Multi-model comparison result format validated")
+print(f"✅ Result keys: {{list(result.keys())}}")
+print(f"✅ Models trained: {{list(result['models'].keys())}}")
 ```
 
 ENHANCED RESPONSE FORMATTING:

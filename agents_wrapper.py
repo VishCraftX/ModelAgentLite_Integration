@@ -200,17 +200,30 @@ class PreprocessingAgentWrapper:
                 print_to_log(f"❌ Cannot send Slack message - slack_manager: {slack_manager}, chat_session: {state.chat_session}")
                 return self._run_basic_preprocessing_fallback(state)
             
-            # Set up interactive session state for continuation
-            state.interactive_session = {
-                "agent_type": "preprocessing",
-                "session_active": True,
-                "session_id": state.chat_session,
-                "phase": phase,
-                "target_column": state.target_column,
-                "current_phase": "overview",
-                "needs_target": (phase == "need_target"),
-                "needs_mode_selection": False
-            }
+            # Check if mode has already been selected (don't overwrite existing session)
+            if hasattr(state, 'interactive_session') and state.interactive_session and state.interactive_session.get('mode_selected'):
+                print_to_log(f"🎛️ Mode already selected: {state.interactive_session.get('mode_selected')} - continuing with preprocessing")
+                
+                # Continue with the selected mode instead of showing menu again
+                if state.interactive_session.get('mode_selected') == 'slow':
+                    print_to_log("🐌 Starting slow mode preprocessing workflow...")
+                    return self.handle_interactive_command(state, "proceed")
+                elif state.interactive_session.get('mode_selected') == 'fast':
+                    print_to_log("⚡ Starting fast mode preprocessing workflow...")
+                    return self._run_basic_preprocessing_fallback(state)
+            
+            # Set up interactive session state for continuation (only if not already set)
+            if not hasattr(state, 'interactive_session') or not state.interactive_session:
+                state.interactive_session = {
+                    "agent_type": "preprocessing",
+                    "session_active": True,
+                    "session_id": state.chat_session,
+                    "phase": phase,
+                    "target_column": state.target_column,
+                    "current_phase": "overview",
+                    "needs_target": (phase == "need_target"),
+                    "needs_mode_selection": False
+                }
             
             # Set preprocessing state as active
             state.preprocessing_state = {
