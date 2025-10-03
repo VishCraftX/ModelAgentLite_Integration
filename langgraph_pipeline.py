@@ -295,11 +295,9 @@ _(Available: {', '.join(list(state.raw_data.columns)[:5])}{'...' if len(state.ra
         # Send mode selection message to Slack
         self.slack_manager.send_message(state.chat_session, mode_choice_msg)
         
-        # Set response and return - user will respond with fast/slow choice
-        if hasattr(state, 'target_column') and state.target_column:
-            state.last_response = f"Target column '{state.target_column}' confirmed. Please choose your pipeline mode."
-        else:
-            state.last_response = "Please specify your target column first, then choose pipeline mode."
+        # DON'T set last_response here - it will be handled by Early Interception logic
+        # This prevents stale responses from being cached and returned later
+        print_to_log(f"⏭️ [Preprocessing] Skipping last_response assignment - letting Early Interception handle it")
         
         return state
     
@@ -1505,8 +1503,6 @@ Generate Python code to fulfill this request:"""
               state.interactive_session is not None and 
               state.interactive_session.get('needs_mode_selection', False)):
             
-            # CRITICAL FIX: Clear stale last_response from previous preprocessing node
-            state.last_response = None
             print_to_log(f"🎯 [Early Interception] Mode selection needed, checking query: '{query}'")
             query_lower = query.lower().strip()
             
