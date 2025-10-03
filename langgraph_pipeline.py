@@ -290,7 +290,7 @@ class MultiAgentMLPipeline:
 I'll help you build a machine learning model. Let's start!
 
 💬 **Step 1:** Type your target column name
-_(Available: {', '.join(list(state.raw_data.columns)[:5])}{'...' if len(state.raw_data.columns) > 5 else ''})_"""
+"""
         
         # Send mode selection message to Slack
         self.slack_manager.send_message(state.chat_session, mode_choice_msg)
