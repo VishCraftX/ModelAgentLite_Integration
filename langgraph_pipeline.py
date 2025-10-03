@@ -234,6 +234,14 @@ class MultiAgentMLPipeline:
             state.response = "❌ No data available for preprocessing. Please upload a dataset first."
             return state
         
+        # CRITICAL: Skip if we already have an interactive session for mode selection
+        # This prevents overwriting state when user is in the middle of target/mode selection
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session is not None and 
+            state.interactive_session.get('needs_mode_selection', False)):
+            print_to_log(f"⏭️ [Preprocessing] Skipping preprocessing node - interactive session already active for mode selection")
+            return state
+        
         # CRITICAL: Always ask for fast/slow mode selection when preprocessing is triggered
         # This ensures user can choose between automated (fast) or interactive (slow) pipeline
         
@@ -1549,14 +1557,20 @@ Generate Python code to fulfill this request:"""
                 print_to_log("🐌 Starting slow mode preprocessing workflow directly...")
                 self._save_session_state(session_id, state)
                 
-                # Route to preprocessing agent but ask for user confirmation instead of auto-proceeding
-                from agents_wrapper import PreprocessingAgentWrapper
-                preprocessing_agent = PreprocessingAgentWrapper()
+                # Initialize preprocessing state without calling the agent yet
+                # This avoids "unknown command" errors and lets us send a clean intro message
+                if not hasattr(state, 'preprocessing_state') or not state.preprocessing_state:
+                    state.preprocessing_state = {
+                        'current_phase': 'overview',
+                        'status': 'waiting',
+                        'completed_phases': []
+                    }
                 
-                # Instead of auto-proceeding, show the initial menu and wait for user input
-                result_state = preprocessing_agent.handle_interactive_command(state, "overview")
+                # Update interactive session to show we're ready for preprocessing
+                state.interactive_session['current_phase'] = 'overview'
+                state.interactive_session['phase'] = 'waiting_input'
                 
-                # Send a message asking the user to proceed with outliers
+                # Send preprocessing intro message
                 self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
 
 📋 **Preprocessing Workflow:**
@@ -1577,8 +1591,12 @@ I'll detect extreme values that might affect your model and recommend handling s
 
 **Ready to proceed?**""")
                 
-                self._save_session_state(session_id, result_state)
-                return self._prepare_response(result_state)
+                # Clear last_response to prevent stale messages
+                state.last_response = "Interactive preprocessing started. Ready for outlier analysis."
+                
+                # Save state and return
+                self._save_session_state(session_id, state)
+                return self._prepare_response(state, "Interactive preprocessing started. Ready for outlier analysis.")
                 
             else:
                 self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
