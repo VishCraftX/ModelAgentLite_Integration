@@ -1583,9 +1583,7 @@ Generate Python code to fulfill this request:"""
                     state.interactive_session['phase'] = 'waiting_input'
                     
                     # Send preprocessing intro message
-                    self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
-
-📋 **Preprocessing Workflow:**
+                    self.slack_manager.send_message(session_id, """📋 **Preprocessing Workflow:**
 **Phase 1:** 🚨 Outliers - Handle extreme values
 **Phase 2:** 🗑️ Missing Values - Impute or remove nulls
 **Phase 3:** 🏷️ Encoding - Convert categorical to numeric
@@ -1604,11 +1602,11 @@ I'll detect extreme values that might affect your model and recommend handling s
 **Ready to proceed?**""")
                     
                     # Clear last_response to prevent stale messages
-                    state.last_response = "Interactive preprocessing started. Ready for outlier analysis."
+                    state.last_response = " "
                     
                     # Save state and return
                     self._save_session_state(session_id, state)
-                    return self._prepare_response(state, "Interactive preprocessing started. Ready for outlier analysis.")
+                    return self._prepare_response(state, " ")
                     
                 else:
                     self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
@@ -2144,7 +2142,7 @@ Please specify a valid column name."""
                     
                     # The preprocessing agent should handle the interactive flow
                     # and return the state with the interactive session set up
-                    return self._prepare_response(processed_state, "Interactive preprocessing started.")
+                    return self._prepare_response(processed_state, " ")
                 else:
                     # Phase-aware: treat 'proceed' as 'continue' when already inside a phase
                     print_to_log("🔄 Proceed received in-phase → treating as 'continue'")
@@ -2216,7 +2214,7 @@ Please specify a valid column name."""
                 # Save the updated state to session state file
                 self._save_session_state(processed_state.session_id, processed_state)
                 
-                return self._prepare_response(processed_state, f"Processed in {current_phase} phase.")
+                return self._prepare_response(processed_state, f" ")
             
 
             else:
@@ -2262,7 +2260,7 @@ What would you like to do?"""
         if accomplishments:
             return "\n".join(accomplishments)
         else:
-            return "✅ Operation completed successfully"
+            return " "
     
     def load_data(self, data: Any, session_id: str):
         """Load data into a session"""
