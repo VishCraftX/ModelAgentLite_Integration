@@ -1400,12 +1400,14 @@ Generate Python code to fulfill this request:"""
                 except Exception as e:
                     print_to_log(f"⚠️ Could not save updated interactive_session: {e}")
                 
-                # Continue to mode selection or orchestrator routing
-            else:
-                print_to_log(f"🎯 [Early Interception] No target column set - proceeding with detection")
+                # CRITICAL: Don't continue to fuzzy matching - fall through to mode selection handler below
+                print_to_log(f"🔀 [Early Interception] Falling through to mode selection handler")
             
-            # Check if query looks like a column name with FUZZY MATCHING
-            if state.raw_data is not None:
+            # Only try fuzzy matching if target is NOT already set
+            elif not (hasattr(state, 'target_column') and state.target_column) and state.raw_data is not None:
+                print_to_log(f"🎯 [Early Interception] No target column set - proceeding with detection")
+                
+                # Check if query looks like a column name with FUZZY MATCHING
                 available_columns = list(state.raw_data.columns)
                 
                 # Use enhanced fuzzy matching function
