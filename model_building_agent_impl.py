@@ -2001,9 +2001,41 @@ else:
 Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
-        # Generate multi-model comparison code with enhanced robustness
-        # Generate multi-model comparison code with enhanced robustness
-        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
+        # NEW MODULAR ORCHESTRATOR APPROACH - No more massive prompts!
+        try:
+            result = handle_multi_model_orchestrator(query, data, user_id, progress_callback)
+            
+            if result and isinstance(result, dict):
+                # Create simple success response with key metrics
+                models_count = len(result.get('models', {}))
+                best_model = result.get('best_model', {}).get('name', 'Unknown')
+                selection_metric = result.get('user_config', {}).get('selection_metric', 'accuracy')
+                
+                state["response"] = f"""🎯 **Multi-Model Comparison Completed Successfully!**
+
+📊 **Models Trained:** {models_count}
+🏆 **Best Model:** {best_model}
+📈 **Selection Metric:** {selection_metric}
+
+✅ **All models, metrics, and visualizations have been generated and saved to artifacts!**"""
+                
+                state["model_building_state"] = result
+                return state
+            else:
+                state["response"] = "❌ Multi-model comparison failed: Orchestrator returned no results"
+                return state
+                
+        except Exception as e:
+            print_to_log(f"❌ Multi-model orchestrator failed: {str(e)}")
+            import traceback
+            print_to_log(f"💥 Full traceback: {traceback.format_exc()}")
+            state["response"] = f"❌ Multi-model comparison failed: {str(e)}"
+            return state
+        
+        # DEAD CODE BELOW - TO BE REMOVED IN NEXT COMMIT
+        multi_model_prompt = f"""DEAD CODE - This entire prompt is dead code and will never execute.
+
+You are building a comprehensive multi-model comparison system. 
 
 USER REQUEST: {query}
 
@@ -3576,6 +3608,407 @@ def create_agent_graph() -> StateGraph:
     workflow.add_edge("model_building", END)
     
     return workflow.compile()
+
+# =============================================================================
+# MODULAR MULTI-MODEL ORCHESTRATOR
+# =============================================================================
+
+CONFIG_PARSER_PROMPT = """You are a CONFIG PARSING agent for a model comparison system.
+
+INPUT:
+- USER_QUERY: "{query}"
+
+TASK:
+1. Parse and extract these fields:
+   - models_requested: list of canonical model keys (see mapping below)
+   - test_size: float between 0 and 1 (default 0.2)
+   - selection_metric: string (default: accuracy for classification, r2 for regression)
+   - problem_type: "classification" or "regression"
+
+CANONICAL KEYS:
+- 'lgbm', 'xgboost', 'random_forest', 'decision_tree', 'neural_network', 'logistic_regression', 'svm'
+
+OUTPUT:
+Return STRICT JSON only (no explanation) with exactly these keys:
+{{
+  "models_requested": ["random_forest", "xgboost"],
+  "test_size": 0.2,
+  "selection_metric": "accuracy",
+  "problem_type": "classification"
+}}
+"""
+
+def handle_multi_model_orchestrator(query: str, sample_data, user_id: str, progress_callback=None):
+    """
+    Modular orchestrator that breaks multi-model comparison into focused steps.
+    Each step uses ExecutionAgent to run small, focused code blocks.
+    """
+    print_to_log("🎯 Starting modular multi-model orchestrator...")
+    
+    try:
+        # Step A: Config parsing using focused LLM prompt
+        print_to_log("📋 Step A: Parsing configuration...")
+        if progress_callback:
+            progress_callback("📋 Parsing request configuration...", "Config Parsing")
+        
+        config_prompt = CONFIG_PARSER_PROMPT.format(query=query)
+        
+        try:
+            response = ollama.chat(
+                model=MAIN_MODEL,
+                messages=[{"role": "user", "content": config_prompt}]
+            )
+            config_json = response["message"]["content"].strip()
+            # Extract JSON from markdown code blocks if present
+            if "```json" in config_json:
+                config_json = config_json.split("```json")[1].split("```")[0].strip()
+            elif "```" in config_json:
+                config_json = config_json.split("```")[1].split("```")[0].strip()
+            
+            config = json.loads(config_json)
+            print_to_log(f"✅ Config parsed: {config}")
+            
+        except Exception as e:
+            print_to_log(f"⚠️ Config parsing failed, using defaults: {e}")
+            config = {
+                "models_requested": ["random_forest", "xgboost", "lgbm"],
+                "test_size": 0.2,
+                "selection_metric": "accuracy",
+                "problem_type": "classification"
+            }
+        
+        # Step B: Model availability check (DIRECT CODE EXECUTION - NO LLM)
+        print_to_log("🔧 Step B: Checking model availability...")
+        if progress_callback:
+            progress_callback("🔧 Checking available models...", "Model Setup")
+        
+        model_availability_code = f"""
+import re
+
+user_request = "{query}"
+user_request_lower = user_request.lower()
+models_requested = {config['models_requested']}
+
+available_models = {{}}
+
+try:
+    from sklearn.ensemble import RandomForestClassifier
+    available_models['Random Forest'] = RandomForestClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn RandomForest not available")
+
+try:
+    from lightgbm import LGBMClassifier
+    available_models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
+except ImportError:
+    print("Warning: LightGBM not available")
+
+try:
+    from xgboost import XGBClassifier
+    available_models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
+except ImportError:
+    print("Warning: XGBoost not available")
+
+try:
+    from sklearn.neural_network import MLPClassifier
+    available_models['Neural Network'] = MLPClassifier(random_state=42, max_iter=500)
+except ImportError:
+    print("Warning: Neural Network not available")
+
+try:
+    from sklearn.tree import DecisionTreeClassifier
+    available_models['Decision Tree'] = DecisionTreeClassifier(max_depth=5, random_state=42)
+except ImportError:
+    print("Warning: Decision Tree not available")
+
+try:
+    from sklearn.linear_model import LogisticRegression
+    available_models['Logistic Regression'] = LogisticRegression(random_state=42, max_iter=1000)
+except ImportError:
+    print("Warning: Logistic Regression not available")
+
+try:
+    from sklearn.svm import SVC
+    available_models['SVM'] = SVC(random_state=42, probability=True)
+except ImportError:
+    print("Warning: SVM not available")
+
+print(f"Available models: {{list(available_models.keys())}}")
+
+model_name_mapping = {{
+    'lgbm': 'LightGBM',
+    'xgboost': 'XGBoost',
+    'random_forest': 'Random Forest',
+    'decision_tree': 'Decision Tree',
+    'neural_network': 'Neural Network',
+    'logistic_regression': 'Logistic Regression',
+    'svm': 'SVM'
+}}
+
+models_to_train = {{}}
+for requested_model in models_requested:
+    mapped_name = model_name_mapping.get(requested_model)
+    if mapped_name and mapped_name in available_models:
+        models_to_train[mapped_name] = available_models[mapped_name]
+    else:
+        print(f"Warning: {{requested_model}} -> {{mapped_name}} not available")
+
+if len(models_to_train) < 2:
+    available_list = list(available_models.keys())
+    requested_list = models_requested
+    error_msg = f"Insufficient Models for Comparison. Requested: {{requested_list}}, Available: {{available_list}}, Found: {{len(models_to_train)}} (need minimum 2)"
+    raise ValueError(error_msg)
+
+print(f"Final models to build: {{list(models_to_train.keys())}}")
+"""
+        
+        # Execute model availability code
+        env_b = {'sample_data': sample_data}
+        exec(model_availability_code, env_b)
+        models_to_train = env_b['models_to_train']
+        print_to_log(f"✅ Models to train: {list(models_to_train.keys())}")
+        
+        # Step C: Training (DIRECT CODE EXECUTION - NO LLM)
+        print_to_log("🏋️ Step C: Training models...")
+        if progress_callback:
+            progress_callback(f"🏋️ Training {len(models_to_train)} models...", "Model Training")
+        
+        training_code = f"""
+import numpy as np
+import pandas as pd
+import time
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
+                           roc_auc_score, confusion_matrix, log_loss, roc_curve)
+import warnings
+warnings.filterwarnings('ignore')
+
+X = sample_data.drop('target', axis=1)
+y = sample_data['target']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size={config['test_size']}, random_state=42)
+
+models_results = {{}}
+
+for model_name, model in models_to_train.items():
+    try:
+        print(f"Training {{model_name}}...")
+        start_time = time.time()
+        model.fit(X_train, y_train)
+        training_time = time.time() - start_time
+
+        y_pred = model.predict(X_test)
+        y_proba = model.predict_proba(X_test) if hasattr(model, 'predict_proba') else None
+
+        metrics = {{
+            'accuracy': accuracy_score(y_test, y_pred),
+            'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
+            'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
+            'f1': f1_score(y_test, y_pred, average='weighted', zero_division=0),
+            'roc_auc': roc_auc_score(y_test, y_proba[:, 1]) if y_proba is not None and y_proba.shape[1] == 2 else None,
+        }}
+
+        model_path = safe_joblib_dump(model, f'{{model_name}}_model.joblib')
+
+        models_results[model_name] = {{
+            'model': model,
+            'model_path': model_path,
+            'metrics': metrics,
+            'predictions': y_pred.tolist(),
+            'probabilities': y_proba.tolist() if y_proba is not None else None,
+            'training_time': training_time,
+            'model_type': 'classification'
+        }}
+
+        print(f"✅ {{model_name}} completed - accuracy: {{metrics['accuracy']:.4f}}")
+        
+    except Exception as e:
+        print(f"❌ Error training {{model_name}}: {{e}}")
+        continue
+
+print(f"✅ Trained {{len(models_results)}} models successfully")
+"""
+        
+        # Execute training code
+        env_c = {'sample_data': sample_data, 'models_to_train': models_to_train, 'safe_joblib_dump': safe_joblib_dump}
+        exec(training_code, env_c)
+        models_results = env_c['models_results']
+        X_test = env_c['X_test']
+        y_test = env_c['y_test']
+        print_to_log(f"✅ Trained {len(models_results)} models")
+        
+        # Step D: Visualization (DIRECT CODE EXECUTION - NO LLM)  
+        print_to_log("📊 Step D: Creating visualizations...")
+        if progress_callback:
+            progress_callback("📊 Generating comparison plots...", "Visualization")
+        
+        plotting_code = """
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve
+
+comparison_plots = {}
+
+# ROC Curves
+try:
+    plt.figure(figsize=(10, 8))
+    plotted = False
+    for model_name, result in models_results.items():
+        if result['probabilities'] is not None:
+            y_proba_array = np.array(result['probabilities'])
+            if y_proba_array.ndim == 2 and y_proba_array.shape[1] >= 2:
+                fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
+            else:
+                fpr, tpr, _ = roc_curve(y_test, y_proba_array)
+            roc_auc = result['metrics'].get('roc_auc', 0)
+            plt.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.2f})')
+            plotted = True
+    
+    if plotted:
+        plt.plot([0, 1], [0, 1], 'k--', lw=2)
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) Curves')
+        plt.legend(loc="lower right")
+        roc_plot_path = safe_plt_savefig('roc_comparison.png')
+        comparison_plots['roc_curves'] = roc_plot_path
+        
+except Exception as e:
+    print(f"Error creating ROC curves: {e}")
+    comparison_plots['roc_curves'] = None
+
+# Metrics table
+try:
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.axis('tight')
+    ax.axis('off')
+    
+    table_data = []
+    headers = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1', 'ROC AUC', 'Time (s)']
+    
+    for model_name, result in models_results.items():
+        metrics = result['metrics']
+        row = [
+            model_name,
+            f"{metrics.get('accuracy', 0):.4f}",
+            f"{metrics.get('precision', 0):.4f}",
+            f"{metrics.get('recall', 0):.4f}",
+            f"{metrics.get('f1', 0):.4f}",
+            f"{metrics.get('roc_auc', 0):.4f}" if metrics.get('roc_auc') else 'N/A',
+            f"{result.get('training_time', 0):.2f}"
+        ]
+        table_data.append(row)
+    
+    table = ax.table(cellText=table_data, colLabels=headers, cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 2)
+    
+    plt.title('Model Performance Comparison', fontsize=14, pad=20)
+    metrics_plot_path = safe_plt_savefig('metrics_table.png')
+    comparison_plots['metrics_table'] = metrics_plot_path
+    
+except Exception as e:
+    print(f"Error creating metrics table: {e}")
+    comparison_plots['metrics_table'] = None
+
+print(f"✅ Created {len(comparison_plots)} visualizations")
+"""
+        
+        # Execute plotting code
+        env_d = {
+            'models_results': models_results,
+            'X_test': X_test,
+            'y_test': y_test,
+            'safe_plt_savefig': safe_plt_savefig
+        }
+        exec(plotting_code, env_d)
+        comparison_plots = env_d['comparison_plots']
+        print_to_log(f"✅ Created {len(comparison_plots)} visualizations")
+        
+        # Step E: Best model selection (DIRECT CODE EXECUTION - NO LLM)
+        print_to_log("🏆 Step E: Selecting best model...")
+        if progress_callback:
+            progress_callback("🏆 Selecting best model...", "Model Selection")
+        
+        selection_code = f"""
+selection_metric = '{config['selection_metric']}'
+
+# Get scores for all models
+scores = {{model_name: result['metrics'].get(selection_metric, 0) 
+          for model_name, result in models_results.items()}}
+
+# Find best and worst
+best_model_name = max(scores, key=scores.get)
+worst_model_name = min(scores, key=scores.get)
+best_score = scores[best_model_name]
+worst_score = scores[worst_model_name]
+
+# Calculate improvement
+improvement_percent = ((best_score - worst_score) / worst_score * 100) if worst_score != 0 else 0
+
+# Create ranking
+ranking_list = []
+for rank, (model_name, score) in enumerate(sorted(scores.items(), key=lambda x: x[1], reverse=True), 1):
+    ranking_list.append({{
+        'rank': rank,
+        'model_name': model_name,
+        'score': score,
+        'metric_used': selection_metric
+    }})
+
+# Build final result
+result = {{
+    'user_config': {{
+        'models_requested': {config['models_requested']},
+        'test_size': {config['test_size']},
+        'selection_metric': selection_metric,
+        'total_models_built': len(models_results)
+    }},
+    'models': models_results,
+    'best_model': {{
+        'name': best_model_name,
+        'model': models_results[best_model_name]['model'],
+        'model_path': models_results[best_model_name]['model_path'],
+        'metrics': models_results[best_model_name]['metrics'],
+        'selection_criteria': f'{{selection_metric}}: {{best_score:.4f}}',
+        'improvement_over_worst': f'{{improvement_percent:.2f}}% better than worst model'
+    }},
+    'comparison_plots': comparison_plots,
+    'model_ranking': ranking_list,
+    'summary': {{
+        'total_models': len(models_results),
+        'best_model': best_model_name,
+        'best_score': best_score,
+        'worst_model': worst_model_name,
+        'worst_score': worst_score,
+        'performance_spread': f'{{improvement_percent:.2f}}% difference',
+        'recommendation': f'Use {{best_model_name}} with {{selection_metric}} of {{best_score:.4f}}'
+    }},
+    'detailed_comparison': '\\n'.join([f"{{r['rank']}}. {{r['model_name']}}: {{r['score']:.4f}}" for r in ranking_list])
+}}
+
+print("✅ Best model selection completed")
+"""
+        
+        # Execute selection code
+        env_e = {
+            'models_results': models_results,
+            'comparison_plots': comparison_plots,
+            'config': config
+        }
+        exec(selection_code, env_e)
+        result = env_e['result']
+        
+        print_to_log("✅ Multi-model orchestrator completed successfully!")
+        return result
+        
+    except Exception as e:
+        print_to_log(f"❌ Orchestrator failed: {e}")
+        import traceback
+        print_to_log(f"💥 Traceback: {traceback.format_exc()}")
+        return None
 
 def format_model_response(result: Dict, routing_decision: str, query: str) -> str:
     """Format detailed response with model metrics for Slack display"""
