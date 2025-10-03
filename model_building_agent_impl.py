@@ -774,6 +774,10 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             if verbose:
                 print_to_log(f"✅ Loaded existing model from {state['model_path']}")
                 print_to_log(f"📊 Model type: {type(env['current_model']).__name__}")
+                # Log model parameters to help debug performance issues
+                if hasattr(env['current_model'], 'get_params'):
+                    params = env['current_model'].get_params()
+                    print_to_log(f"🔧 Model parameters: {params}")
         except Exception as e:
             if verbose:
                 print_to_log(f"⚠️ Failed to load existing model: {e}")
@@ -2795,14 +2799,27 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                             # Save predictions dataset to artifacts
                             artifacts_dir = os.path.join(os.path.dirname(result.get('model_path', '')), '..')
                             if os.path.exists(artifacts_dir):
-                                # Extract model name from result
+                                # Extract model name from result or model_path
                                 model_name = "unknown_model"
+                                
+                                # Try to get from result first
                                 if 'model' in result:
                                     model = result['model']
                                     if hasattr(model, '__class__'):
                                         model_name = model.__class__.__name__.lower()
                                     elif hasattr(model, 'name'):
                                         model_name = model.name.lower()
+                                
+                                # If still unknown, try to extract from model_path
+                                if model_name == "unknown_model":
+                                    model_path = result.get('model_path') or global_model_states.get(user_id, {}).get('model_path', '')
+                                    if model_path:
+                                        # Extract from filename: "LightGBM_model.joblib" -> "lightgbm"
+                                        filename = os.path.basename(model_path)
+                                        if '_model.joblib' in filename:
+                                            model_name = filename.replace('_model.joblib', '').lower()
+                                        elif '.joblib' in filename:
+                                            model_name = filename.replace('.joblib', '').lower()
                                 
                                 # Create filename with model name
                                 timestamp = int(time.time())
@@ -4752,7 +4769,7 @@ class LangGraphModelAgent:
             if recent_models:
                 # PRIORITY 1: Check if we have best model info from previous multi-model result
                 best_model_path = None
-                last_result = global_model_info.get('last_result', {})
+                last_result = global_model_states.get(user_id, {}).get('last_result', {})
                 
                 if isinstance(last_result, dict) and 'best_model' in last_result:
                     best_model_info = last_result['best_model']
