@@ -1424,6 +1424,13 @@ Generate Python code to fulfill this request:"""
                     # User needs preprocessing - ask fast or slow mode
                     state.interactive_session['needs_mode_selection'] = True
                 
+                # CRITICAL FIX: Save state after updating interactive_session
+                try:
+                    state_manager.save_state(state)
+                    print_to_log(f"💾 Saved updated interactive_session with target '{state.target_column}'")
+                except Exception as e:
+                    print_to_log(f"⚠️ Could not save updated interactive_session: {e}")
+                
                 # Continue to mode selection or orchestrator routing
             else:
                 print_to_log(f"🎯 [Early Interception] No target column set - proceeding with detection")
@@ -1438,15 +1445,17 @@ Generate Python code to fulfill this request:"""
                 if matched_column:
                     target_col = matched_column
                     state.target_column = target_col
+                    
+                    # CRITICAL FIX: Update interactive_session BEFORE saving state
+                    state.interactive_session['target_column'] = target_col
+                    state.interactive_session['needs_target'] = False
+                    
                     # IMMEDIATE SAVE: Persist target column to session state for fallback
                     try:
                         state_manager.save_state(state)
                         print_to_log(f"💾 Immediately saved target column '{target_col}' to session state")
                     except Exception as e:
                         print_to_log(f"⚠️ Could not immediately save target column: {e}")
-                    
-                    state.interactive_session['target_column'] = target_col
-                    state.interactive_session['needs_target'] = False
                     
                     # CRITICAL: Use existing skip pattern detection system instead of duplicate logic
                     from orchestrator import Orchestrator
