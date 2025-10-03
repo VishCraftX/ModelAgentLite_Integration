@@ -910,7 +910,7 @@ class PreprocessingAgentWrapper:
                         print_to_log("🔧 Applying missing values treatments...")
                         
                         df = state.cleaned_data.copy() if state.cleaned_data is not None else state.raw_data.copy()
-                        applied_treatments = []
+                        strategy_counts = {}
                         
                         if isinstance(missing_results, dict) and 'llm_recommendations' in missing_results:
                             for col, recommendation in missing_results['llm_recommendations'].items():
@@ -918,15 +918,15 @@ class PreprocessingAgentWrapper:
                                 strategy = str(raw_strategy).lower().replace('-', '_')
                                 if strategy == 'median':
                                     df[col] = df[col].fillna(df[col].median())
-                                    applied_treatments.append(f"• {col}: Filled with median")
+                                    strategy_counts['Median'] = strategy_counts.get('Median', 0) + 1
                                 elif strategy == 'mean':
                                     df[col] = df[col].fillna(df[col].mean())
-                                    applied_treatments.append(f"• {col}: Filled with mean")
+                                    strategy_counts['Mean'] = strategy_counts.get('Mean', 0) + 1
                                 elif strategy == 'mode':
                                     mode_val = df[col].mode()
                                     fill_val = mode_val.iloc[0] if not mode_val.empty else df[col].dropna().iloc[0] if df[col].dropna().shape[0] else 0
                                     df[col] = df[col].fillna(fill_val)
-                                    applied_treatments.append(f"• {col}: Filled with mode")
+                                    strategy_counts['Mode'] = strategy_counts.get('Mode', 0) + 1
                                 elif strategy == 'constant':
                                     # Smart constant defaults based on data type
                                     if 'constant_value' in recommendation:
@@ -937,27 +937,32 @@ class PreprocessingAgentWrapper:
                                         constant_value = 'Unknown'  # 'Unknown' for categorical columns
                                     
                                     df[col] = df[col].fillna(constant_value)
-                                    applied_treatments.append(f"• {col}: Filled with constant ({constant_value})")
+                                    strategy_counts['Constant'] = strategy_counts.get('Constant', 0) + 1
                                 elif strategy == 'model_based':
                                     # Simple model-based imputation (fallback to median/mode)
                                     if pd.api.types.is_numeric_dtype(df[col]):
                                         df[col] = df[col].fillna(df[col].median())
-                                        applied_treatments.append(f"• {col}: Model-based (fallback median)")
+                                        strategy_counts['Model-based'] = strategy_counts.get('Model-based', 0) + 1
                                     else:
                                         mode_val = df[col].mode()
                                         fill_val = mode_val.iloc[0] if not mode_val.empty else 'Unknown'
                                         df[col] = df[col].fillna(fill_val)
-                                        applied_treatments.append(f"• {col}: Model-based (fallback mode)")
+                                        strategy_counts['Model-based'] = strategy_counts.get('Model-based', 0) + 1
                                 else:
                                     # Simple fallback for any unknown strategy
                                     if pd.api.types.is_numeric_dtype(df[col]):
                                         df[col] = df[col].fillna(df[col].median())
-                                        applied_treatments.append(f"• {col}: Median (default)")
+                                        strategy_counts['Median (default)'] = strategy_counts.get('Median (default)', 0) + 1
                                     else:
                                         mode_val = df[col].mode()
                                         fill_val = mode_val.iloc[0] if not mode_val.empty else 'Unknown'
                                         df[col] = df[col].fillna(fill_val)
-                                        applied_treatments.append(f"• {col}: Mode (default)")
+                                        strategy_counts['Mode (default)'] = strategy_counts.get('Mode (default)', 0) + 1
+                        
+                        # Create concise treatment summary
+                        applied_treatments = []
+                        for strategy, count in strategy_counts.items():
+                            applied_treatments.append(f"**{strategy}**: {count} columns")
 
                         # Update state with processed data
                         state.cleaned_data = df
@@ -1194,7 +1199,7 @@ class PreprocessingAgentWrapper:
                         print_to_log("🔧 Applying encoding treatments...")
                         
                         df = state.cleaned_data.copy() if state.cleaned_data is not None else state.raw_data.copy()
-                        applied_treatments = []
+                        strategy_counts = {}
                         
                         if isinstance(encoding_results, dict) and 'llm_recommendations' in encoding_results:
                             for col, recommendation in encoding_results['llm_recommendations'].items():
@@ -1222,13 +1227,13 @@ class PreprocessingAgentWrapper:
                                     from sklearn.preprocessing import LabelEncoder
                                     le = LabelEncoder()
                                     df[col] = le.fit_transform(df[col].astype(str))
-                                    applied_treatments.append(f"• {col}: Label encoded")
+                                    strategy_counts['Label encoding'] = strategy_counts.get('Label encoding', 0) + 1
                                 elif enc_choice == 'ordinal':
                                     # Apply ordinal encoding
                                     unique_values = df[col].astype(str).unique()
                                     value_map = {val: idx for idx, val in enumerate(unique_values)}
                                     df[col] = df[col].astype(str).map(value_map)
-                                    applied_treatments.append(f"• {col}: Ordinal encoded")
+                                    strategy_counts['Ordinal encoding'] = strategy_counts.get('Ordinal encoding', 0) + 1
                                 elif enc_choice == 'target':
                                     # Simple target mean encoding
                                     try:
@@ -1236,40 +1241,45 @@ class PreprocessingAgentWrapper:
                                         if target_col and target_col in df.columns:
                                             means = df.groupby(col)[target_col].mean()
                                             df[col] = df[col].map(means)
-                                            applied_treatments.append(f"• {col}: Target mean encoded")
+                                            strategy_counts['Target encoding'] = strategy_counts.get('Target encoding', 0) + 1
                                         else:
                                             # Fallback to label if target not available
                                             from sklearn.preprocessing import LabelEncoder
                                             le = LabelEncoder()
                                             df[col] = le.fit_transform(df[col].astype(str))
-                                            applied_treatments.append(f"• {col}: Label encoded (no target)")
+                                            strategy_counts['Label encoding (fallback)'] = strategy_counts.get('Label encoding (fallback)', 0) + 1
                                     except Exception:
                                         from sklearn.preprocessing import LabelEncoder
                                         le = LabelEncoder()
                                         df[col] = le.fit_transform(df[col].astype(str))
-                                        applied_treatments.append(f"• {col}: Label encoded (fallback)")
+                                        strategy_counts['Label encoding (fallback)'] = strategy_counts.get('Label encoding (fallback)', 0) + 1
                                 elif enc_choice == 'onehot' or enc_choice == 'onehot_encoding':
                                     # Smart one-hot encoding: Top-10 + Other for medium cardinality
                                     unique_count = df[col].nunique()
                                     if unique_count > 10:  # Use top-10 for medium/high cardinality
                                         try:
                                             df = self._apply_top10_onehot_encoding(df, col)
-                                            applied_treatments.append(f"• {col}: Top-10 one-hot encoded (11 max columns)")
+                                            strategy_counts['One-hot (top-10)'] = strategy_counts.get('One-hot (top-10)', 0) + 1
                                         except Exception:
                                             # Fallback to regular one-hot
                                             df = pd.get_dummies(df, columns=[col], prefix=col)
-                                            applied_treatments.append(f"• {col}: One-hot encoded")
+                                            strategy_counts['One-hot encoding'] = strategy_counts.get('One-hot encoding', 0) + 1
                                     else:
                                         # Regular one-hot for low cardinality
                                         df = pd.get_dummies(df, columns=[col], prefix=col)
-                                        applied_treatments.append(f"• {col}: One-hot encoded")
+                                        strategy_counts['One-hot encoding'] = strategy_counts.get('One-hot encoding', 0) + 1
                                 elif enc_choice == 'skip':
                                     # Skip encoding - leave column as-is
-                                    applied_treatments.append(f"• {col}: Skipped (high cardinality/date column)")
+                                    strategy_counts['Skipped'] = strategy_counts.get('Skipped', 0) + 1
                                 elif enc_choice == 'drop_column':
                                     if col in df.columns:
                                         df = df.drop(columns=[col])
-                                        applied_treatments.append(f"• {col}: Dropped due to high missing%")
+                                        strategy_counts['Dropped'] = strategy_counts.get('Dropped', 0) + 1
+                        
+                        # Create concise treatment summary
+                        applied_treatments = []
+                        for strategy, count in strategy_counts.items():
+                            applied_treatments.append(f"**{strategy}**: {count} columns")
 
                         # Update state with processed data
                         state.cleaned_data = df
@@ -1495,7 +1505,7 @@ class PreprocessingAgentWrapper:
                         print_to_log("🔧 Applying transformation treatments...")
                         
                         df = state.cleaned_data.copy() if state.cleaned_data is not None else state.raw_data.copy()
-                        applied_treatments = []
+                        strategy_counts = {}
                         
                         if isinstance(transformation_results, dict) and 'llm_recommendations' in transformation_results:
                             for col, recommendation in transformation_results['llm_recommendations'].items():
@@ -1511,21 +1521,21 @@ class PreprocessingAgentWrapper:
                                 # Use EXACT strategy names from LLM (no confusing alternatives)
                                 if raw_t == 'log1p':
                                     df[col] = np.log1p(df[col])
-                                    applied_treatments.append(f"• {col}: Log1p transformation applied")
+                                    strategy_counts['Log1p'] = strategy_counts.get('Log1p', 0) + 1
                                     print_to_log(f"✅ Applied log1p to {col}")
                                     
                                 elif raw_t == 'yeo_johnson':
                                     from sklearn.preprocessing import PowerTransformer
                                     pt = PowerTransformer(method='yeo-johnson')
                                     df[col] = pt.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: Yeo-Johnson transformation applied")
+                                    strategy_counts['Yeo-Johnson'] = strategy_counts.get('Yeo-Johnson', 0) + 1
                                     print_to_log(f"✅ Applied yeo_johnson to {col}")
                                     
                                 elif raw_t == 'standardize':
                                     from sklearn.preprocessing import StandardScaler
                                     scaler = StandardScaler()
                                     df[col] = scaler.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: Standardized")
+                                    strategy_counts['Standardize'] = strategy_counts.get('Standardize', 0) + 1
                                     print_to_log(f"✅ Applied standardize to {col}")
                                     
                                 elif raw_t == 'log':
@@ -1533,7 +1543,7 @@ class PreprocessingAgentWrapper:
                                         df[col] = np.log(df[col])
                                     else:
                                         df[col] = np.log1p(df[col] - df[col].min() + 1)
-                                    applied_treatments.append(f"• {col}: Log transformation applied")
+                                    strategy_counts['Log'] = strategy_counts.get('Log', 0) + 1
                                     print_to_log(f"✅ Applied log to {col}")
                                     
                                 elif raw_t == 'box_cox':
@@ -1542,7 +1552,7 @@ class PreprocessingAgentWrapper:
                                         df[col], _ = boxcox(df[col])
                                     else:
                                         df[col] = np.log1p(df[col] - df[col].min() + 1)
-                                    applied_treatments.append(f"• {col}: Box-Cox transformation applied")
+                                    strategy_counts['Box-Cox'] = strategy_counts.get('Box-Cox', 0) + 1
                                     print_to_log(f"✅ Applied box_cox to {col}")
                                     
                                 elif raw_t == 'sqrt':
@@ -1551,43 +1561,41 @@ class PreprocessingAgentWrapper:
                                         df[col] = np.sqrt(df[col])
                                     else:
                                         df[col] = np.sqrt(df[col] - df[col].min())
-                                    applied_treatments.append(f"• {col}: Square root transformation applied")
+                                    strategy_counts['Square root'] = strategy_counts.get('Square root', 0) + 1
                                     print_to_log(f"✅ Applied sqrt to {col}")
                                     
                                 elif raw_t == 'robust_scale':
                                     from sklearn.preprocessing import RobustScaler
                                     scaler = RobustScaler()
                                     df[col] = scaler.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: Robust scaled")
-                                    print_to_log(f"✅ Applied robust_scale to {col}")
-                                    
-                                elif raw_t == 'robust_scale':
-                                    from sklearn.preprocessing import RobustScaler
-                                    scaler = RobustScaler()
-                                    df[col] = scaler.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: Robust scaled")
+                                    strategy_counts['Robust scale'] = strategy_counts.get('Robust scale', 0) + 1
                                     print_to_log(f"✅ Applied robust_scale to {col}")
                                     
                                 elif raw_t == 'quantile':
                                     from sklearn.preprocessing import QuantileTransformer
                                     qt = QuantileTransformer(output_distribution='uniform', random_state=42)
                                     df[col] = qt.fit_transform(df[[col]])
-                                    applied_treatments.append(f"• {col}: Quantile transformation applied")
+                                    strategy_counts['Quantile'] = strategy_counts.get('Quantile', 0) + 1
                                     print_to_log(f"✅ Applied quantile to {col}")
                                     
                                 elif raw_t == 'square':
                                     # Square transformation (for negative skew)
                                     df[col] = df[col] ** 2
-                                    applied_treatments.append(f"• {col}: Square transformation applied")
+                                    strategy_counts['Square'] = strategy_counts.get('Square', 0) + 1
                                     print_to_log(f"✅ Applied square to {col}")
                                     
                                 elif raw_t == 'none':
-                                    applied_treatments.append(f"• {col}: Kept as-is")
+                                    strategy_counts['Kept as-is'] = strategy_counts.get('Kept as-is', 0) + 1
                                     print_to_log(f"✅ Kept {col} as-is (strategy: none)")
                                     
                                 else:
-                                    applied_treatments.append(f"• {col}: Kept as-is (unknown strategy: {raw_t})")
+                                    strategy_counts['Kept as-is'] = strategy_counts.get('Kept as-is', 0) + 1
                                     print_to_log(f"⚠️ Unknown strategy '{raw_t}' for {col}, kept as-is")
+                        
+                        # Create concise treatment summary
+                        applied_treatments = []
+                        for strategy, count in strategy_counts.items():
+                            applied_treatments.append(f"**{strategy}**: {count} columns")
 
                         # Update state with processed data
                         state.cleaned_data = df
