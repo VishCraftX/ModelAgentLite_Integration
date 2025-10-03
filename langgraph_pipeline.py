@@ -1443,25 +1443,9 @@ Generate Python code to fulfill this request:"""
                     else:
                         print_to_log(f"✅ [Early Interception] Target column set: {target_col} (fuzzy match: {match_type})")
                         print_to_log(f"   🔍 User input: '{query.strip()}' → Matched: '{target_col}'")
-                else:
-                    # No match found - show available columns
-                    available_cols_preview = ', '.join(available_columns[:5])
-                    if len(available_columns) > 5:
-                        available_cols_preview += f" ... and {len(available_columns) - 5} more"
                     
-                    error_msg = f"""❌ **Target column not found**
-
-🔍 **Your input:** `{query.strip()}`
-
-📊 **Available columns:** {available_cols_preview}
-
-💡 **Try:** Type the exact column name (case-sensitive) or a close variation"""
-                    
-                    self.slack_manager.send_message(session_id, error_msg)
-                    return self._prepare_response(state, f"Target column '{query.strip()}' not found. Please try again.")
-                    
-                # If we have a valid target, show mode choice
-                if hasattr(state, 'target_column') and state.target_column:
+                    # CRITICAL: Show mode selection immediately after setting target (don't wait for next iteration)
+                    print_to_log(f"🎯 [Early Interception] Sending mode selection message for target: {target_col}")
                     mode_choice_msg = f"""✅ **Target column set:** `{target_col}`
 
 🚀 **Choose Your ML Pipeline Mode**
@@ -1482,13 +1466,31 @@ Generate Python code to fulfill this request:"""
 💬 **Choose:** Type `fast` or `slow`"""
                     
                     self.slack_manager.send_message(session_id, mode_choice_msg)
+                    print_to_log(f"✅ [Early Interception] Mode selection message sent via Slack")
                     
                     # CRITICAL FIX: Clear old last_response so it doesn't override our new response
                     state.last_response = f"Target column set to '{target_col}'. Please choose your mode."
                     
                     # Save state and return
                     self._save_session_state(session_id, state)
+                    print_to_log(f"🔧 [Early Interception] Returning with mode selection response")
                     return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
+                else:
+                    # No match found - show available columns
+                    available_cols_preview = ', '.join(available_columns[:5])
+                    if len(available_columns) > 5:
+                        available_cols_preview += f" ... and {len(available_columns) - 5} more"
+                    
+                    error_msg = f"""❌ **Target column not found**
+
+🔍 **Your input:** `{query.strip()}`
+
+📊 **Available columns:** {available_cols_preview}
+
+💡 **Try:** Type the exact column name (case-sensitive) or a close variation"""
+                    
+                    self.slack_manager.send_message(session_id, error_msg)
+                    return self._prepare_response(state, f"Target column '{query.strip()}' not found. Please try again.")
         
         # Handle mode selection (fast vs slow)
         elif (hasattr(state, 'interactive_session') and 
