@@ -1787,28 +1787,33 @@ VALIDATION METRICS PROCESS (when user asks for validation metrics, model perform
 5. This ensures proper validation on unseen data
 
 RANK ORDERING/SEGMENTATION PROCESS (when user asks for rank ordering, deciles, buckets):
-🚨 CRITICAL: Check if user specifies "test data" or "test dataset" in their request:
+🚨 CRITICAL DEFAULT: ALWAYS CREATE RANK ORDERING ON TEST DATA UNLESS USER EXPLICITLY ASKS FOR FULL DATASET
 
-IF USER ASKS FOR RANK ORDERING ON TEST DATA (mentions "test data", "test dataset", "test set"):
+DEFAULT BEHAVIOR (most queries):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Create test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 3. Get TEST probabilities: test_probabilities = current_model.predict_proba(X_test)[:,1]
 4. Create rank_df with TEST data only: pd.DataFrame({{'actual': y_test.values, 'probability': test_probabilities}})
 5. Create segments with pd.qcut(test_probabilities, q=N, duplicates='drop')
 6. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
+7. Store ONLY in 'rank_ordering_table': result['rank_ordering_table'] = rank_metrics.to_dict('records')
 
-IF USER ASKS FOR GENERAL RANK ORDERING (no "test" specification - for business analysis):
+ONLY IF USER EXPLICITLY ASKS FOR FULL DATASET (mentions "full data", "full dataset", "all data", "entire dataset"):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Get FULL dataset probabilities: full_probabilities = current_model.predict_proba(X)[:,1]
 3. Create rank_df with FULL data: pd.DataFrame({{'actual': y.values, 'probability': full_probabilities}})
 4. Create segments with pd.qcut(full_probabilities, q=N, duplicates='drop')
 5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
+6. Store in 'rank_ordering_table_full': result['rank_ordering_table_full'] = rank_metrics.to_dict('records')
+
+🚨 DO NOT CREATE BOTH TABLES UNLESS EXPLICITLY REQUESTED
+🚨 DEFAULT: Use TEST data only and store as 'rank_ordering_table' (without _test or _full suffix)
 
 ALWAYS include ALL required columns: bucket, badrate, totalUsersCount, cum_badrate, coverage, avg_probability, min_threshold, max_threshold
 
 Your specific task: {query}
 
-REMEMBER: Use 'current_model' for everything. Do not create any new models. Use train_test_split for validation metrics AND when user specifically asks for rank ordering on test data."""
+REMEMBER: Use 'current_model' for everything. Do not create any new models. DEFAULT to TEST data rank ordering only."""
         
     elif routing_decision == "no_model_available":
         state["response"] = """❌ You're asking to use an existing model, but no model has been built yet in this session.
