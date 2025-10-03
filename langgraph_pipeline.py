@@ -1572,10 +1572,27 @@ Generate Python code to fulfill this request:"""
                 print_to_log("🐌 Starting slow mode preprocessing workflow directly...")
                 self._save_session_state(session_id, state)
                 
-                # Route directly to preprocessing agent with "proceed" command
+                # Route to preprocessing agent but ask for user confirmation instead of auto-proceeding
                 from agents_wrapper import PreprocessingAgentWrapper
                 preprocessing_agent = PreprocessingAgentWrapper()
-                result_state = preprocessing_agent.handle_interactive_command(state, "proceed")
+                
+                # Instead of auto-proceeding, show the initial menu and wait for user input
+                result_state = preprocessing_agent.handle_interactive_command(state, "overview")
+                
+                # Send a message asking the user to proceed with outliers
+                self.slack_manager.send_message(session_id, """📊 **Dataset Overview Complete**
+
+🎯 **Next Step: Outlier Analysis**
+The system is ready to analyze and handle outliers in your dataset.
+
+**💬 Your Options:**
+• Type `proceed` or `yes` - Continue with outlier analysis
+• Type `skip` - Skip outlier analysis  
+• Type `explain` - Learn more about outlier analysis
+• Type `summary` - Show current preprocessing plan
+
+**Ready to proceed with outlier analysis?**""")
+                
                 self._save_session_state(session_id, result_state)
                 return self._prepare_response(result_state)
                 
