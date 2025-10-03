@@ -264,31 +264,31 @@ class MultiAgentMLPipeline:
         
         # Show mode selection message
         if hasattr(state, 'target_column') and state.target_column:
-            mode_choice_msg = f"""✅ **Target column set:** `{state.target_column}`
+            mode_choice_msg = f"""✅ Target column set: `{state.target_column}`
 
-🚀 **Choose Your ML Pipeline Mode**
+🚀 Choose Your ML Pipeline Mode
 
 
 
-**⚡ Fast Mode (Automated):** 
+⚡ Fast Mode (Automated): 
 • Complete ML pipeline without interaction
 • AI handles all preprocessing decisions
 • Get results in 2-3 minutes
 
-**🎛️ Slow Mode (Interactive):** 
+🎛️ Slow Mode (Interactive): 
 • Step-by-step guided process
 • Review and approve each phase
 • Full control over decisions
 
-💬 **Choose:** Type `fast` or `slow`"""
+💬 Choose: Type `fast` or `slow`"""
         else:
-            mode_choice_msg = f"""👋 **Welcome to ModelAgent PRO!**
+            mode_choice_msg = f"""👋 Welcome to ModelAgent PRO!
 
-📊 **Dataset Uploaded:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+📊 Dataset Uploaded: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
 
 I'll help you build a machine learning model. Let's start!
 
-💬 **Step 1:** Type your target column name
+💬 Step 1: Type your target column name
 """
         
         # Send mode selection message to Slack
@@ -1453,23 +1453,23 @@ Generate Python code to fulfill this request:"""
                     
                     # CRITICAL: Show mode selection immediately after setting target (don't wait for next iteration)
                     print_to_log(f"🎯 [Early Interception] Sending mode selection message for target: {target_col}")
-                    mode_choice_msg = f"""✅ **Target column set:** `{target_col}`
+                    mode_choice_msg = f"""✅ Target column set: `{target_col}`
 
-🚀 **Choose Your ML Pipeline Mode**
+🚀 Choose Your ML Pipeline Mode
 
 
 
-**⚡ Fast Mode (Automated):** 
+⚡ Fast Mode (Automated): 
 • Complete ML pipeline without interaction
 • AI handles all preprocessing decisions
 • Get results in 2-3 minutes
 
-**🎛️ Slow Mode (Interactive):** 
+🎛️ Slow Mode (Interactive): 
 • Step-by-step guided process
 • Review and approve each phase
 • Full control over decisions
 
-💬 **Choose:** Type `fast` or `slow`"""
+💬 Choose: Type `fast` or `slow`"""
                     
                     self.slack_manager.send_message(session_id, mode_choice_msg)
                     print_to_log(f"✅ [Early Interception] Mode selection message sent via Slack")
@@ -1487,13 +1487,13 @@ Generate Python code to fulfill this request:"""
                     if len(available_columns) > 5:
                         available_cols_preview += f" ... and {len(available_columns) - 5} more"
                     
-                    error_msg = f"""❌ **Target column not found**
+                    error_msg = f"""❌ Target column not found
 
-🔍 **Your input:** `{query.strip()}`
+🔍 Your input: `{query.strip()}`
 
-📊 **Available columns:** {available_cols_preview}
+📊 Available columns: {available_cols_preview}
 
-💡 **Try:** Type the exact column name (case-sensitive) or a close variation"""
+💡 Try: Type the exact column name (case-sensitive) or a close variation"""
                     
                     self.slack_manager.send_message(session_id, error_msg)
                     return self._prepare_response(state, f"Target column '{query.strip()}' not found. Please try again.")
@@ -1526,7 +1526,7 @@ Generate Python code to fulfill this request:"""
                     state.interactive_session['mode_selected'] = 'fast'
                     state.interactive_session['original_query'] = query  # Update original query to current 'fast' command
                     
-                    self.slack_manager.send_message(session_id, "⚡ **Fast Mode Selected** - Starting automated ML pipeline...")
+                    self.slack_manager.send_message(session_id, "⚡ Fast Mode Selected - Starting automated ML pipeline...")
                     
                     # Call automated pipeline agent (preprocessing + feature selection + model building)
                     from automated_pipeline_agent import automated_pipeline_agent
@@ -1563,7 +1563,7 @@ Generate Python code to fulfill this request:"""
                     state.interactive_session['phase'] = 'waiting_input'
                     state.interactive_session['original_query'] = query  # Update original query to current 'slow' command
                     
-                    self.slack_manager.send_message(session_id, "🎛️ **Slow Mode Selected** - Starting interactive preprocessing...")
+                    self.slack_manager.send_message(session_id, "🎛️ Slow Mode Selected - Starting interactive preprocessing...")
                     
                     # CRITICAL: Start slow mode preprocessing immediately instead of going through orchestrator again
                     print_to_log("🐌 Starting slow mode preprocessing workflow directly...")
@@ -1583,23 +1583,23 @@ Generate Python code to fulfill this request:"""
                     state.interactive_session['phase'] = 'waiting_input'
                     
                     # Send preprocessing intro message
-                    self.slack_manager.send_message(session_id, """📋 **Preprocessing Workflow:**
-**Phase 1:** 🚨 Outliers - Handle extreme values
-**Phase 2:** 🗑️ Missing Values - Impute or remove nulls
-**Phase 3:** 🏷️ Encoding - Convert categorical to numeric
-**Phase 4:** 🔄 Transformations - Normalize and scale features
+                    self.slack_manager.send_message(session_id, """📋 Preprocessing Workflow:
+Phase 1: 🚨 Outliers - Handle extreme values
+Phase 2: 🗑️ Missing Values - Impute or remove nulls
+Phase 3: 🏷️ Encoding - Convert categorical to numeric
+Phase 4: 🔄 Transformations - Normalize and scale features
 
 ---
 
-📊 **Current Phase: Outlier Analysis**
+📊 Current Phase: Outlier Analysis
 I'll detect extreme values that might affect your model and recommend handling strategies.
 
-**💬 Your Options:**
+💬 Your Options:
 • Type `proceed` or `yes` - Start outlier analysis
 • Type `skip` - Skip this phase
 • Type `explain` - Learn more about outliers
 
-**Ready to proceed?**""")
+Ready to proceed?""")
                     
                     # Clear last_response to prevent stale messages
                     state.last_response = " "
@@ -2088,30 +2088,30 @@ I'll detect extreme values that might affect your model and recommend handling s
                     state.interactive_session['phase'] = 'waiting_input'
                     
                     # After target is set, show mode selection instead of preprocessing intro
-                    response_msg = f"""✅ **Target column set:** `{target_col}`
+                    response_msg = f"""✅ Target column set: `{target_col}`
 
-🚀 **Choose Your ML Pipeline Mode**
+🚀 Choose Your ML Pipeline Mode
 
 
-**⚡ Fast Mode (Automated):** 
+⚡ Fast Mode (Automated): 
 • Complete ML pipeline without interaction
 • AI handles all preprocessing decisions
 • Get results in 2-3 minutes
 
-**🎛️ Slow Mode (Interactive):** 
+🎛️ Slow Mode (Interactive): 
 • Step-by-step guided process
 • Review and approve each phase
 • Full control over decisions
 
-💬 **Choose:** Type `fast` or `slow`"""
+💬 Choose: Type `fast` or `slow`"""
                     
                     self.slack_manager.send_message(state.chat_session, response_msg)
                     return self._prepare_response(state, f" ")
                 else:
                     available_cols = list(state.raw_data.columns)
-                    error_msg = f"""❌ **Column '{target_col}' not found.**
+                    error_msg = f"""❌ Column '{target_col}' not found.
 
-**Available columns:** {', '.join(available_cols[:10])}{'...' if len(available_cols) > 10 else ''}
+Available columns: {', '.join(available_cols[:10])}{'...' if len(available_cols) > 10 else ''}
 
 Please specify a valid column name."""
                     
@@ -2219,7 +2219,7 @@ Please specify a valid column name."""
 
             else:
                 # Default help message
-                help_msg = """💬 **Available Commands:**
+                help_msg = """💬 Available Commands:
 • `proceed` - Start preprocessing workflow
 • `summary` - Show current status
 • `explain outliers` - Learn about outlier handling
