@@ -2002,7 +2002,7 @@ Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
         # Generate multi-model comparison code with enhanced robustness
-        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
+        multi_model_prompt = """You are building a comprehensive multi-model comparison system. 
 
 USER REQUEST: {query}
 
@@ -2031,7 +2031,7 @@ user_request_lower = user_request.lower()
 models_requested = []
 
 # Define model aliases and keywords - EXACTLY as shown
-model_keywords = {{
+model_keywords = {
     'lgbm': ['lgbm', 'lightgbm', 'light gbm', 'lightgradientboosting'],
     'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting', 'xgb classifier', 'xgb regressor'],
     'random_forest': ['random forest', 'randomforest', 'rf', 'random forest classifier', 'random forest regressor'],
@@ -2051,7 +2051,7 @@ model_keywords = {{
     'catboost': ['catboost', 'cat boost', 'categorical boosting'],
     'voting_classifier': ['voting', 'voting classifier', 'ensemble voting'],
     'bagging': ['bagging', 'bagging classifier', 'bootstrap aggregating']
-}}
+}
 
 # Extract models mentioned in query - EXACTLY as shown
 for model_name, keywords in model_keywords.items():
@@ -2097,7 +2097,7 @@ ROBUST LIBRARY HANDLING:
 🚨 COMPLETE MODEL MAPPING AND AVAILABILITY CHECK:
 ```python
 # Build models dictionary based on available libraries
-available_models = {{}}
+available_models = {}
 
 # Always available sklearn models
 try:
@@ -2186,7 +2186,7 @@ except ImportError:
     print("Warning: CatBoost not available")
 
 # Map requested models to available models
-model_mapping = {{
+model_mapping = {
     'lgbm': 'LightGBM',
     'xgboost': 'XGBoost', 
     'random_forest': 'Random Forest',
@@ -2201,7 +2201,7 @@ model_mapping = {{
     'naive_bayes': 'Naive Bayes',
     'bagging': 'Bagging',
     'catboost': 'CatBoost'
-}}
+}
 
 # Select models to build
 models_to_build = []
@@ -2210,23 +2210,23 @@ for requested in models_requested:
     if mapped_name in available_models:
         models_to_build.append(mapped_name)
     else:
-        print(f"Warning: {{requested}} not available")
+        print(f"Warning: {requested} not available")
 
 # Check if we have enough models for comparison
 if len(models_to_build) < 2:
     available_list = list(available_models.keys())
     requested_list = models_requested
     
-    error_msg = f"Insufficient Models for Comparison. Requested: {{requested_list}}, Available: {{available_list}}, Found: {{len(models_to_build)}} (need minimum 2). Install missing libraries: pip install lightgbm xgboost tensorflow"
+    error_msg = f"Insufficient Models for Comparison. Requested: {requested_list}, Available: {available_list}, Found: {len(models_to_build)} (need minimum 2). Install missing libraries: pip install lightgbm xgboost tensorflow"
     
     raise ValueError(error_msg)
 
-print(f"Final models to build: {{models_to_build}}")
+print(f"Final models to build: {models_to_build}")
 ```
 
 6. Example:
 ```python
-models = {{}}
+models = {}
 try:
     from sklearn.ensemble import RandomForestClassifier
     models['Random Forest'] = RandomForestClassifier()
@@ -2391,7 +2391,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             if progress_callback:
                 progress_callback("🤔 Generating code...", "Code Generation")
             
-            reply, code, system_prompt = generate_model_code(multi_model_prompt, user_id, query)
+            reply, code, system_prompt = generate_model_code(multi_model_prompt.format(query=query), user_id, query)
             
             if not code.strip():
                 state["response"] = f"❌ Failed to generate multi-model code: {reply}"

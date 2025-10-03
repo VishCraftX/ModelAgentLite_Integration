@@ -4004,6 +4004,15 @@ class ModelBuildingAgentWrapper:
             print_to_log(f"❌ Model building agent failed: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Set proper error response instead of returning unchanged state
+            state.last_response = f"❌ Model building failed: {str(e)}"
+            state.last_error = str(e)
+            
+            # Clear any existing model results to prevent confusion
+            if hasattr(state, 'model_building_state'):
+                state.model_building_state = None
+            
             return state
     
     def _upload_files_to_slack(self, files_list, session_id):
