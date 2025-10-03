@@ -2002,14 +2002,10 @@ Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
         # Generate multi-model comparison code with enhanced robustness
-        # Build the prompt using simple string concatenation - NO TEMPLATES
-        user_request_line = f'user_request = "{query}"'
-        
-        multi_model_prompt = """You are building a comprehensive multi-model comparison system. 
+        # Generate multi-model comparison code with enhanced robustness
+        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
 
-USER REQUEST: """ + query + """
-
-🚨 CRITICAL: Follow the EXACT code templates provided below. DO NOT improvise or use different parsing approaches!
+USER REQUEST: {query}
 
 🚨 CRITICAL SUCCESS REQUIREMENTS:
 1. Build multiple ML models based on USER'S SPECIFIC REQUEST (minimum 2 models)
@@ -2021,54 +2017,10 @@ USER REQUEST: """ + query + """
 7. MANDATORY: Code must be complete, executable, and return the exact result format specified
 
 DYNAMIC USER INPUT PARSING:
-- MODELS: Extract specific model names from user query. If none specified, use: RandomForest, DecisionTree, LightGBM
+- MODELS: Extract specific model names from user query. If none specified, use: RandomForest, XGBoost, LightGBM                                                                                                    
 - TEST SIZE: Look for "test", "split", "validation" mentions. Default: 0.2 (20%)
-- BEST MODEL METRIC: Look for "best based on", "select by", "choose using". Default: accuracy for classification, r2 for regression
+- BEST MODEL METRIC: Look for "best based on", "select by", "choose using". Default: accuracy for classification, r2 for regression                                                                                     
 - Handle ANY model names user mentions (LogisticRegression, SVM, XGBoost, Neural Network, etc.)
-
-🚨 CRITICAL: USE THIS EXACT MODEL PARSING CODE (DO NOT MODIFY):
-```python
-# MANDATORY: Use this exact model parsing approach - DO NOT use split() or regex
-{user_request_line}
-user_request_lower = user_request.lower()
-models_requested = []
-
-# Define model aliases and keywords - EXACTLY as shown
-model_keywords = {{
-    'lgbm': ['lgbm', 'lightgbm', 'light gbm', 'lightgradientboosting'],
-    'xgboost': ['xgboost', 'xgb', 'extreme gradient boosting', 'xgb classifier', 'xgb regressor'],
-    'random_forest': ['random forest', 'randomforest', 'rf', 'random forest classifier', 'random forest regressor'],
-    'decision_tree': ['decision tree', 'decisiontree', 'dt', 'tree', 'decision tree classifier', 'decision tree regressor'],
-    'neural_network': ['neural network', 'nn', 'mlp', 'neural net', 'multilayer perceptron', 'deep learning', 'tensorflow', 'keras'],
-    'logistic_regression': ['logistic regression', 'logistic', 'lr', 'logit', 'linear classifier'],
-    'svm': ['svm', 'support vector machine', 'support vector classifier', 'svc', 'svr'],
-    'gradient_boosting': ['gradient boosting', 'gbm', 'gradient boost', 'sklearn gradient boosting'],
-    'adaboost': ['adaboost', 'ada boost', 'adaptive boosting', 'ada'],
-    'extra_trees': ['extra trees', 'extratrees', 'extremely randomized trees', 'et'],
-    'knn': ['knn', 'k nearest neighbors', 'k-nn', 'nearest neighbors', 'kneighbors'],
-    'naive_bayes': ['naive bayes', 'nb', 'gaussian nb', 'multinomial nb', 'bernoulli nb'],
-    'linear_regression': ['linear regression', 'linear', 'ols', 'ordinary least squares'],
-    'ridge_regression': ['ridge', 'ridge regression', 'l2 regression'],
-    'lasso_regression': ['lasso', 'lasso regression', 'l1 regression'],
-    'elastic_net': ['elastic net', 'elasticnet', 'elastic net regression'],
-    'catboost': ['catboost', 'cat boost', 'categorical boosting'],
-    'voting_classifier': ['voting', 'voting classifier', 'ensemble voting'],
-    'bagging': ['bagging', 'bagging classifier', 'bootstrap aggregating']
-}}
-
-# Extract models mentioned in query - EXACTLY as shown
-for model_name, keywords in model_keywords.items():
-    if any(keyword in user_request_lower for keyword in keywords):
-        models_requested.append(model_name)
-
-# If no models found, use defaults - EXACTLY as shown
-if not models_requested:
-    models_requested = ['random_forest', 'decision_tree', 'lgbm']
-
-print(f"Models requested: {models_requested}")
-```
-
-🚨 FORBIDDEN: DO NOT use user_request.split('models') or .split('and') - these approaches are broken!
 
 DATA REQUIREMENTS:
 - Use 'sample_data' DataFrame (already loaded)
@@ -2090,146 +2042,14 @@ import warnings
 warnings.filterwarnings('ignore')
 ```
 
-ROBUST LIBRARY HANDLING:
+ROBUST LIBRARY HANDLING WITH FALLBACKS:
 1. Import libraries with try-except blocks
 2. If a model library is missing, skip that model with warning message
-3. Check if minimum 2 models are available for comparison
-4. If insufficient models, provide helpful error message with installation guidance
-5. DO NOT automatically add fallback models - inform user instead
-
-🚨 COMPLETE MODEL MAPPING AND AVAILABILITY CHECK:
+3. Continue with available models (minimum 2 required)
+4. ALWAYS ensure at least 2 models are available
+5. Example:
 ```python
-# Build models dictionary based on available libraries
-available_models = {}
-
-# Always available sklearn models
-try:
-    from sklearn.ensemble import RandomForestClassifier
-    available_models['Random Forest'] = RandomForestClassifier(random_state=42)
-except ImportError:
-    print("Warning: sklearn RandomForest not available")
-
-try:
-    from sklearn.tree import DecisionTreeClassifier
-    available_models['Decision Tree'] = DecisionTreeClassifier(max_depth=5, random_state=42)
-except ImportError:
-    print("Warning: sklearn DecisionTree not available")
-
-try:
-    from sklearn.linear_model import LogisticRegression
-    available_models['Logistic Regression'] = LogisticRegression(random_state=42, max_iter=1000)
-except ImportError:
-    print("Warning: sklearn Logistic Regression not available")
-
-try:
-    from sklearn.svm import SVC
-    available_models['SVM'] = SVC(random_state=42, probability=True)
-except ImportError:
-    print("Warning: sklearn SVM not available")
-
-try:
-    from sklearn.ensemble import GradientBoostingClassifier
-    available_models['Gradient Boosting'] = GradientBoostingClassifier(random_state=42)
-except ImportError:
-    print("Warning: sklearn Gradient Boosting not available")
-
-try:
-    from sklearn.ensemble import AdaBoostClassifier
-    available_models['AdaBoost'] = AdaBoostClassifier(random_state=42)
-except ImportError:
-    print("Warning: sklearn AdaBoost not available")
-
-try:
-    from sklearn.ensemble import ExtraTreesClassifier
-    available_models['Extra Trees'] = ExtraTreesClassifier(random_state=42)
-except ImportError:
-    print("Warning: sklearn Extra Trees not available")
-
-try:
-    from sklearn.neighbors import KNeighborsClassifier
-    available_models['KNN'] = KNeighborsClassifier()
-except ImportError:
-    print("Warning: sklearn KNN not available")
-
-try:
-    from sklearn.naive_bayes import GaussianNB
-    available_models['Naive Bayes'] = GaussianNB()
-except ImportError:
-    print("Warning: sklearn Naive Bayes not available")
-
-try:
-    from sklearn.neural_network import MLPClassifier
-    available_models['Neural Network'] = MLPClassifier(random_state=42, max_iter=500)
-except ImportError:
-    print("Warning: sklearn Neural Network not available")
-
-try:
-    from sklearn.ensemble import BaggingClassifier
-    available_models['Bagging'] = BaggingClassifier(random_state=42)
-except ImportError:
-    print("Warning: sklearn Bagging not available")
-
-# Optional external libraries
-try:
-    from lightgbm import LGBMClassifier
-    available_models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
-except ImportError:
-    print("Warning: LightGBM not available")
-
-try:
-    from xgboost import XGBClassifier
-    available_models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
-except ImportError:
-    print("Warning: XGBoost not available")
-
-try:
-    import catboost
-    available_models['CatBoost'] = catboost.CatBoostClassifier(random_state=42, verbose=False)
-except ImportError:
-    print("Warning: CatBoost not available")
-
-# Map requested models to available models
-model_mapping = {
-    'lgbm': 'LightGBM',
-    'xgboost': 'XGBoost', 
-    'random_forest': 'Random Forest',
-    'decision_tree': 'Decision Tree',
-    'neural_network': 'Neural Network',
-    'logistic_regression': 'Logistic Regression',
-    'svm': 'SVM',
-    'gradient_boosting': 'Gradient Boosting',
-    'adaboost': 'AdaBoost',
-    'extra_trees': 'Extra Trees',
-    'knn': 'KNN',
-    'naive_bayes': 'Naive Bayes',
-    'bagging': 'Bagging',
-    'catboost': 'CatBoost'
-}
-
-# Select models to build
-models_to_build = []
-for requested in models_requested:
-    mapped_name = model_mapping.get(requested, requested.title())
-    if mapped_name in available_models:
-        models_to_build.append(mapped_name)
-    else:
-        print(f"Warning: {requested} not available")
-
-# Check if we have enough models for comparison
-if len(models_to_build) < 2:
-    available_list = list(available_models.keys())
-    requested_list = models_requested
-    
-    error_msg = f"Insufficient Models for Comparison. Requested: {requested_list}, Available: {available_list}, Found: {len(models_to_build)} (need minimum 2). Install missing libraries: pip install lightgbm xgboost tensorflow"
-    
-    raise ValueError(error_msg)
-
-print(f"Final models to build: {models_to_build}")
-```
-
-6. Example:
-```python
-models = {}
+models = {{}}
 try:
     from sklearn.ensemble import RandomForestClassifier
     models['Random Forest'] = RandomForestClassifier()
@@ -2268,7 +2088,7 @@ FLEXIBLE BEST MODEL SELECTION:
 - Use safe_plt_savefig() for plot saving (automatically handles paths)
 - DO NOT use hardcoded paths like '/path/to/model.joblib'
 - Let the safe functions handle proper directory structure
-- Example: model_path = safe_joblib_dump(model, f'{model_name}_model.joblib')
+- Example: model_path = safe_joblib_dump(model, f'{{model_name}}_model.joblib')
 - Example: plot_path = safe_plt_savefig('roc_comparison.png')
 
 MANDATORY CODE STRUCTURE:
@@ -2293,74 +2113,74 @@ for model_name, result in results.items():
             fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
         else:
             fpr, tpr, _ = roc_curve(y_test, y_proba_array)
-        plt.plot(fpr, tpr, label=f'{model_name} (AUC = {result["metrics"]["roc_auc"]:.2f})')
+        plt.plot(fpr, tpr, label=f'{{model_name}} (AUC = {{result["metrics"]["roc_auc"]:.2f}})')
 ```
 
 RESULT DICTIONARY REQUIREMENTS:
-result = {
-    'user_config': {
+result = {{
+    'user_config': {{
         'models_requested': ['model1', 'model2', ...],
         'test_size': float,
         'selection_metric': 'metric_name',
         'total_models_built': int
-    },
-    'models': {model_name: {
+    }},
+    'models': {{model_name: {{
         'model': model_object,
         'model_path': saved_path,
-        'metrics': {accuracy, precision, recall, f1, roc_auc, mse, mae, r2, etc.},
+        'metrics': {{accuracy, precision, recall, f1, roc_auc, mse, mae, r2, etc.}},
         'predictions': y_pred,
         'probabilities': y_proba_or_none,
         'training_time': float,
         'model_type': 'classification_or_regression'
-    }},
-    'best_model': {
+    }}}},
+    'best_model': {{
         'name': best_model_name,
-        'model': best_model_object,
+        'model': best_model_object, 
         'model_path': best_model_path,
         'metrics': best_model_metrics,
         'selection_criteria': 'accuracy: 0.XX (user requested)' or 'roc_auc: 0.XX (default)',
         'improvement_over_worst': 'X% better than worst model'
-    },
-    'comparison_plots': {
+    }},
+    'comparison_plots': {{
         'roc_curves': 'path/to/roc_comparison.png',
         'metrics_table': 'path/to/metrics_table.png'
-    },
-    'model_ranking': [{
+    }},
+    'model_ranking': [{{
         'rank': 1,
         'model_name': 'best_model',
         'score': float,
         'metric_used': 'metric_name'
-    }],
-    'summary': {
+    }}],
+    'summary': {{
         'total_models': int,
         'best_model': 'model_name',
         'best_score': float,
-        'worst_model': 'model_name',
+        'worst_model': 'model_name', 
         'worst_score': float,
         'performance_spread': 'X% difference between best and worst',
         'recommendation': 'Detailed recommendation text'
-    },
+    }},
     'detailed_comparison': 'Comprehensive textual comparison of all models with strengths/weaknesses'
-}
+}}
 
 🚨 MANDATORY RESULT FORMAT VALIDATION:
 Your code MUST end with this exact structure (no exceptions):
 
 ```python
 # Validate result format before returning
-required_keys = ['user_config', 'models', 'best_model', 'comparison_plots', 'model_ranking', 'summary', 'detailed_comparison']
+required_keys = ['user_config', 'models', 'best_model', 'comparison_plots', 'model_ranking', 'summary', 'detailed_comparison']                                                                                          
 for key in required_keys:
     if key not in result:
-        print(f"ERROR: Missing required key: {key}")
-        result[key] = {} if key != 'detailed_comparison' else "Analysis not available"
+        print(f"ERROR: Missing required key: {{key}}")
+        result[key] = {{}} if key != 'detailed_comparison' else "Analysis not available"
 
 # Ensure models dictionary has the right structure
 if 'models' in result and isinstance(result['models'], dict):
     for model_name, model_data in result['models'].items():
-        required_model_keys = ['model', 'model_path', 'metrics', 'predictions', 'probabilities', 'training_time', 'model_type']
+        required_model_keys = ['model', 'model_path', 'metrics', 'predictions', 'probabilities', 'training_time', 'model_type']                                                                                         
         for model_key in required_model_keys:
             if model_key not in model_data:
-                print(f"WARNING: Missing {model_key} for {model_name}")
+                print(f"WARNING: Missing {{model_key}} for {{model_name}}")
                 if model_key == 'model_type':
                     model_data[model_key] = 'classification'
                 elif model_key == 'training_time':
@@ -2388,7 +2208,6 @@ ENHANCED RESPONSE FORMATTING:
 6. Validate all required keys exist in result
 
 Generate complete, executable Python code that implements this dynamic multi-model comparison system with robust error handling."""
-
         try:
             print_to_log("🤔 Generating multi-model comparison code...")
             if progress_callback:
