@@ -1793,14 +1793,14 @@ IF USER ASKS FOR RANK ORDERING ON TEST DATA (mentions "test data", "test dataset
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Create test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 3. Get TEST probabilities: test_probabilities = current_model.predict_proba(X_test)[:,1]
-4. Create rank_df with TEST data only: pd.DataFrame({{'actual': y_test.values, 'probability': test_probabilities}})
+4. Create rank_df with TEST data only: pd.DataFrame({'actual': y_test.values, 'probability': test_probabilities})
 5. Create segments with pd.qcut(test_probabilities, q=N, duplicates='drop')
 6. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
 
 IF USER ASKS FOR GENERAL RANK ORDERING (no "test" specification - for business analysis):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Get FULL dataset probabilities: full_probabilities = current_model.predict_proba(X)[:,1]
-3. Create rank_df with FULL data: pd.DataFrame({{'actual': y.values, 'probability': full_probabilities}})
+3. Create rank_df with FULL data: pd.DataFrame({'actual': y.values, 'probability': full_probabilities})
 4. Create segments with pd.qcut(full_probabilities, q=N, duplicates='drop')
 5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
 
@@ -2005,9 +2005,9 @@ Once you upload your data, I can build multiple models and compare them! 🎯"""
         # Build the prompt using simple string concatenation - NO TEMPLATES
         user_request_line = f'user_request = "{query}"'
         
-        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
+        multi_model_prompt = """You are building a comprehensive multi-model comparison system. 
 
-USER REQUEST: {query}
+USER REQUEST: """ + query + """
 
 🚨 CRITICAL: Follow the EXACT code templates provided below. DO NOT improvise or use different parsing approaches!
 
@@ -2065,7 +2065,7 @@ for model_name, keywords in model_keywords.items():
 if not models_requested:
     models_requested = ['random_forest', 'decision_tree', 'lgbm']
 
-print(f"Models requested: {{models_requested}}")
+print(f"Models requested: {models_requested}")
 ```
 
 🚨 FORBIDDEN: DO NOT use user_request.split('models') or .split('and') - these approaches are broken!
@@ -2268,7 +2268,7 @@ FLEXIBLE BEST MODEL SELECTION:
 - Use safe_plt_savefig() for plot saving (automatically handles paths)
 - DO NOT use hardcoded paths like '/path/to/model.joblib'
 - Let the safe functions handle proper directory structure
-- Example: model_path = safe_joblib_dump(model, f'{{model_name}}_model.joblib')
+- Example: model_path = safe_joblib_dump(model, f'{model_name}_model.joblib')
 - Example: plot_path = safe_plt_savefig('roc_comparison.png')
 
 MANDATORY CODE STRUCTURE:
@@ -2293,55 +2293,55 @@ for model_name, result in results.items():
             fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
         else:
             fpr, tpr, _ = roc_curve(y_test, y_proba_array)
-        plt.plot(fpr, tpr, label=f'{{model_name}} (AUC = {{result["metrics"]["roc_auc"]:.2f}})')
+        plt.plot(fpr, tpr, label=f'{model_name} (AUC = {result["metrics"]["roc_auc"]:.2f})')
 ```
 
 RESULT DICTIONARY REQUIREMENTS:
-result = {{
-    'user_config': {{
+result = {
+    'user_config': {
         'models_requested': ['model1', 'model2', ...],
         'test_size': float,
         'selection_metric': 'metric_name',
         'total_models_built': int
-    }},
-    'models': {{model_name: {{
+    },
+    'models': {model_name: {
         'model': model_object,
         'model_path': saved_path,
-        'metrics': {{accuracy, precision, recall, f1, roc_auc, mse, mae, r2, etc.}},
+        'metrics': {accuracy, precision, recall, f1, roc_auc, mse, mae, r2, etc.},
         'predictions': y_pred,
         'probabilities': y_proba_or_none,
         'training_time': float,
         'model_type': 'classification_or_regression'
-    }}}},
-    'best_model': {{
+    }},
+    'best_model': {
         'name': best_model_name,
-        'model': best_model_object, 
+        'model': best_model_object,
         'model_path': best_model_path,
         'metrics': best_model_metrics,
         'selection_criteria': 'accuracy: 0.XX (user requested)' or 'roc_auc: 0.XX (default)',
         'improvement_over_worst': 'X% better than worst model'
-    }},
-    'comparison_plots': {{
+    },
+    'comparison_plots': {
         'roc_curves': 'path/to/roc_comparison.png',
         'metrics_table': 'path/to/metrics_table.png'
-    }},
-    'model_ranking': [{{
+    },
+    'model_ranking': [{
         'rank': 1,
         'model_name': 'best_model',
         'score': float,
         'metric_used': 'metric_name'
-    }}],
-    'summary': {{
+    }],
+    'summary': {
         'total_models': int,
         'best_model': 'model_name',
         'best_score': float,
-        'worst_model': 'model_name', 
+        'worst_model': 'model_name',
         'worst_score': float,
         'performance_spread': 'X% difference between best and worst',
         'recommendation': 'Detailed recommendation text'
-    }},
+    },
     'detailed_comparison': 'Comprehensive textual comparison of all models with strengths/weaknesses'
-}}
+}
 
 🚨 MANDATORY RESULT FORMAT VALIDATION:
 Your code MUST end with this exact structure (no exceptions):
@@ -2351,8 +2351,8 @@ Your code MUST end with this exact structure (no exceptions):
 required_keys = ['user_config', 'models', 'best_model', 'comparison_plots', 'model_ranking', 'summary', 'detailed_comparison']
 for key in required_keys:
     if key not in result:
-        print(f"ERROR: Missing required key: {{key}}")
-        result[key] = {{}} if key != 'detailed_comparison' else "Analysis not available"
+        print(f"ERROR: Missing required key: {key}")
+        result[key] = {} if key != 'detailed_comparison' else "Analysis not available"
 
 # Ensure models dictionary has the right structure
 if 'models' in result and isinstance(result['models'], dict):
@@ -2360,7 +2360,7 @@ if 'models' in result and isinstance(result['models'], dict):
         required_model_keys = ['model', 'model_path', 'metrics', 'predictions', 'probabilities', 'training_time', 'model_type']
         for model_key in required_model_keys:
             if model_key not in model_data:
-                print(f"WARNING: Missing {{model_key}} for {{model_name}}")
+                print(f"WARNING: Missing {model_key} for {model_name}")
                 if model_key == 'model_type':
                     model_data[model_key] = 'classification'
                 elif model_key == 'training_time':
