@@ -143,39 +143,39 @@ class PreprocessingAgentWrapper:
                 
                 if not state.target_column:
                     # Need target column first
-                    initial_msg = f"""🧹 **Sequential Preprocessing Agent**
+                    initial_msg = f"""🧹 Sequential Preprocessing Agent
 
-📁 **Dataset loaded:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+📁 Dataset loaded: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
 
-🎯 **Please specify your target column:**
+🎯 Please specify your target column:
 • Available columns: {', '.join(list(state.raw_data.columns)[:10])}{'...' if len(state.raw_data.columns) > 10 else ''}
 
-📝 **How to specify:**
+📝 How to specify:
 • Type: `target column_name` (e.g., `target default`)
 • Or just: `column_name` (e.g., `default`)"""
                     
                     phase = "need_target"
                 else:
                     # Show preprocessing menu
-                    initial_msg = f"""🧹 **Sequential Preprocessing Agent**
+                    initial_msg = f"""🧹 Sequential Preprocessing Agent
 
-📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target Column:** {state.target_column}
+📊 Current Dataset: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 Target Column: {state.target_column}
 
-**🔄 Preprocessing Phases:**
+🔄 Preprocessing Phases:
 • `Overview` - Dataset analysis and summary
 • `Outliers` - Detect and handle outliers  
 • `Missing Values` - Handle missing data
 • `Encoding` - Categorical variable encoding
 • `Transformations` - Feature transformations
 
-**💬 Your Options:**
+💬 Your Options:
 • `proceed` - Start preprocessing workflow
 • `skip overview` - Skip to outlier detection
 • `explain outliers` - Learn about outlier handling
 • `summary` - Show current status
 
-💬 **What would you like to do?**"""
+💬 What would you like to do?"""
                     
                     phase = "waiting_input"
                 
@@ -402,7 +402,7 @@ class PreprocessingAgentWrapper:
                         print_to_log(f"✅ Feature selection agent initialized with {clean_df.shape[1]} features")
                         
                         # Set proper response message
-                        state.last_response = f"🚀 **Feature Selection Started!** Initialized with {clean_df.shape[1]} clean features. Menu sent to Slack - ready for analysis!"
+                        state.last_response = f"🚀 Feature Selection Started! Initialized with {clean_df.shape[1]} clean features. Menu sent to Slack - ready for analysis!"
                         
                         # Clean up temp file
                         try:
@@ -521,13 +521,13 @@ class PreprocessingAgentWrapper:
                             strategy_summary = []
                             for strategy, count in strategy_counts.items():
                                 if strategy == 'keep':
-                                    strategy_summary.append(f"**Keep as-is**: {count} columns")
+                                    strategy_summary.append(f"Keep as-is: {count} columns")
                                 elif strategy == 'winsorize':
-                                    strategy_summary.append(f"**Winsorize**: {count} columns")
+                                    strategy_summary.append(f"Winsorize: {count} columns")
                                 elif strategy == 'remove':
-                                    strategy_summary.append(f"**Remove**: {count} columns")
+                                    strategy_summary.append(f"Remove: {count} columns")
                                 else:
-                                    strategy_summary.append(f"**{strategy.title()}**: {count} columns")
+                                    strategy_summary.append(f"{strategy.title()}: {count} columns")
                             
                             outlier_details = chr(10).join(strategy_summary) if strategy_summary else "• No outlier treatment needed"
                             
@@ -556,41 +556,41 @@ class PreprocessingAgentWrapper:
                             columns_needing_treatment = len([col for col, rec in outlier_results.get('llm_recommendations', {}).items() 
                                                            if rec.get('treatment', 'keep') != 'keep'])
                             
-                            message = f"""🔍 **Outlier Analysis Complete!**
+                            message = f"""🔍 Outlier Analysis Complete!
 
-📊 **Dataset Overview:**
+📊 Dataset Overview:
 • Total rows: {state.raw_data.shape[0]:,}
 • Total columns: {state.raw_data.shape[1]}
 • Target column: {state.target_column}
 
-🎯 **Analysis Results:**
+🎯 Analysis Results:
 • Columns analyzed: {analyzed_columns}
 • Columns needing treatment: {columns_needing_treatment}
 
-**🔧 Recommended Treatments:**
+🔧 Recommended Treatments:
 {outlier_details}
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `continue` - Apply recommendations and move to missing values
 • `skip outliers` - Move to missing values analysis
 • `summary` - Show current preprocessing status"""
                         else:
                             # Old format
-                            message = f"""🔍 **Outlier Analysis Complete!**
+                            message = f"""🔍 Outlier Analysis Complete!
 
-📊 **Dataset Overview:**
+📊 Dataset Overview:
 • Total rows: {state.raw_data.shape[0]:,}
 • Total columns: {state.raw_data.shape[1]}
 • Target column: {state.target_column}
 
-🎯 **Outlier Detection Results:**
+🎯 Outlier Detection Results:
 • Columns with outliers: {len(outlier_columns)}
 • Total outliers found: {total_outliers:,}
 
-**📋 Columns with Outliers:**
+📋 Columns with Outliers:
 {outlier_details}{'...' if len(outlier_columns) > 5 else ''}
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `continue` - Apply recommendations and move to missing values
 • `skip outliers` - Move to missing values analysis
 • `summary` - Show current preprocessing status"""
@@ -726,26 +726,26 @@ class PreprocessingAgentWrapper:
                                         'remove': '🗑️ Remove'
                                     }.get(treatment, f'🔧 {treatment.title()}')
                                     
-                                    treatment_text.append(f"**{treatment_display}:** {col_text}")
+                                    treatment_text.append(f"{treatment_display}: {col_text}")
                                 
-                                message = f"""🚨 **Outliers Analysis Complete!**
+                                message = f"""🚨 Outliers Analysis Complete!
 
-**📊 Outlier Columns Found:** {len(outlier_results.get('outliers_columns', []))} columns
+📊 Outlier Columns Found: {len(outlier_results.get('outliers_columns', []))} columns
 
-**🔧 Recommended Treatments:**
+🔧 Recommended Treatments:
 {chr(10).join(treatment_text)}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply treatments and move to missing values
 • `skip outliers` - Skip to missing values phase  
 • `summary` - Show current preprocessing status"""
                             else:
-                                message = f"""🚨 **Outliers Analysis Complete!**
+                                message = f"""🚨 Outliers Analysis Complete!
 
-**📊 Analysis Results:**
+📊 Analysis Results:
 {outlier_results}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply treatments and move to missing values
 • `skip outliers` - Skip to missing values phase
 • `summary` - Show current preprocessing status"""
@@ -839,7 +839,7 @@ class PreprocessingAgentWrapper:
                     # Create concise treatment summary
                     applied_treatments = []
                     for treatment, count in treatment_counts.items():
-                        applied_treatments.append(f"**{treatment}**: {count} columns")
+                        applied_treatments.append(f"{treatment}: {count} columns")
                     
                     # Update state with processed data
                     state.cleaned_data = df
@@ -854,19 +854,19 @@ class PreprocessingAgentWrapper:
                     if slack_manager and state.chat_session:
                         treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
                         
-                        message = f"""✅ **Outlier Treatments Applied!**
+                        message = f"""✅ Outlier Treatments Applied!
 
-**🔧 Applied Treatments:**
+🔧 Applied Treatments:
 {treatments_text}
 
-**📊 Data Summary:**
+📊 Data Summary:
 • Original: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
 • Processed: {df.shape[0]:,} rows × {df.shape[1]} columns
 • Rows removed: {state.raw_data.shape[0] - df.shape[0]:,}
 
-**🔄 Moving to Next Phase: Missing Values Analysis**
+🔄 Moving to Next Phase: Missing Values Analysis
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `continue` - Start missing values analysis
 • `skip missing` - Move to encoding phase
 • `summary` - Show current status"""
@@ -962,7 +962,7 @@ class PreprocessingAgentWrapper:
                         # Create concise treatment summary
                         applied_treatments = []
                         for strategy, count in strategy_counts.items():
-                            applied_treatments.append(f"**{strategy}**: {count} columns")
+                            applied_treatments.append(f"{strategy}: {count} columns")
 
                         # Update state with processed data
                         state.cleaned_data = df
@@ -977,18 +977,18 @@ class PreprocessingAgentWrapper:
                         if slack_manager and state.chat_session:
                             treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
                             
-                            message = f"""✅ **Missing Values Treatments Applied!**
+                            message = f"""✅ Missing Values Treatments Applied!
 
-**🔧 Applied Treatments:**
+🔧 Applied Treatments:
 {treatments_text}
 
-**📊 Data Summary:**
+📊 Data Summary:
 • Processed: {df.shape[0]:,} rows × {df.shape[1]} columns
 • Missing values filled: {len(applied_treatments)} columns
 
-**🔄 Moving to Next Phase: Encoding Analysis**
+🔄 Moving to Next Phase: Encoding Analysis
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `continue` - Start encoding analysis
 • `skip encoding` - Move to transformations phase
 • `summary` - Show current status"""
@@ -1089,33 +1089,33 @@ class PreprocessingAgentWrapper:
                                         strategy_summary = []
                                         for strategy, count in strategy_counts.items():
                                             if strategy == 'drop_column':
-                                                strategy_summary.append(f"**Drop columns**: {count} columns")
+                                                strategy_summary.append(f"Drop columns: {count} columns")
                                             elif strategy == 'drop_missing':
-                                                strategy_summary.append(f"**Drop missing rows**: {count} columns")
+                                                strategy_summary.append(f"Drop missing rows: {count} columns")
                                             else:
-                                                strategy_summary.append(f"**{strategy.title()} imputation**: {count} columns")
+                                                strategy_summary.append(f"{strategy.title()} imputation: {count} columns")
                                         
                                         strategy_text = "\n".join(strategy_summary)
                                         
                                         # Confidence stats removed from display per user request
                                         
-                                        message = f"""🔍 **Missing Values Analysis Complete!**
+                                        message = f"""🔍 Missing Values Analysis Complete!
 
-**📊 Missing Values Found:** {len(missing_columns)} columns
+📊 Missing Values Found: {len(missing_columns)} columns
 
-**🔧 Recommended Strategies:**
+🔧 Recommended Strategies:
 {strategy_text}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply missing values treatments and move to encoding
 • `skip missing` - Move directly to encoding phase
 • `summary` - Show current preprocessing status"""
                                     else:
-                                        message = f"""🔍 **Missing Values Analysis Complete!**
+                                        message = f"""🔍 Missing Values Analysis Complete!
 
-**📊 No missing values found** - Dataset is complete!
+📊 No missing values found - Dataset is complete!
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Move to encoding phase
 • `summary` - Show current preprocessing status"""
                                 
@@ -1139,28 +1139,28 @@ class PreprocessingAgentWrapper:
                                         cols_str = ', '.join(cols[:5])  # Show first 5 columns
                                         if len(cols) > 5:
                                             cols_str += f" (+{len(cols)-5} more)"
-                                        strategy_summary.append(f"**{strategy.title()} imputation:** {cols_str}")
+                                        strategy_summary.append(f"{strategy.title()} imputation: {cols_str}")
                                     
                                     strategy_text = "\n".join(strategy_summary)
                                     
-                                    message = f"""🔍 **Missing Values Analysis Complete!**
+                                    message = f"""🔍 Missing Values Analysis Complete!
 
-**📊 Missing Values Found:** {len(missing_columns)} columns
+📊 Missing Values Found: {len(missing_columns)} columns
 
-**🔧 Recommended Strategies:**
+🔧 Recommended Strategies:
 {strategy_text}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply missing values treatments and move to encoding
 • `skip missing` - Move directly to encoding phase
 • `summary` - Show current preprocessing status"""
                                 else:
                                     # Fallback - avoid showing raw JSON
-                                    message = f"""🔍 **Missing Values Analysis Complete!**
+                                    message = f"""🔍 Missing Values Analysis Complete!
 
-**📊 Analysis completed successfully**
+📊 Analysis completed successfully
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply missing values treatments and move to encoding
 • `skip missing` - Move directly to encoding phase
 • `summary` - Show current preprocessing status"""
@@ -1279,7 +1279,7 @@ class PreprocessingAgentWrapper:
                         # Create concise treatment summary
                         applied_treatments = []
                         for strategy, count in strategy_counts.items():
-                            applied_treatments.append(f"**{strategy}**: {count} columns")
+                            applied_treatments.append(f"{strategy}: {count} columns")
 
                         # Update state with processed data
                         state.cleaned_data = df
@@ -1294,18 +1294,18 @@ class PreprocessingAgentWrapper:
                         
                         # Store success message for later sending (after CSV save)
                         treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
-                        state.pending_slack_message = f"""✅ **Encoding Treatments Applied!**
+                        state.pending_slack_message = f"""✅ Encoding Treatments Applied!
 
-**🔧 Applied Treatments:**
+🔧 Applied Treatments:
 {treatments_text}
 
-**📊 Data Summary:**
+📊 Data Summary:
 • Processed: {df.shape[0]:,} rows × {df.shape[1]} columns
 • Encodings applied: {len(applied_treatments)} columns
 
-**🔄 Moving to Next Phase: Transformations Analysis**
+🔄 Moving to Next Phase: Transformations Analysis
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `continue` - Start transformations analysis
 • `skip transformations` - Complete preprocessing
 • `summary` - Show current status"""
@@ -1386,37 +1386,37 @@ class PreprocessingAgentWrapper:
                                         strategy_summary = []
                                         for strategy, count in strategy_counts.items():
                                             if strategy == 'label_encoding':
-                                                strategy_summary.append(f"**Label encoding**: {count} columns")
+                                                strategy_summary.append(f"Label encoding: {count} columns")
                                             elif strategy == 'onehot_encoding':
-                                                strategy_summary.append(f"**One-hot encoding**: {count} columns")
+                                                strategy_summary.append(f"One-hot encoding: {count} columns")
                                             elif strategy == 'target_encoding':
-                                                strategy_summary.append(f"**Target encoding**: {count} columns")
+                                                strategy_summary.append(f"Target encoding: {count} columns")
                                             elif strategy == 'binary_encoding':
-                                                strategy_summary.append(f"**Binary encoding**: {count} columns")
+                                                strategy_summary.append(f"Binary encoding: {count} columns")
                                             else:
-                                                strategy_summary.append(f"**{strategy.replace('_', ' ').title()}**: {count} columns")
+                                                strategy_summary.append(f"{strategy.replace('_', ' ').title()}: {count} columns")
                                         
                                         strategy_text = "\n".join(strategy_summary)
                                         
                                         # Confidence stats removed from display per user request
                                         
-                                        message = f"""🔍 **Encoding Analysis Complete!**
+                                        message = f"""🔍 Encoding Analysis Complete!
 
-**📊 Categorical Columns Found:** {len(encoding_columns)} columns
+📊 Categorical Columns Found: {len(encoding_columns)} columns
 
-**🔧 Recommended Strategies:**
+🔧 Recommended Strategies:
 {strategy_text}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply encoding treatments and move to transformations
 • `skip encoding` - Move directly to transformations phase
 • `summary` - Show current preprocessing status"""
                                     else:
-                                        message = f"""🔍 **Encoding Analysis Complete!**
+                                        message = f"""🔍 Encoding Analysis Complete!
 
-**📊 No categorical columns found** - All columns are numeric!
+📊 No categorical columns found - All columns are numeric!
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Move to transformations phase
 • `summary` - Show current preprocessing status"""
                                 
@@ -1452,28 +1452,28 @@ class PreprocessingAgentWrapper:
                                     # Build concise encoding summary
                                     encoding_summary = []
                                     for encoding_type, cols in encoding_groups.items():
-                                        encoding_summary.append(f"**{encoding_type} encoding**: {len(cols)} columns")
+                                        encoding_summary.append(f"{encoding_type} encoding: {len(cols)} columns")
                                     
                                     encoding_text = "\n".join(encoding_summary)
                                     
-                                    message = f"""🔍 **Encoding Analysis Complete!**
+                                    message = f"""🔍 Encoding Analysis Complete!
 
-**📊 Categorical Columns Found:** {len(categorical_columns)} columns
+📊 Categorical Columns Found: {len(categorical_columns)} columns
 
-**🔧 Recommended Encoding:**
+🔧 Recommended Encoding:
 {encoding_text}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply encoding treatments and move to transformations
 • `skip encoding` - Move directly to transformations phase
 • `summary` - Show current preprocessing status"""
                                 else:
                                     # Fallback - avoid showing raw JSON
-                                    message = f"""🔍 **Encoding Analysis Complete!**
+                                    message = f"""🔍 Encoding Analysis Complete!
 
-**📊 Analysis completed successfully**
+📊 Analysis completed successfully
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply encoding treatments and move to transformations
 • `skip encoding` - Move directly to transformations phase
 • `summary` - Show current preprocessing status"""
@@ -1595,7 +1595,7 @@ class PreprocessingAgentWrapper:
                         # Create concise treatment summary
                         applied_treatments = []
                         for strategy, count in strategy_counts.items():
-                            applied_treatments.append(f"**{strategy}**: {count} columns")
+                            applied_treatments.append(f"{strategy}: {count} columns")
 
                         # Update state with processed data
                         state.cleaned_data = df
@@ -1612,18 +1612,18 @@ class PreprocessingAgentWrapper:
                         if slack_manager and state.chat_session:
                             treatments_text = "\n".join(applied_treatments) if applied_treatments else "• No treatments applied"
                             
-                            message = f"""✅ **Transformations Applied!**
+                            message = f"""✅ Transformations Applied!
 
-**🔧 Applied Treatments:**
+🔧 Applied Treatments:
 {treatments_text}
 
-**📊 Data Summary:**
+📊 Data Summary:
 • Final processed: {df.shape[0]:,} rows × {df.shape[1]} columns
 • Transformations applied: {len(applied_treatments)} columns
 
-**🎉 Preprocessing Complete!**
+🎉 Preprocessing Complete!
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `summary` - Show complete preprocessing summary
 • `feature_selection` - Move to feature selection phase
 • `model_building` - Move to model building phase"""
@@ -1721,43 +1721,43 @@ class PreprocessingAgentWrapper:
                                         strategy_summary = []
                                         for strategy, count in strategy_counts.items():
                                             if strategy == 'none':
-                                                strategy_summary.append(f"**No transformation needed**: {count} columns")
+                                                strategy_summary.append(f"No transformation needed: {count} columns")
                                             elif strategy == 'log':
-                                                strategy_summary.append(f"**Log transformation**: {count} columns")
+                                                strategy_summary.append(f"Log transformation: {count} columns")
                                             elif strategy == 'log1p':
-                                                strategy_summary.append(f"**Log1p transformation**: {count} columns")
+                                                strategy_summary.append(f"Log1p transformation: {count} columns")
                                             elif strategy == 'sqrt':
-                                                strategy_summary.append(f"**Square root transformation**: {count} columns")
+                                                strategy_summary.append(f"Square root transformation: {count} columns")
                                             elif strategy == 'box_cox':
-                                                strategy_summary.append(f"**Box-Cox transformation**: {count} columns")
+                                                strategy_summary.append(f"Box-Cox transformation: {count} columns")
                                             elif strategy == 'yeo_johnson':
-                                                strategy_summary.append(f"**Yeo-Johnson transformation**: {count} columns")
+                                                strategy_summary.append(f"Yeo-Johnson transformation: {count} columns")
                                             elif strategy == 'quantile':
-                                                strategy_summary.append(f"**Quantile transformation**: {count} columns")
+                                                strategy_summary.append(f"Quantile transformation: {count} columns")
                                             else:
-                                                strategy_summary.append(f"**{strategy.replace('_', ' ').title()} transformation**: {count} columns")
+                                                strategy_summary.append(f"{strategy.replace('_', ' ').title()} transformation: {count} columns")
                                         
                                         strategy_text = "\n".join(strategy_summary)
                                         
                                         # Confidence stats removed from display per user request
                                         
-                                        message = f"""🔍 **Transformations Analysis Complete!**
+                                        message = f"""🔍 Transformations Analysis Complete!
 
-**📊 Numerical Columns Analyzed:** {len(transformations_columns)} columns
+📊 Numerical Columns Analyzed: {len(transformations_columns)} columns
 
-**🔧 Recommended Strategies:**
+🔧 Recommended Strategies:
 {strategy_text}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply transformations and complete preprocessing
 • `skip transformations` - Complete preprocessing without transformations
 • `summary` - Show current preprocessing status"""
                                     else:
-                                        message = f"""🔍 **Transformations Analysis Complete!**
+                                        message = f"""🔍 Transformations Analysis Complete!
 
-**📊 No transformations needed** - All columns are well-distributed!
+📊 No transformations needed - All columns are well-distributed!
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Complete preprocessing
 • `summary` - Show current preprocessing status"""
                                 
@@ -1804,28 +1804,28 @@ class PreprocessingAgentWrapper:
                                     # Build concise transformation summary
                                     transformation_summary = []
                                     for transformation_type, cols in transformation_groups.items():
-                                        transformation_summary.append(f"**{transformation_type}**: {len(cols)} columns")
+                                        transformation_summary.append(f"{transformation_type}: {len(cols)} columns")
                                     
                                     transformation_text = "\n".join(transformation_summary)
                                     
-                                    message = f"""🔍 **Transformations Analysis Complete!**
+                                    message = f"""🔍 Transformations Analysis Complete!
 
-**📊 Numerical Columns Analyzed:** {len(numerical_columns)} columns
+📊 Numerical Columns Analyzed: {len(numerical_columns)} columns
 
-**🔧 Recommended Transformations:**
+🔧 Recommended Transformations:
 {transformation_text}
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply transformations and complete preprocessing
 • `skip transformations` - Complete preprocessing without transformations
 • `summary` - Show current preprocessing status"""
                                 else:
                                     # Fallback - avoid showing raw JSON
-                                    message = f"""🔍 **Transformations Analysis Complete!**
+                                    message = f"""🔍 Transformations Analysis Complete!
 
-**📊 Analysis completed successfully**
+📊 Analysis completed successfully
 
-**🔄 Ready for Next Step:**
+🔄 Ready for Next Step:
 • `continue` - Apply transformations and complete preprocessing
 • `skip transformations` - Complete preprocessing without transformations
 • `summary` - Show current preprocessing status"""
@@ -1978,11 +1978,11 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                         
                         if slack_manager and state.chat_session:
                             print_to_log(f"📤 DEBUG: Sending message to Slack session: {state.chat_session}")
-                            message = f"""🤖 **Query Response:**
+                            message = f"""🤖 Query Response:
 
 {response}
 
-**💬 Continue with preprocessing:**
+💬 Continue with preprocessing:
 • `continue` - Continue with current phase
 • `summary` - Show current status  
 • `help` - Get more assistance"""
@@ -2010,13 +2010,13 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                             slack_manager = global_slack_manager
                         
                         if slack_manager and state.chat_session:
-                            fallback_message = f"""🤖 **Query Response:**
+                            fallback_message = f"""🤖 Query Response:
 
 I understand you're asking: "{actual_query}"
 
 I'm having trouble accessing detailed analysis data right now, but I can help with general preprocessing questions.
 
-**💬 Continue with preprocessing:**
+💬 Continue with preprocessing:
 • `continue` - Continue with current phase
 • `summary` - Show current status"""
                             
@@ -2202,11 +2202,11 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                     
                     if slack_manager and state.chat_session:
                         print_to_log(f"📤 DEBUG: Sending message to Slack session: {state.chat_session}")
-                        message = f"""🤖 **Query Response:**
+                        message = f"""🤖 Query Response:
 
 {response}
 
-**💬 Continue with preprocessing:**
+💬 Continue with preprocessing:
 • `continue` - Continue with current phase
 • `summary` - Show current status  
 • `help` - Get more assistance"""
@@ -2237,25 +2237,25 @@ Explain the current preprocessing phase, strategies, and recommendations based o
                         
                         if slack_manager and state.chat_session:
                             print_to_log("🔄 DEBUG: Sending fallback message to Slack")
-                            fallback_message = f"""🤖 **Query Response:**
+                            fallback_message = f"""🤖 Query Response:
 
 I understand you're asking: "{command}"
 
 I'm having trouble accessing detailed analysis data right now, but I can help with general preprocessing questions. Here are some common topics:
 
-**🔧 Preprocessing Methods:**
-• **Outliers**: Winsorize (clip extreme values) vs Keep (leave as-is)
-• **Missing Values**: Mean/Median imputation vs Model-based vs Drop
-• **Encoding**: One-hot vs Label vs Target encoding for categories  
-• **Transformations**: Log/Square root for skewed data, Scaling for normalization
+🔧 Preprocessing Methods:
+• Outliers: Winsorize (clip extreme values) vs Keep (leave as-is)
+• Missing Values: Mean/Median imputation vs Model-based vs Drop
+• Encoding: One-hot vs Label vs Target encoding for categories  
+• Transformations: Log/Square root for skewed data, Scaling for normalization
 
-**💬 Try asking:**
+💬 Try asking:
 • `"explain median imputation"`
 • `"what is winsorization"`  
 • `"why use one-hot encoding"`
 • `summary` - Show current preprocessing status
 
-**💬 Continue with preprocessing:**
+💬 Continue with preprocessing:
 • `continue` - Continue with current phase
 • `summary` - Show current status"""
                             
@@ -2384,7 +2384,7 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                         for col, v in parsed.items():
                             lines.append(f"• {col}: {v}")
                         captured = "\n".join(lines)
-                        override_response += f"\n\n**Captured Overrides:**\n{captured}"
+                        override_response += f"\n\nCaptured Overrides:\n{captured}"
                     
                     # Send response to Slack
                     slack_manager = getattr(state, '_slack_manager', None)
@@ -2393,11 +2393,11 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                         slack_manager = global_slack_manager
                     
                     if slack_manager and state.chat_session:
-                        message = f"""🔧 **Override Request:**
+                        message = f"""🔧 Override Request:
 
 {override_response}
 
-**💬 Continue with preprocessing:**
+💬 Continue with preprocessing:
 • `continue` - Apply current phase with overrides
 • `summary` - Show current status  
 • `help` - Get more assistance"""
@@ -2487,23 +2487,23 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                             final_data_shape = state.raw_data.shape
                         else:
                             final_data_shape = (0, 0)
-                        message = f"""🎉 **Preprocessing Complete!**
+                        message = f"""🎉 Preprocessing Complete!
 
-**✅ Skipped transformations - preprocessing finished!**
+✅ Skipped transformations - preprocessing finished!
 • Final dataset: {final_data_shape[0]:,} rows × {final_data_shape[1]} columns
 • Data is ready for machine learning
 
-**🚀 Would you like to move to feature selection?**
+🚀 Would you like to move to feature selection?
 • `yes` - Start feature selection with cleaned data
 • `no` - Stay in preprocessing for summary/export
 • `summary` - Show complete preprocessing summary"""
                     else:
                         # Regular skip message
-                        message = f"""⏭️ **Phase Skipped!**
+                        message = f"""⏭️ Phase Skipped!
 
-**🔄 Moved from {current_phase} to {next_phase}**
+🔄 Moved from {current_phase} to {next_phase}
 
-**💬 Next Steps:**
+💬 Next Steps:
 • `continue` - Start {next_phase} analysis
 • `summary` - Show current status
 • `help` - Get assistance"""
@@ -2521,43 +2521,43 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 
                 # Build summary message
                 summary_parts = []
-                summary_parts.append(f"**📊 Preprocessing Status:**")
-                summary_parts.append(f"• **Current Phase:** {current_phase}")
-                summary_parts.append(f"• **Status:** {status}")
+                summary_parts.append(f"📊 Preprocessing Status:")
+                summary_parts.append(f"• Current Phase: {current_phase}")
+                summary_parts.append(f"• Status: {status}")
                 
                 if state.cleaned_data is not None:
-                    summary_parts.append(f"• **Data Shape:** {state.cleaned_data.shape[0]:,} rows × {state.cleaned_data.shape[1]} columns")
+                    summary_parts.append(f"• Data Shape: {state.cleaned_data.shape[0]:,} rows × {state.cleaned_data.shape[1]} columns")
                 elif state.raw_data is not None:
-                    summary_parts.append(f"• **Data Shape:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns")
+                    summary_parts.append(f"• Data Shape: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns")
                 else:
-                    summary_parts.append(f"• **Data Shape:** No data available")
+                    summary_parts.append(f"• Data Shape: No data available")
                 
                 # Add phase-specific information
                 if current_phase == 'outliers' and state.preprocessing_state.get('outlier_results'):
                     outlier_results = state.preprocessing_state['outlier_results']
                     if isinstance(outlier_results, dict) and 'outlier_columns' in outlier_results:
                         outlier_count = len(outlier_results['outlier_columns'])
-                        summary_parts.append(f"• **Outliers Found:** {outlier_count} columns")
+                        summary_parts.append(f"• Outliers Found: {outlier_count} columns")
                 
                 elif current_phase == 'missing_values' and state.preprocessing_state.get('missing_results'):
                     missing_results = state.preprocessing_state['missing_results']
                     if isinstance(missing_results, dict) and 'missing_columns' in missing_results:
                         missing_count = len(missing_results['missing_columns'])
-                        summary_parts.append(f"• **Missing Values:** {missing_count} columns")
+                        summary_parts.append(f"• Missing Values: {missing_count} columns")
                 
                 elif current_phase == 'encoding' and state.preprocessing_state.get('encoding_results'):
                     encoding_results = state.preprocessing_state['encoding_results']
                     if isinstance(encoding_results, dict) and 'categorical_columns' in encoding_results:
                         categorical_count = len(encoding_results['categorical_columns'])
-                        summary_parts.append(f"• **Categorical Columns:** {categorical_count} columns")
+                        summary_parts.append(f"• Categorical Columns: {categorical_count} columns")
                 
                 elif current_phase == 'transformations' and state.preprocessing_state.get('transformation_results'):
                     transformation_results = state.preprocessing_state['transformation_results']
                     if isinstance(transformation_results, dict) and 'numerical_columns' in transformation_results:
                         numerical_count = len(transformation_results['numerical_columns'])
-                        summary_parts.append(f"• **Numerical Columns:** {numerical_count} columns")
+                        summary_parts.append(f"• Numerical Columns: {numerical_count} columns")
                 
-                summary_parts.append(f"\n**💬 Available Commands:**")
+                summary_parts.append(f"\n💬 Available Commands:")
                 summary_parts.append(f"• `continue` - Continue with current phase")
                 summary_parts.append(f"• `skip` - Skip to next phase")
                 summary_parts.append(f"• `help` - Get assistance")
@@ -2904,27 +2904,27 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 slack_manager = global_slack_manager
             
             if slack_manager and state.chat_session:
-                confirmation_msg = f"""✅ **Target column set:** `{target_column}`
+                confirmation_msg = f"""✅ Target column set: `{target_column}`
 
-🧹 **Sequential Preprocessing Agent**
+🧹 Sequential Preprocessing Agent
 
-📊 **Current Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target Column:** {target_column}
+📊 Current Dataset: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+🎯 Target Column: {target_column}
 
-**🔄 Preprocessing Phases:**
+🔄 Preprocessing Phases:
 • `Overview` - Dataset analysis and summary
 • `Outliers` - Detect and handle outliers  
 • `Missing Values` - Handle missing data
 • `Encoding` - Categorical variable encoding
 • `Transformations` - Feature transformations
 
-**💬 Your Options:**
+💬 Your Options:
 • `proceed` - Start preprocessing workflow
 • `skip overview` - Skip to outlier detection
 • `explain outliers` - Learn about outlier handling
 • `summary` - Show current status
 
-💬 **What would you like to do?**"""
+💬 What would you like to do?"""
                 
                 slack_manager.send_message(state.chat_session, confirmation_msg)
             
@@ -2946,26 +2946,26 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
                 # Create column list with numbering for easy selection
                 column_list = []
                 for i, col in enumerate(available_columns, 1):
-                    column_list.append(f"**{i}.** `{col}`")
+                    column_list.append(f"{i}. `{col}`")
                 
                 columns_text = "\n".join(column_list)
                 
-                selection_msg = f"""🎯 **Target Column Selection Required**
+                selection_msg = f"""🎯 Target Column Selection Required
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+📊 Dataset: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
 
-**📋 Available Columns:**
+📋 Available Columns:
 {columns_text}
 
-**💬 How to select:**
+💬 How to select:
 • Type: `target column_name` (e.g., `target price`)
 • Type: `use column_name as target` (e.g., `use price as target`)
 • Or just type the column name directly
 
-❓ **Which column should be used as the target variable for prediction?**"""
+❓ Which column should be used as the target variable for prediction?"""
                 
                 if target_column and target_column not in available_columns:
-                    error_msg = f"\n❌ **Column '{target_column}' not found.** Please choose from the list above."
+                    error_msg = f"\n❌ Column '{target_column}' not found. Please choose from the list above."
                     selection_msg += error_msg
                 
                 slack_manager.send_message(state.chat_session, selection_msg)
@@ -3329,9 +3329,9 @@ Provide exactly 2-3 bullet points with:
 • Brief rationale for each suggestion
 
 Format as:
-• **Analysis Name** - Brief description with suggested parameters
-• **Analysis Name** - Brief description with suggested parameters  
-• **Analysis Name** - Brief description with suggested parameters
+• Analysis Name - Brief description with suggested parameters
+• Analysis Name - Brief description with suggested parameters  
+• Analysis Name - Brief description with suggested parameters
 
 Keep it concise and actionable."""
 
@@ -3339,7 +3339,7 @@ Keep it concise and actionable."""
                     response = llm.invoke([HumanMessage(content=prompt)])
                     
                     # Format and send suggestion
-                    suggestion_message = f"💡 **Data Science Suggestions:**\n\n{response.content}\n\n💬 Just tell me which analysis you'd like to run!"
+                    suggestion_message = f"💡 Data Science Suggestions:\n\n{response.content}\n\n💬 Just tell me which analysis you'd like to run!"
                     mock_say(suggestion_message)
                     
                 except Exception as e:
@@ -3423,13 +3423,13 @@ Keep it concise and actionable."""
                         slack_manager = global_slack_manager
                     
                     # Set proper error response and clear any cached responses
-                    error_message = """❌ **No Data Available for Feature Selection**
+                    error_message = """❌ No Data Available for Feature Selection
 
-**Please provide data first:**
+Please provide data first:
 • Upload a CSV file to Slack
 • Or run preprocessing first with your data
 
-**Example:**
+Example:
 • Upload `data.csv` file
 • Or say: "preprocess my data" first"""
                     
@@ -3668,17 +3668,17 @@ Keep it concise and actionable."""
                         print_to_log(f"✅ Feature selection menu sent to Slack")
                         
                         # Add a concise action prompt (no duplicate analysis options)
-                        action_prompt = """🎯 **Ready to start feature selection!**
+                        action_prompt = """🎯 Ready to start feature selection!
 
-**Or ask questions:**
+Or ask questions:
 • `how many features do we have?`
 • `what analysis should I run first?`
 • `explain IV analysis`
 
-**When finished with all analyses:**
+When finished with all analyses:
 • `proceed` - Complete feature selection and show final results
 
-💬 **What would you like to do first?**"""
+💬 What would you like to do first?"""
                         
                         print_to_log(f"🔧 DEBUG PROMPT SEND: About to send action prompt...")
                         slack_manager.send_message(state.chat_session, action_prompt)
@@ -3707,13 +3707,13 @@ Keep it concise and actionable."""
                                         slack_manager.session_threads[state.chat_session] = slack_manager.session_threads[session_id]
                                     break
                         available_cols = ', '.join(session.current_features[:5])
-                        target_prompt = f"""🎯 **Target Column Selection**
+                        target_prompt = f"""🎯 Target Column Selection
 
 Please specify your target column for feature selection analysis.
 
-📋 **Available columns**: {available_cols}{'...' if len(session.current_features) > 5 else ''}
+📋 Available columns: {available_cols}{'...' if len(session.current_features) > 5 else ''}
 
-💬 **How to specify**: 
+💬 How to specify: 
 • Type: `target column_name`
 • Or just: `column_name`
 
