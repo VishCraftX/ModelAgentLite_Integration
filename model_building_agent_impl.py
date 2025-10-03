@@ -1793,14 +1793,14 @@ IF USER ASKS FOR RANK ORDERING ON TEST DATA (mentions "test data", "test dataset
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Create test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 3. Get TEST probabilities: test_probabilities = current_model.predict_proba(X_test)[:,1]
-4. Create rank_df with TEST data only: pd.DataFrame({'actual': y_test.values, 'probability': test_probabilities})
+4. Create rank_df with TEST data only: pd.DataFrame({{'actual': y_test.values, 'probability': test_probabilities}})
 5. Create segments with pd.qcut(test_probabilities, q=N, duplicates='drop')
 6. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
 
 IF USER ASKS FOR GENERAL RANK ORDERING (no "test" specification - for business analysis):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Get FULL dataset probabilities: full_probabilities = current_model.predict_proba(X)[:,1]
-3. Create rank_df with FULL data: pd.DataFrame({'actual': y.values, 'probability': full_probabilities})
+3. Create rank_df with FULL data: pd.DataFrame({{'actual': y.values, 'probability': full_probabilities}})
 4. Create segments with pd.qcut(full_probabilities, q=N, duplicates='drop')
 5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
 
