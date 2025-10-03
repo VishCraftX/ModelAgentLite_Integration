@@ -1384,6 +1384,9 @@ Generate Python code to fulfill this request:"""
                     # User needs preprocessing - ask fast or slow mode
                     state.interactive_session['needs_mode_selection'] = True
                 
+                # CRITICAL FIX: Clear old last_response to prevent stale responses
+                state.last_response = None
+                
                 # CRITICAL FIX: Save state after updating interactive_session
                 try:
                     state_manager.save_state(state)
@@ -1479,6 +1482,9 @@ Generate Python code to fulfill this request:"""
 💬 **Choose:** Type `fast` or `slow`"""
                     
                     self.slack_manager.send_message(session_id, mode_choice_msg)
+                    
+                    # CRITICAL FIX: Clear old last_response so it doesn't override our new response
+                    state.last_response = f"Target column set to '{target_col}'. Please choose your mode."
                     
                     # Save state and return
                     self._save_session_state(session_id, state)
