@@ -268,8 +268,7 @@ class MultiAgentMLPipeline:
 
 🚀 **Choose Your ML Pipeline Mode**
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target:** {state.target_column}
+
 
 **⚡ Fast Mode (Automated):** 
 • Complete ML pipeline without interaction
@@ -1458,8 +1457,7 @@ Generate Python code to fulfill this request:"""
 
 🚀 **Choose Your ML Pipeline Mode**
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target:** {target_col}
+
 
 **⚡ Fast Mode (Automated):** 
 • Complete ML pipeline without interaction
@@ -1477,12 +1475,12 @@ Generate Python code to fulfill this request:"""
                     print_to_log(f"✅ [Early Interception] Mode selection message sent via Slack")
                     
                     # CRITICAL FIX: Clear old last_response so it doesn't override our new response
-                    state.last_response = f"Target column set to '{target_col}'. Please choose your mode."
+                    state.last_response = None
                     
                     # Save state and return
                     self._save_session_state(session_id, state)
                     print_to_log(f"🔧 [Early Interception] Returning with mode selection response")
-                    return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
+                    return self._prepare_response(state, "")
                 else:
                     # No match found - show available columns
                     available_cols_preview = ', '.join(available_columns[:5])
@@ -1585,7 +1583,7 @@ Generate Python code to fulfill this request:"""
                     state.interactive_session['phase'] = 'waiting_input'
                     
                     # Send preprocessing intro message
-                    self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
+                    self.slack_manager.send_message(session_id, """
 
 📋 **Preprocessing Workflow:**
 **Phase 1:** 🚨 Outliers - Handle extreme values
@@ -1606,11 +1604,11 @@ I'll detect extreme values that might affect your model and recommend handling s
 **Ready to proceed?**""")
                     
                     # Clear last_response to prevent stale messages
-                    state.last_response = "Interactive preprocessing started. Ready for outlier analysis."
+                    state.last_response = None
                     
                     # Save state and return
                     self._save_session_state(session_id, state)
-                    return self._prepare_response(state, "Interactive preprocessing started. Ready for outlier analysis.")
+                    return self._prepare_response(state, "")
                     
                 else:
                     self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
@@ -2096,8 +2094,6 @@ I'll detect extreme values that might affect your model and recommend handling s
 
 🚀 **Choose Your ML Pipeline Mode**
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
-🎯 **Target:** {target_col}
 
 **⚡ Fast Mode (Automated):** 
 • Complete ML pipeline without interaction
@@ -2112,7 +2108,7 @@ I'll detect extreme values that might affect your model and recommend handling s
 💬 **Choose:** Type `fast` or `slow`"""
                     
                     self.slack_manager.send_message(state.chat_session, response_msg)
-                    return self._prepare_response(state, f"Target column set to '{target_col}'. Please choose your mode.")
+                    return self._prepare_response(state,"")
                 else:
                     available_cols = list(state.raw_data.columns)
                     error_msg = f"""❌ **Column '{target_col}' not found.**
@@ -2148,7 +2144,7 @@ Please specify a valid column name."""
                     
                     # The preprocessing agent should handle the interactive flow
                     # and return the state with the interactive session set up
-                    return self._prepare_response(processed_state, "Interactive preprocessing started.")
+                    return self._prepare_response(processed_state, "")
                 else:
                     # Phase-aware: treat 'proceed' as 'continue' when already inside a phase
                     print_to_log("🔄 Proceed received in-phase → treating as 'continue'")
@@ -2220,7 +2216,7 @@ Please specify a valid column name."""
                 # Save the updated state to session state file
                 self._save_session_state(processed_state.session_id, processed_state)
                 
-                return self._prepare_response(processed_state, f"Processed in {current_phase} phase.")
+                return self._prepare_response(processed_state, f"")
             
 
             else:
@@ -2266,7 +2262,7 @@ What would you like to do?"""
         if accomplishments:
             return "\n".join(accomplishments)
         else:
-            return "✅ Operation completed successfully"
+            return ""
     
     def load_data(self, data: Any, session_id: str):
         """Load data into a session"""
