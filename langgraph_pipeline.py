@@ -314,15 +314,14 @@ class MultiAgentMLPipeline:
 
 💬 **Choose:** Type `fast` or `slow`"""
         else:
-            mode_choice_msg = f"""🎯 **Target Column & Pipeline Mode Selection**
+            mode_choice_msg = f"""👋 **Welcome to ModelAgent PRO!**
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+📊 **Dataset Uploaded:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
 
-**First, please specify your target column, then choose pipeline mode.**
+I'll help you build a machine learning model. Let's start!
 
-Available columns: {', '.join(list(state.raw_data.columns)[:5])}{'...' if len(state.raw_data.columns) > 5 else ''}
-
-💬 **Step 1:** Type your target column name"""
+💬 **Step 1:** Type your target column name
+_(Available: {', '.join(list(state.raw_data.columns)[:5])}{'...' if len(state.raw_data.columns) > 5 else ''})_"""
         
         # Send mode selection message to Slack
         self.slack_manager.send_message(state.chat_session, mode_choice_msg)
@@ -1589,18 +1588,19 @@ Generate Python code to fulfill this request:"""
                 result_state = preprocessing_agent.handle_interactive_command(state, "overview")
                 
                 # Send a message asking the user to proceed with outliers
-                self.slack_manager.send_message(session_id, """📊 **Dataset Overview Complete**
+                self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
 
-🎯 **Next Step: Outlier Analysis**
-The system is ready to analyze and handle outliers in your dataset.
+We'll clean your data step-by-step: outliers → missing values → encoding → transformations.
+
+📊 **Phase 1: Outlier Analysis**
+I'll detect extreme values that might affect your model and recommend handling strategies.
 
 **💬 Your Options:**
-• Type `proceed` or `yes` - Continue with outlier analysis
-• Type `skip` - Skip outlier analysis  
-• Type `explain` - Learn more about outlier analysis
-• Type `summary` - Show current preprocessing plan
+• Type `proceed` or `yes` - Start outlier analysis
+• Type `skip` - Skip this phase
+• Type `explain` - Learn more about outliers
 
-**Ready to proceed with outlier analysis?**""")
+**Ready to proceed?**""")
                 
                 self._save_session_state(session_id, result_state)
                 return self._prepare_response(result_state)
