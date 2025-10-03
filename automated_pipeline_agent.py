@@ -44,7 +44,7 @@ class AutomatedPipelineAgent:
         
         # Check if target column is set
         if not state.target_column:
-            state.last_response = f"""🎯 **Target Column Required**
+            state.last_response = f"""🎯Target Column Required
             
 Please specify your target column from: {', '.join(list(state.raw_data.columns)[:10])}{'...' if len(state.raw_data.columns) > 10 else ''}
 
@@ -161,7 +161,7 @@ Reply with the target column name (e.g., 'f_segment')"""
         
             
             # Phase 2: Intelligent Outlier Analysis
-            send_progress("🚨 **Starting outlier phase**")
+            send_progress("🚨 Starting outlier phase")
             print_to_log("🚨 Phase 2: Outliers - Running intelligent LLM + rule-based analysis")
             
             # Run the same intelligent outlier analysis as manual flow
@@ -211,10 +211,10 @@ Reply with the target column name (e.g., 'f_segment')"""
                 state.cleaned_data = df_working
                 state.preprocessing_state['outlier_results'] = {'outlier_columns': [], 'llm_recommendations': {}}
             
-            send_progress("✅ **Finished outlier phase**")
+            send_progress("✅ Finished outlier phase")
             
             # Phase 3: Intelligent Missing Values Analysis
-            send_progress("🗑️ **Starting missing values phase**")
+            send_progress("🗑️ Starting missing values phase")
             print_to_log("🗑️ Phase 3: Missing Values - Running intelligent LLM + rule-based analysis")
             
             # Update preprocessing state with current data
@@ -243,10 +243,10 @@ Reply with the target column name (e.g., 'f_segment')"""
                 print_to_log(f"⚠️ Missing values LLM analysis failed: {e}, using fallback")
                 state.preprocessing_state['missing_results'] = {'missing_columns': [], 'llm_recommendations': {}}
             
-            send_progress("✅ **Finished missing values phase**")
+            send_progress("✅ Finished missing values phase")
             
             # Phase 4: Intelligent Encoding Analysis
-            send_progress("🏷️ **Starting encoding phase**")
+            send_progress("🏷️ Starting encoding phase")
             print_to_log("🏷️ Phase 4: Encoding - Running intelligent LLM + rule-based analysis")
             
             # Update preprocessing state
@@ -275,13 +275,13 @@ Reply with the target column name (e.g., 'f_segment')"""
                 print_to_log(f"⚠️ Encoding LLM analysis failed: {e}, using fallback")
                 state.preprocessing_state['encoding_results'] = {'categorical_columns': [], 'llm_recommendations': {}}
             
-            send_progress("✅ **Finished encoding phase**")
-            send_progress("🎉 **Finished preprocessing**")
+            send_progress("✅ Finished encoding phase")
+            send_progress("🎉 Finished preprocessing")
             
             print_to_log(f"✅ All intelligent preprocessing completed: {df_working.shape}")
             
             # Phase 5: Feature Selection (following actual flow)
-            send_progress("🔍 **Started feature selection**")
+            send_progress("🔍 Started feature selection")
             print_to_log("🔍 Phase 6: Feature Selection - Following actual flow with IV and VIF filtering")
             
             try:
@@ -308,19 +308,19 @@ Reply with the target column name (e.g., 'f_segment')"""
                 if DataProcessor.load_and_clean_data(session):
                     clean_data = session.current_df
                     print_to_log(f"   📊 After intelligent cleaning: {clean_data.shape}")
-                    send_progress("🔍 **Started IV Value Filtering with threshold 0.02**")
+                    send_progress("🔍 Started IV Value Filtering with threshold 0.02")
                     print_to_log("🔧 Step 3: Applying IV filter (threshold > 0.02)")
                     # Apply IV filter with 0.02 threshold
                     iv_results = AnalysisEngine.run_iv_analysis(session, threshold=0.02)
-                    send_progress("🔍 **IV Value filtering complete**")
+                    send_progress("🔍 IV Value filtering complete")
                     if 'error' not in iv_results:
                         iv_filtered_data = session.current_df  # Data is updated in session
                         print_to_log(f"   📊 After IV filtering: {iv_filtered_data.shape}")
-                        send_progress("🔍 **Started VIF Value Filtering with threshold 5**")
+                        send_progress("🔍 Started VIF Value Filtering with threshold 5")
                         print_to_log("🔧 Step 4: Applying VIF (threshold > 5)")
                         # Apply VIF filter with 5 threshold
                         vif_results = AnalysisEngine.run_vif_analysis(session, threshold=5)
-                        send_progress("🔍 **VIF Value filtering complete**")
+                        send_progress("🔍 VIF Value filtering complete")
                         if 'error' not in vif_results:
                             final_data = session.current_df  # Data is updated in session
                             print_to_log(f"   📊 After VIF filtering: {final_data.shape}")
@@ -356,10 +356,10 @@ Reply with the target column name (e.g., 'f_segment')"""
                 state.processed_data = df_working
                 print_to_log(f"✅ Fallback: Using all {len(feature_columns)} features")
                 state.cleaned_data = df_working  # CRITICAL: Model agent looks for cleaned_data            
-            send_progress("✅ **Final features selected**")
+            send_progress("✅ Final features selected")
             
             # Phase 7: Route to Model Building Agent
-            send_progress("🤖 **Started modeling**")
+            send_progress("🤖 Started modeling")
             print_to_log("🤖 Phase 7: Routing to Model Building Agent")
             
             # Prepare original query for model building agent
@@ -427,7 +427,7 @@ Reply with the target column name (e.g., 'f_segment')"""
             import traceback
             traceback.print_exc()
             state.last_error = error_msg
-            state.last_response = f"❌ **Pipeline Error:** {error_msg}"
+            state.last_response = f"❌ Pipeline Error: {error_msg}"
             return state
 
 def automated_pipeline_agent(state: PipelineState) -> PipelineState:

@@ -184,12 +184,12 @@ USER REQUEST: "{message}"
 
 Based on this request, determine the user's intent and extract relevant parameters. Consider these possibilities:
 
-1. **STANDARD_ANALYSIS** - They want to RUN/APPLY IV analysis, correlation analysis, or CSI analysis to FILTER features
-2. **STANDARD_ANALYSIS_QUERY** - They want to QUERY results from standard analyses (IV, SHAP, correlation, CSI, VIF) like "top 10 SHAP features", "how many IV > 0.4", etc.
-3. **CUSTOM_ANALYSIS** - They want VIF filtering, PCA, LASSO, custom code analysis, or advanced techniques  
-4. **QUERY** - They're asking for general information about existing data (like feature counts, current state, etc.)
-5. **GENERAL_QUERY** - They're asking theoretical questions about feature selection concepts, bot capabilities, or general ML topics (no data needed)
-6. **REVERT** - They want to go back to initial/original state (after cleaning)
+1. STANDARD_ANALYSIS - They want to RUN/APPLY IV analysis, correlation analysis, or CSI analysis to FILTER features
+2. STANDARD_ANALYSIS_QUERY - They want to QUERY results from standard analyses (IV, SHAP, correlation, CSI, VIF) like "top 10 SHAP features", "how many IV > 0.4", etc.
+3. CUSTOM_ANALYSIS - They want VIF filtering, PCA, LASSO, custom code analysis, or advanced techniques  
+4. QUERY - They're asking for general information about existing data (like feature counts, current state, etc.)
+5. GENERAL_QUERY - They're asking theoretical questions about feature selection concepts, bot capabilities, or general ML topics (no data needed)
+6. REVERT - They want to go back to initial/original state (after cleaning)
 
 IMPORTANT DISTINCTION:
 - "run correlation analysis" or "filter highly correlated features" = STANDARD_ANALYSIS (removes correlated feature pairs)
@@ -215,7 +215,7 @@ CLASSIFICATION EXAMPLES:
 
 
 
-**STANDARD_ANALYSIS_QUERY** examples:
+STANDARD_ANALYSIS_QUERY examples:
 - "show me top 10 SHAP features" → STANDARD_ANALYSIS_QUERY
 - "give me top 5 IV values" → STANDARD_ANALYSIS_QUERY
 - "how many features have SHAP > 0.01" → STANDARD_ANALYSIS_QUERY
@@ -224,7 +224,7 @@ CLASSIFICATION EXAMPLES:
 - "top 10 features by IV analysis" → STANDARD_ANALYSIS_QUERY
 - "best features by correlation analysis" → STANDARD_ANALYSIS_QUERY
 
-**QUERY** examples:
+QUERY examples:
 - "top 20 features by correlation with target" → QUERY
 - "correlation with target column" → QUERY
 - "which features correlate most with target" → QUERY
@@ -260,7 +260,7 @@ CLASSIFICATION EXAMPLES:
 
 
 
-**STANDARD_ANALYSIS** examples:
+STANDARD_ANALYSIS examples:
 - "run IV analysis" → STANDARD_ANALYSIS
 - "apply correlation filter" → STANDARD_ANALYSIS
 - "do CSI analysis" → STANDARD_ANALYSIS
@@ -272,7 +272,7 @@ CLASSIFICATION EXAMPLES:
 - "SHAP 0.01" → STANDARD_ANALYSIS
 - "VIF 5" → STANDARD_ANALYSIS
 
-**CUSTOM_ANALYSIS** examples:
+CUSTOM_ANALYSIS examples:
 - "filter features with VIF > 5" → CUSTOM_ANALYSIS
 - "run LASSO feature selection" → CUSTOM_ANALYSIS
 - "keep only top 10 SHAP features" → CUSTOM_ANALYSIS
@@ -290,7 +290,7 @@ CLASSIFICATION EXAMPLES:
 - "principal component analysis" → CUSTOM_ANALYSIS
 - "run PCA with 95% variance" → CUSTOM_ANALYSIS
 
-**GENERAL_QUERY** examples:
+GENERAL_QUERY examples:
 - "what can you do" → GENERAL_QUERY
 - "what are your capabilities" → GENERAL_QUERY
 - "what is IV analysis" → GENERAL_QUERY
@@ -302,7 +302,7 @@ CLASSIFICATION EXAMPLES:
 - "explain feature importance" → GENERAL_QUERY
 - "help me understand" → GENERAL_QUERY
 
-**REVERT** examples:
+REVERT examples:
 - "revert to original" → REVERT
 - "go back to initial state" → REVERT
 - "start from start" → REVERT
@@ -491,16 +491,16 @@ class DataProcessor:
         """Load data and perform initial cleaning with user progress updates"""
         try:
             # Load data
-            say("📊 **Loading dataset...**")
+            say("📊 Loading dataset...")
             df = pd.read_csv(session.file_path)
             session.original_df = df.copy()
             
             rows, cols = df.shape
-            say(f"✅ **Dataset loaded:** {rows:,} rows, {cols} columns")
+            say(f"✅ Dataset loaded: {rows:,} rows, {cols} columns")
             
             # Show cleaning progress for large datasets
             if rows > 10000 or cols > 50:
-                say("🧹 **Cleaning data (removing single-value and non-numeric columns)...**")
+                say("🧹 Cleaning data (removing single-value and non-numeric columns)...")
             
             # Remove single value columns
             single_value_cols = []
@@ -545,14 +545,14 @@ class DataProcessor:
             # Show cleaning results
             removed_count = len(cols_to_remove)
             if removed_count > 0:
-                say(f"🧹 **Data cleaned:** Removed {len(single_value_cols)} single-value + {len(non_numeric_cols)} object columns")
+                say(f"🧹 Data cleaned: Removed {len(single_value_cols)} single-value + {len(non_numeric_cols)} object columns")
             
-            say(f"✅ **Ready for analysis:** {clean_df.shape[0]:,} rows, {clean_df.shape[1]} features")
+            say(f"✅ Ready for analysis: {clean_df.shape[0]:,} rows, {clean_df.shape[1]} features")
             
             return True
             
         except Exception as e:
-            say(f"❌ **Error processing dataset:** {str(e)}")
+            say(f"❌ Error processing dataset: {str(e)}")
             return False
 
 class AnalysisEngine:
@@ -1017,8 +1017,8 @@ class MenuGenerator:
     def show_crisp_summary(session: UserSession, say) -> None:
         """Show crisp summary after analysis instead of full menu"""
         if not session.analysis_chain:
-            summary = f"""📊 **Current State:** {len(session.current_features)} features
-💬 **Ready for analysis**"""
+            summary = f"""📊 Current State: {len(session.current_features)} features
+💬 Ready for analysis"""
             say(summary)
             return
         
@@ -1057,32 +1057,32 @@ class MenuGenerator:
             step_params = f" ({', '.join(step_details)})" if step_details else ""
             
             if step.type == "data_cleaning":
-                pipeline_steps.append(f"🧹 **{step.type}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"🧹 {step.type}: {step.features_before}→{step.features_after} (-{features_removed})")
             elif step.type == "csi_analysis":
-                pipeline_steps.append(f"📅 **CSI{step_params}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"📅 CSI{step_params}: {step.features_before}→{step.features_after} (-{features_removed})")
             elif step.type == "iv_analysis":
-                pipeline_steps.append(f"📊 **IV{step_params}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"📊 IV{step_params}: {step.features_before}→{step.features_after} (-{features_removed})")
             elif step.type == "correlation_analysis":
-                pipeline_steps.append(f"🔗 **Corr{step_params}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"🔗 Corr{step_params}: {step.features_before}→{step.features_after} (-{features_removed})")
             elif step.type == "vif_analysis":
-                pipeline_steps.append(f"📈 **VIF{step_params}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"📈 VIF{step_params}: {step.features_before}→{step.features_after} (-{features_removed})")
             elif step.type == "shap_analysis":
-                pipeline_steps.append(f"🎯 **SHAP{step_params}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"🎯 SHAP{step_params}: {step.features_before}→{step.features_after} (-{features_removed})")
             else:
-                pipeline_steps.append(f"⚙️ **{step.type}{step_params}**: {step.features_before}→{step.features_after} (-{features_removed})")
+                pipeline_steps.append(f"⚙️ {step.type}{step_params}: {step.features_before}→{step.features_after} (-{features_removed})")
         
         # Calculate reduction percentage
         reduction_pct = (total_removed / original_features * 100) if original_features > 0 else 0
         
         newline = "\n"
-        summary = f"""📊 **Pipeline Summary** | {len(session.current_features)} features remaining
+        summary = f"""📊 Pipeline Summary | {len(session.current_features)} features remaining
 
-📈 **Feature Reduction:** {original_features} → {len(session.current_features)} (-{total_removed}, {reduction_pct:.1f}%)
+📈 Feature Reduction: {original_features} → {len(session.current_features)} (-{total_removed}, {reduction_pct:.1f}%)
 
-🔄 **Analysis Steps:**
+🔄 Analysis Steps:
 {newline.join(pipeline_steps)}
 
-💬 **Continue:** Ask questions or request more analyses"""
+💬 Continue: Ask questions or request more analyses"""
         
         say(summary)
     
@@ -1093,12 +1093,12 @@ class MenuGenerator:
         pipeline_text = " -> ".join([step.type for step in session.analysis_chain])
         available_snapshots = list(session.snapshots.keys())
         
-        menu = f"""🎯 **Feature Selection Assistant**
+        menu = f"""🎯 Feature Selection Assistant
 
-📊 **Current Dataset:** {current_features_count} features
-📈 **Progress:** {pipeline_text or 'Ready to start'}
+📊 Current Dataset: {current_features_count} features
+📈 Progress: {pipeline_text or 'Ready to start'}
 
-**🔬 Available Analyses:**
+🔬 Available Analyses:
 • `IV analysis 0.05` - Filter by predictive power
 • `Correlation analysis 0.8` - Remove redundant features  
 • `CSI analysis 0.2` - Check feature stability over time
@@ -1107,18 +1107,18 @@ class MenuGenerator:
 • `PCA analysis` - Dimensionality reduction
 • `LASSO selection` - Regularized feature selection
 
-**❓ Ask Me Anything:**
+❓ Ask Me Anything:
 • Data questions: `how many features remain?`, `show me top features`
 • Analysis queries: `top 10 IV scores`, `correlation with target`
 • Learn concepts: `what is IV?`, `explain correlation analysis`
 • Get suggestions: `what analysis should I run next?`
 
-**🔄 Navigation:**
+🔄 Navigation:
 • Start over: `revert`, `go back to clean data`, `reset`
 • Check progress: `show pipeline`, `current summary`
 • Complete: `proceed`, `finalize analysis`
 
-💬 **What would you like to do next?**"""
+💬 What would you like to do next?"""
         
         return menu
     
@@ -1126,26 +1126,26 @@ class MenuGenerator:
     def format_analysis_result(analysis_type: str, result: Dict[str, Any]) -> str:
         """Format analysis results for display"""
         if result.get("error"):
-            return f"❌ **{analysis_type.upper()} Analysis Failed:** {result['error']}"
+            return f"❌ {analysis_type.upper()} Analysis Failed: {result['error']}"
         
         if analysis_type == "iv_analysis":
-            return f"""✅ **IV Analysis Complete**
+            return f"""✅ IV Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features removed: {result['features_removed']}
 • Remaining features: {result['remaining_features']}
 
-📈 **Top IV Scores:**"""
+📈 Top IV Scores:"""
         
         elif analysis_type == "correlation_analysis":
-            return f"""✅ **Correlation Analysis Complete**
+            return f"""✅ Correlation Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features removed: {result['features_removed']} 
 • Remaining features: {result['remaining_features']}
 • High correlation pairs found: {len(result.get('high_corr_pairs', []))}"""
         
-        return f"✅ **{analysis_type.upper()} Analysis Complete**"
+        return f"✅ {analysis_type.upper()} Analysis Complete"
 
 class AgenticFeatureSelectionBot:
     """Main bot controller with clean state management"""
@@ -1202,7 +1202,7 @@ class AgenticFeatureSelectionBot:
                 return
             
             # Show immediate welcome message
-            say(f"👋 **Welcome to Agentic Feature Selection!**\n🔄 **Processing your file:** {file_info['name']}...")
+            say(f"👋 Welcome to Agentic Feature Selection!\n🔄 Processing your file: {file_info['name']}...")
             
             # Download file
             import requests
@@ -1216,7 +1216,7 @@ class AgenticFeatureSelectionBot:
                 f.write(response.content)
             
             # Show data scanning message
-            say("🔍 **Scanning dataset and preparing for analysis...**")
+            say("🔍 Scanning dataset and preparing for analysis...")
             
             # Create user session
             session = UserSession(
@@ -1233,17 +1233,17 @@ class AgenticFeatureSelectionBot:
                 
                 # Show target column selection
                 columns = session.current_features
-                say(f"""📁 **File uploaded:** {file_info['name']}
+                say(f"""📁 File uploaded: {file_info['name']}
 
-🎯 **Target Column Selection**
+🎯 Target Column Selection
 
 Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
 
-📝 **Please specify your target column:**
+📝 Please specify your target column:
 • Type the column name directly (e.g., `is_fraud`)  
 • Or use: `target column_name`
 
-**Example:** `is_fraud` or `target is_fraud`""")
+Example: `is_fraud` or `target is_fraud`""")
             else:
                 say("❌ Error processing the uploaded file. Please check the file format and try again.")
                 
@@ -1318,7 +1318,7 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
         session.target_column = target_column
         session.phase = "waiting_input"
         
-        say(f"🎯 **Target column set:** {target_column}", thread_ts=None)
+        say(f"🎯 Target column set: {target_column}", thread_ts=None)
         
         # Show main menu
         menu = MenuGenerator.generate_main_menu(session)
@@ -1366,7 +1366,7 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
         threshold = intent_data.get("threshold", 0.05)
         
         # Show what we're doing
-        say(f"🔄 **Running {analysis_type.upper()} Analysis** with threshold {threshold}...")
+        say(f"🔄 Running {analysis_type.upper()} Analysis with threshold {threshold}...")
         
         if analysis_type == "iv":
             result = AnalysisEngine.run_iv_analysis(session, threshold)
@@ -1375,20 +1375,20 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 iv_scores = result.get("iv_scores", {})
                 top_features = sorted(iv_scores.items(), key=lambda x: x[1], reverse=True)[:5]
                 
-                response = f"""✅ **IV Analysis Complete**
+                response = f"""✅ IV Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Features removed: {result.get('features_removed', 0)} (IV < {threshold})
 • Remaining features: {result.get('remaining_features', 0)}
 
-📈 **Top IV Scores:**"""
+📈 Top IV Scores:"""
                 
                 for feature, score in top_features:
                     if feature != session.target_column:  # Don't show target column IV
                         response += f"{chr(10)}• {feature}: {score:.4f}"
                 
-                response += f"\n\n🎯 **Analysis added to pipeline!**"
+                response += f"\n\n🎯 Analysis added to pipeline!"
                 say(response)
             else:
                 say(f"❌ IV Analysis failed: {result.get('error', 'Unknown error')}")
@@ -1397,22 +1397,22 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
             result = AnalysisEngine.run_correlation_analysis(session, threshold)
             if result.get("success"):
                 high_corr_pairs = result.get("high_corr_pairs", [])
-                response = f"""✅ **Correlation Analysis Complete**
+                response = f"""✅ Correlation Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Features removed: {result.get('features_removed', 0)} (correlation > {threshold})
 • Remaining features: {result.get('remaining_features', 0)}
 • High correlation pairs found: {len(high_corr_pairs)}"""
 
                 if high_corr_pairs:
-                    response += f"{chr(10)}{chr(10)}📈 **Removed Correlations:**"
+                    response += f"{chr(10)}{chr(10)}📈 Removed Correlations:"
                     for col1, col2, corr_val in high_corr_pairs[:3]:  # Show top 3
                         response += f"{chr(10)}• {col1} ↔ {col2}: {corr_val:.3f}"
                     if len(high_corr_pairs) > 3:
                         response += f"{chr(10)}• ... and {len(high_corr_pairs) - 3} more"
 
-                response += f"{chr(10)}{chr(10)}🎯 **Analysis added to pipeline!**"
+                response += f"{chr(10)}{chr(10)}🎯 Analysis added to pipeline!"
                 say(response)
             else:
                 say(f"❌ Correlation Analysis failed: {result.get('error', 'Unknown error')}")
@@ -1431,31 +1431,31 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 datetime_candidates = self._find_datetime_columns(session)
                 
                 if datetime_candidates:
-                    response = f"""📅 **CSI Analysis Setup**
+                    response = f"""📅 CSI Analysis Setup
 
-🔍 **Detected potential datetime columns:**
+🔍 Detected potential datetime columns:
 {chr(10).join([f'• {col}' for col in datetime_candidates[:5]])}
 
-📝 **Please specify (in natural language):**
-• **Datetime column**: e.g., "use transaction_date as datetime column"
-• **OOT start month**: e.g., "set oot month to 2023M09"
+📝 Please specify (in natural language):
+• Datetime column: e.g., "use transaction_date as datetime column"
+• OOT start month: e.g., "set oot month to 2023M09"
 
-**Example:** 
+Example: 
 "use transaction_date as datetime column and set oot month to 2023M09\""""
                 else:
                     # Get original columns for display
                     orig_cols = list(session.original_df.columns) if session.original_df is not None else session.current_features
-                    response = f"""📅 **CSI Analysis Setup**
+                    response = f"""📅 CSI Analysis Setup
 
-⚠️ **No obvious datetime columns detected.**
+⚠️ No obvious datetime columns detected.
 
-📝 **Please specify (in natural language):**
-• **Datetime column**: e.g., "use your_date_column as datetime column"
-• **OOT start month**: e.g., "set oot month to 2023M09"
+📝 Please specify (in natural language):
+• Datetime column: e.g., "use your_date_column as datetime column"
+• OOT start month: e.g., "set oot month to 2023M09"
 
-📋 **Available columns:** {', '.join(orig_cols[:10])}{'...' if len(orig_cols) > 10 else ''}
+📋 Available columns: {', '.join(orig_cols[:10])}{'...' if len(orig_cols) > 10 else ''}
 
-**Example:** 
+Example: 
 "use your_date_column as datetime column and set oot month to 2023M09\""""
                 
                 say(response)
@@ -1466,16 +1466,16 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 # Run CSI analysis with existing datetime column
                 result = AnalysisEngine.run_csi_analysis(session, threshold)
                 if result.get("success"):
-                    response = f"""✅ **CSI Analysis Complete**
+                    response = f"""✅ CSI Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Features removed: {result.get('features_removed', 0)} (CSI > {threshold})
 • Remaining features: {result.get('remaining_features', 0)}
 • Datetime column: {session.datetime_column}
 • OOT month: {session.oot_month}
 
-🎯 **Analysis added to pipeline!**"""
+🎯 Analysis added to pipeline!"""
                     say(response)
                 else:
                     say(f"❌ CSI Analysis failed: {result.get('error', 'Unknown error')}")
@@ -1501,20 +1501,20 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 vif_scores = result.get("vif_scores", {})
                 top_features = sorted(vif_scores.items(), key=lambda x: x[1], reverse=True)[:5]
                 
-                response = f"""✅ **VIF Analysis Complete**
+                response = f"""✅ VIF Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Features removed: {result.get('features_removed', 0)} (VIF > {threshold})
 • Remaining features: {result.get('remaining_features', 0)}
 
-📈 **Top VIF Scores:**"""
+📈 Top VIF Scores:"""
                 
                 for feature, score in top_features:
                     if feature != session.target_column:  # Don't show target column VIF
                         response += f"{chr(10)}• {feature}: {score:.4f}"
                 
-                response += f"\n\n🎯 **Analysis added to pipeline!**"
+                response += f"\n\n🎯 Analysis added to pipeline!"
                 print_to_log(f"🔧 DEBUG VIF: Sending success response to Slack")
                 say(response)
             elif result.get("error"):
@@ -1534,7 +1534,7 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
         analysis_type = intent_data.get("analysis_type", "").lower()
         query_details = intent_data.get("query_details", "")
         
-        say(f"🔄 **Running {analysis_type.upper()} Analysis**...")
+        say(f"🔄 Running {analysis_type.upper()} Analysis...")
         
         if analysis_type == "shap":
             # Handle SHAP analysis as a direct tool
@@ -1554,30 +1554,30 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                 top_features = sorted(shap_scores.items(), key=lambda x: x[1], reverse=True)[:5]
                 
                 if top_n:
-                    response = f"""✅ **SHAP Analysis Complete**
+                    response = f"""✅ SHAP Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Kept top: {top_n} most important features
 • Features removed: {result.get('features_removed', 0)}
 • Remaining features: {result.get('remaining_features', 0)}
 
-📈 **Top SHAP Scores:**"""
+📈 Top SHAP Scores:"""
                 else:
-                    response = f"""✅ **SHAP Analysis Complete**
+                    response = f"""✅ SHAP Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Features removed: {result.get('features_removed', 0)} (SHAP < {threshold})
 • Remaining features: {result.get('remaining_features', 0)}
 
-📈 **Top SHAP Scores:**"""
+📈 Top SHAP Scores:"""
                 
                 for feature, score in top_features:
                     if feature != session.target_column:  # Don't show target column SHAP
                         response += f"{chr(10)}• {feature}: {score:.4f}"
                 
-                response += f"\n\n🎯 **Analysis added to pipeline!**"
+                response += f"\n\n🎯 Analysis added to pipeline!"
                 say(response)
             else:
                 say(f"❌ SHAP Analysis failed: {result.get('error', 'Unknown error')}")
@@ -1591,7 +1591,7 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
         query_details = intent_data.get("query_details", "")
         threshold = intent_data.get("threshold")
         
-        say(f"🔄 **Running {analysis_type.upper()} Analysis**...")
+        say(f"🔄 Running {analysis_type.upper()} Analysis...")
         
         try:
             llm = LLMManager.get_llm(session.model_name)
@@ -1663,14 +1663,14 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                             "step": len(session.analysis_chain) - 1
                         }
                         
-                        response_msg = f"""✅ **{analysis_type.upper()} Analysis Complete**
+                        response_msg = f"""✅ {analysis_type.upper()} Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {features_before}
 • Features removed: {len(features_to_remove)} 
 • Remaining features: {len(remaining_features)}
 
-🎯 **Analysis added to pipeline!**"""
+🎯 Analysis added to pipeline!"""
                         
                         say(response_msg)
                         
@@ -1693,10 +1693,10 @@ Available columns: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}
                     prompt += f"\n\nPREVIOUS ATTEMPT FAILED WITH ERROR: {str(e)}\nPlease fix the code and avoid this error."
             
             # All attempts failed
-            say(f"🔧 **{analysis_type.upper()} Analysis Coming Soon**: This analysis is temporarily unavailable. Please try other analyses or check back later.")
+            say(f"🔧 {analysis_type.upper()} Analysis Coming Soon: This analysis is temporarily unavailable. Please try other analyses or check back later.")
             
         except Exception as e:
-            say(f"🔧 **Analysis Temporarily Unavailable**: Please try other analyses or check back later.")
+            say(f"🔧 Analysis Temporarily Unavailable: Please try other analyses or check back later.")
     
     def _generate_top_features_summary(self, session: UserSession, analysis_type: str, analysis_scores: dict, say):
         """Generate LLM-based summary of top features from custom analysis"""
@@ -1720,13 +1720,13 @@ INSTRUCTIONS:
 - Add a brief interpretation of what high/low scores indicate
 
 Example format:
-🏆 **Top {analysis_type.upper()} Features:**
+🏆 Top {analysis_type.upper()} Features:
 • feature_A: 0.85 - Highest {analysis_type.lower()} score
 • feature_B: 0.72 - Strong {analysis_type.lower()} importance  
 • feature_C: 0.68 - Good {analysis_type.lower()} value
 ...
 
-💡 **Interpretation:** Higher {analysis_type.lower()} scores indicate [brief explanation]
+💡 Interpretation: Higher {analysis_type.lower()} scores indicate [brief explanation]
 """
             
             logger.info(f"🤖 GENERATING TOP FEATURES SUMMARY | User: {session.user_id} | Analysis: {analysis_type}")
@@ -1740,7 +1740,7 @@ Example format:
             # Fallback to simple top 5 list
             sorted_scores = sorted(analysis_scores.items(), key=lambda x: x[1], reverse=True)
             top_5 = sorted_scores[:5]
-            fallback_msg = f"🏆 **Top 5 {analysis_type.upper()} Features:**\n"
+            fallback_msg = f"🏆 Top 5 {analysis_type.upper()} Features:\n"
             for i, (feature, score) in enumerate(top_5, 1):
                 fallback_msg += f"{i}. {feature}: {score:.4f}\n"
             say(fallback_msg)
@@ -2027,14 +2027,14 @@ Generate the complete code now:"""
             session.oot_month = None
             session.phase = "waiting_input"
             
-            say(f"""✅ **Reverted to Cleaned Dataset**
+            say(f"""✅ Reverted to Cleaned Dataset
 
-📊 **Current State:**
+📊 Current State:
 • Features: {len(session.current_features)} (after removing single-value & object columns)
 • Pipeline: data_cleaning only
 • Removed analysis steps: {len(session.analysis_chain) - 1 if len(session.analysis_chain) > 1 else 0}
 
-🔄 **Ready for fresh analysis!**""")
+🔄 Ready for fresh analysis!""")
             
             # Show crisp summary
             MenuGenerator.show_crisp_summary(session, say)
@@ -2136,7 +2136,7 @@ Convert date formats to YYYYMXX:
                     # Only show confirmation if it's actually changing
                     if session.datetime_column != datetime_col:
                         session.datetime_column = datetime_col
-                        say(f"✅ **Datetime column set:** {datetime_col}")
+                        say(f"✅ Datetime column set: {datetime_col}")
                     else:
                         session.datetime_column = datetime_col  # Set silently if same value
                 else:
@@ -2151,7 +2151,7 @@ Convert date formats to YYYYMXX:
                 # Only show confirmation if it's actually changing
                 if session.oot_month != oot_month:
                     session.oot_month = oot_month
-                    say(f"✅ **OOT month set:** {oot_month}")
+                    say(f"✅ OOT month set: {oot_month}")
                 else:
                     session.oot_month = oot_month  # Set silently if same value
             
@@ -2159,7 +2159,7 @@ Convert date formats to YYYYMXX:
             if session.datetime_column and session.oot_month and not getattr(session, 'csi_completed', False):
                 # Use the previously stored threshold
                 threshold = session.pending_csi_threshold or 0.2
-                say(f"🔄 **Running CSI Analysis** with threshold {threshold}...")
+                say(f"🔄 Running CSI Analysis with threshold {threshold}...")
                 self._run_csi_analysis(session, say, threshold)
                 # Clear the pending threshold after use
                 session.pending_csi_threshold = None
@@ -2176,18 +2176,18 @@ Convert date formats to YYYYMXX:
                 if not session.oot_month:
                     still_need.append("OOT month")
                 
-                say(f"📅 **Still need:** {' and '.join(still_need)}")
+                say(f"📅 Still need: {' and '.join(still_need)}")
                 
                 if not session.datetime_column:
-                    say(f"💡 **Available columns:** {available_cols}")
-                    say("📝 **Example:** 'use transaction_date as datetime column'")
+                    say(f"💡 Available columns: {available_cols}")
+                    say("📝 Example: 'use transaction_date as datetime column'")
                 
                 if not session.oot_month:
-                    say("📝 **Example:** 'set oot month to 2023M09'")
+                    say("📝 Example: 'set oot month to 2023M09'")
                     
         except Exception as e:
             say(f"❌ Error parsing datetime setup: {str(e)}")
-            say("📝 **Please specify:**\n• Datetime column from your data\n• OOT month in YYYYMXX format (e.g., 2023M09)\n\n**Examples:**\n• 'use transaction_date as datetime column'\n• 'set oot month to 2023M09'")
+            say("📝 Please specify:\n• Datetime column from your data\n• OOT month in YYYYMXX format (e.g., 2023M09)\n\nExamples:\n• 'use transaction_date as datetime column'\n• 'set oot month to 2023M09'")
             
     
     def _run_csi_analysis(self, session: UserSession, say, threshold: float = 0.2):
@@ -2195,16 +2195,16 @@ Convert date formats to YYYYMXX:
         try:
             result = AnalysisEngine.run_csi_analysis(session, threshold=threshold)
             if result.get("success"):
-                response = f"""✅ **CSI Analysis Complete**
+                response = f"""✅ CSI Analysis Complete
 
-📊 **Results:**
+📊 Results:
 • Features before: {result.get('features_removed', 0) + result.get('remaining_features', 0)}
 • Features removed: {result.get('features_removed', 0)} (CSI > {threshold})
 • Remaining features: {result.get('remaining_features', 0)}
 • Datetime column: {session.datetime_column}
 • OOT month: {session.oot_month}
 
-🎯 **Analysis added to pipeline!**"""
+🎯 Analysis added to pipeline!"""
                 say(response)
                 
                 # Reset phase - no waterfall summary
@@ -2287,12 +2287,12 @@ Example good responses:
             # Minimal fallback
             if "features" in query.lower():
                 newline = "\n"
-                say(f"📊 **Current Features:** {len(session.current_features)} features{newline}{newline}Features: {', '.join(session.current_features[:10])}{'...' if len(session.current_features) > 10 else ''}")
+                say(f"📊 Current Features: {len(session.current_features)} features{newline}{newline}Features: {', '.join(session.current_features[:10])}{'...' if len(session.current_features) > 10 else ''}")
             elif "pipeline" in query.lower() or "summary" in query.lower():
                 self._generate_detailed_summary(session, say)
             else:
                 newline = "\n"
-                say(f"💡 **Query about:** {query}{newline}{newline}I can help you with feature information, pipeline status, and analysis suggestions.")
+                say(f"💡 Query about: {query}{newline}{newline}I can help you with feature information, pipeline status, and analysis suggestions.")
     
     def handle_general_query(self, session: UserSession, intent_data: dict, say):
         """Handle general theoretical questions about feature selection and bot capabilities"""
@@ -2336,7 +2336,7 @@ A: "CSI (Characteristic Stability Index) measures feature stability over time pe
             
         except Exception as e:
             logger.error(f"💥 GENERAL QUERY FAILED | User: {session.user_id} | Error: {str(e)}")
-            say(f"❌ **Error answering your question**: {str(e)}")
+            say(f"❌ Error answering your question: {str(e)}")
     
     def handle_suggestion_request(self, session: UserSession, intent_data: dict, say):
         """Handle requests for analysis suggestions based on current progress"""
@@ -2403,17 +2403,17 @@ COMMAND EXAMPLES:
 - "PCA analysis 95% variance" (NOT "pca_analysis(variance=0.95)")
 
 RESPONSE FORMAT:
-🎯 **Recommended Next Steps:**
+🎯 Recommended Next Steps:
 
-1. **[Analysis Name]** - [Brief explanation why this makes sense now]
+1. [Analysis Name] - [Brief explanation why this makes sense now]
    • Just say: `[natural conversational command]`
    • Why now: [specific reason based on current state]
 
-2. **[Analysis Name]** - [Brief explanation]
+2. [Analysis Name] - [Brief explanation]
    • Just say: `[natural conversational command]`
    • Why now: [reason]
 
-💡 **Data Science Insight:** [Brief insight about the overall strategy]
+💡 Data Science Insight: [Brief insight about the overall strategy]
 """
             
             logger.info(f"🤖 GENERATING ANALYSIS SUGGESTIONS | User: {session.user_id} | Features: {current_features}")
@@ -2425,16 +2425,16 @@ RESPONSE FORMAT:
         except Exception as e:
             logger.error(f"💥 SUGGESTION REQUEST FAILED | User: {session.user_id} | Error: {str(e)}")
             # Fallback suggestions based on simple rules
-            fallback_msg = "💡 **Suggestions based on your current progress:**\n\n"
+            fallback_msg = "💡 Suggestions based on your current progress:\n\n"
             
             if not any(step.type == "iv_analysis" for step in session.analysis_chain):
-                fallback_msg += "1. **IV Analysis** - Start with `IV analysis 0.05` to remove weak predictors\n"
+                fallback_msg += "1. IV Analysis - Start with `IV analysis 0.05` to remove weak predictors\n"
             
             if not any(step.type == "correlation_analysis" for step in session.analysis_chain):
-                fallback_msg += "2. **Correlation Analysis** - Try `correlation analysis 0.8` to remove redundant features\n"
+                fallback_msg += "2. Correlation Analysis - Try `correlation analysis 0.8` to remove redundant features\n"
             
             if current_features > 20:
-                fallback_msg += "3. **Dimensionality Reduction** - Consider `PCA analysis` to reduce feature count\n"
+                fallback_msg += "3. Dimensionality Reduction - Consider `PCA analysis` to reduce feature count\n"
             
             fallback_msg += "\n💡 These are standard next steps for feature selection!"
             say(fallback_msg)
@@ -2451,27 +2451,27 @@ RESPONSE FORMAT:
         
         if analysis_type == "iv":
             logger.info(f"📊 RUNNING IV ANALYSIS FOR QUERY | User: {session.user_id}")
-            say("🔍 **Computing IV values for all features...**")
+            say("🔍 Computing IV values for all features...")
             analysis_results = AnalysisEngine.run_iv_analysis(session, threshold=0.0)
         elif analysis_type == "correlation":
             logger.info(f"📊 RUNNING CORRELATION ANALYSIS FOR QUERY | User: {session.user_id}")
-            say("🔍 **Computing correlation values for all features...**")
+            say("🔍 Computing correlation values for all features...")
             analysis_results = AnalysisEngine.run_correlation_analysis(session, threshold=0.0)
         elif analysis_type == "shap":
             logger.info(f"📊 RUNNING SHAP ANALYSIS FOR QUERY | User: {session.user_id}")
-            say("🔍 **Computing SHAP values for all features...**")
+            say("🔍 Computing SHAP values for all features...")
             analysis_results = AnalysisEngine.run_shap_analysis(session, threshold=0.0)
         elif analysis_type == "csi":
             logger.info(f"📊 RUNNING CSI ANALYSIS FOR QUERY | User: {session.user_id}")
-            say("🔍 **Computing CSI values for all features...**")
+            say("🔍 Computing CSI values for all features...")
             if session.datetime_column and session.oot_month:
                 analysis_results = AnalysisEngine.run_csi_analysis(session, threshold=0.0)
             else:
-                say("❌ **CSI analysis requires datetime column and OOT month setup first.**")
+                say("❌ CSI analysis requires datetime column and OOT month setup first.")
                 return
         elif analysis_type == "vif":
             logger.info(f"📊 RUNNING VIF ANALYSIS FOR QUERY | User: {session.user_id}")
-            say("🔍 **Computing VIF values for all features...**")
+            say("🔍 Computing VIF values for all features...")
             # VIF is in custom analysis, but we can still compute it
             from sklearn.feature_selection import VarianceThreshold
             import pandas as pd
@@ -2493,7 +2493,7 @@ RESPONSE FORMAT:
         else:
             logger.warning(f"⚠️ UNKNOWN ANALYSIS TYPE | User: {session.user_id} | Type: {analysis_type}")
             logger.info(f"🔄 FALLBACK TO CUSTOM ANALYSIS | User: {session.user_id} | Type: {analysis_type}")
-            say(f"🔄 **{analysis_type.upper()} not available in standard analyses, routing to custom code execution...**")
+            say(f"🔄 {analysis_type.upper()} not available in standard analyses, routing to custom code execution...")
             
             # Fallback: Route to CUSTOM_ANALYSIS for code execution
             fallback_intent_data = {
@@ -2511,7 +2511,7 @@ RESPONSE FORMAT:
         
         if not analysis_results or not analysis_results.get("success"):
             logger.error(f"💥 ANALYSIS FAILED | User: {session.user_id} | Type: {analysis_type}")
-            say(f"❌ **{analysis_type.upper()} analysis failed.**")
+            say(f"❌ {analysis_type.upper()} analysis failed.")
             return
         
         # Extract the scores based on analysis type
@@ -2529,7 +2529,7 @@ RESPONSE FORMAT:
         
         if not scores:
             logger.warning(f"⚠️ NO SCORES FOUND | User: {session.user_id} | Type: {analysis_type}")
-            say(f"❌ **No {analysis_type.upper()} scores found.**")
+            say(f"❌ No {analysis_type.upper()} scores found.")
             return
         
         logger.info(f"✅ ANALYSIS COMPLETE | User: {session.user_id} | Type: {analysis_type} | Features: {len(scores)}")
@@ -2565,11 +2565,11 @@ Example responses:
             response = llm.invoke([HumanMessage(content=prompt)])
             
             logger.info(f"✅ LLM RESPONSE GENERATED | User: {session.user_id} | Length: {len(response.content)}")
-            say(f"📊 **{analysis_type.upper()} Query Results:**\n{response.content}")
+            say(f"📊 {analysis_type.upper()} Query Results:\n{response.content}")
             
         except Exception as e:
             logger.error(f"💥 LLM QUERY RESPONSE FAILED | User: {session.user_id} | Error: {str(e)}")
-            say(f"❌ **Error answering query**: {str(e)}")
+            say(f"❌ Error answering query: {str(e)}")
     
     def _requires_code_execution(self, session: UserSession, query: str) -> bool:
         """Use LLM to determine if query requires computational analysis"""
@@ -2626,7 +2626,7 @@ Respond with ONLY: "COMPUTATIONAL" or "TEXT\""""
     def _handle_code_based_query(self, session: UserSession, query: str, say):
         """Handle queries that require code execution for computation"""
         logger.info(f"💻 STARTING CODE-BASED QUERY | User: {session.user_id} | Query: '{query}'")
-        say(f"🔍 **Analyzing Data**: {query}")
+        say(f"🔍 Analyzing Data: {query}")
         
         try:
             llm = LLMManager.get_llm(session.model_name)
@@ -2746,7 +2746,7 @@ Generate COMPLETE, EXECUTABLE Python code for: "{query}"
                     if exec_result.get("success"):
                         result = exec_result.get("result", "Analysis completed successfully")
                         logger.info(f"🎉 CODE EXECUTION SUCCESS | User: {session.user_id} | Attempt: {attempt + 1}")
-                        say(f"📊 **Results:**\n{result}")
+                        say(f"📊 Results:\n{result}")
                         return
                     else:
                         error_msg = exec_result.get("error", "Unknown execution error")
@@ -2757,17 +2757,17 @@ Generate COMPLETE, EXECUTABLE Python code for: "{query}"
                             prompt += f"\n\nPREVIOUS ATTEMPT FAILED WITH ERROR: {error_msg}\nPlease fix the code and avoid this error."
                         else:
                             logger.error(f"💥 ALL ATTEMPTS FAILED | User: {session.user_id} | Final error: {error_msg}")
-                            say(f"🔧 **Analysis Coming Soon**: This type of analysis is temporarily unavailable. Please try other analyses.")
+                            say(f"🔧 Analysis Coming Soon: This type of analysis is temporarily unavailable. Please try other analyses.")
                         
                 except Exception as e:
                     if attempt < max_retries - 1:
                         # Update prompt with error for next attempt
                         prompt += f"\n\nPREVIOUS ATTEMPT FAILED WITH ERROR: {str(e)}\nPlease fix the code and avoid this error."
                     else:
-                        say(f"🔧 **Query Coming Soon**: This type of query is temporarily unavailable. Please try other questions.")
+                        say(f"🔧 Query Coming Soon: This type of query is temporarily unavailable. Please try other questions.")
             
         except Exception as e:
-            say(f"🔧 **Query Temporarily Unavailable**: Please try other questions or analyses.")
+            say(f"🔧 Query Temporarily Unavailable: Please try other questions or analyses.")
     
     def _execute_query_code(self, session: UserSession, code: str) -> Dict[str, Any]:
         """Execute query code safely and extract result"""
@@ -2861,25 +2861,25 @@ REQUIREMENTS:
 Generate a professional analysis summary:"""
             
             response = llm.invoke([HumanMessage(content=prompt)])
-            say(f"📊 **Pipeline Summary**\n\n{response.content}")
+            say(f"📊 Pipeline Summary\n\n{response.content}")
             
         except Exception as e:
             # Fallback to simple summary
             pipeline = " → ".join([step.type for step in session.analysis_chain]) if session.analysis_chain else "No analyses performed"
             original_count = session.analysis_chain[0].features_before if session.analysis_chain else len(session.current_features)
             
-            say(f"""📊 **Pipeline Summary**
+            say(f"""📊 Pipeline Summary
 
-🔄 **Analysis Chain:** {pipeline}
-📈 **Feature Reduction:** {original_count} → {len(session.current_features)} features
-📉 **Total Removed:** {original_count - len(session.current_features)} features
-🎯 **Target:** {session.target_column}
-📋 **Steps Completed:** {len(session.analysis_chain)}""")
+🔄 Analysis Chain: {pipeline}
+📈 Feature Reduction: {original_count} → {len(session.current_features)} features
+📉 Total Removed: {original_count - len(session.current_features)} features
+🎯 Target: {session.target_column}
+📋 Steps Completed: {len(session.analysis_chain)}""")
                 
     def generate_final_summary(self, session: UserSession, say):
         """Generate detailed waterfall final analysis summary"""
         if not session.analysis_chain:
-            say("📋 **No analyses performed yet.**")
+            say("📋 No analyses performed yet.")
             return
         
         # Build waterfall breakdown
@@ -2905,36 +2905,36 @@ Generate a professional analysis summary:"""
             step_params = f" ({', '.join(step_details)})" if step_details else ""
             
             if step.type == "data_cleaning":
-                waterfall_steps.append(f"🧹 **Data Cleaning**: {step.features_before} → {step.features_after} features (removed {features_removed} single-value/object columns)")
+                waterfall_steps.append(f"🧹 Data Cleaning: {step.features_before} → {step.features_after} features (removed {features_removed} single-value/object columns)")
             elif step.type == "csi_analysis":
-                waterfall_steps.append(f"📅 **CSI Analysis{step_params}**: {step.features_before} → {step.features_after} features (removed {features_removed} unstable features)")
+                waterfall_steps.append(f"📅 CSI Analysis{step_params}: {step.features_before} → {step.features_after} features (removed {features_removed} unstable features)")
             elif step.type == "iv_analysis":
-                waterfall_steps.append(f"📊 **IV Analysis{step_params}**: {step.features_before} → {step.features_after} features (removed {features_removed} low-predictive features)")
+                waterfall_steps.append(f"📊 IV Analysis{step_params}: {step.features_before} → {step.features_after} features (removed {features_removed} low-predictive features)")
             elif step.type == "correlation_analysis":
-                waterfall_steps.append(f"🔗 **Correlation Analysis{step_params}**: {step.features_before} → {step.features_after} features (removed {features_removed} highly correlated features)")
+                waterfall_steps.append(f"🔗 Correlation Analysis{step_params}: {step.features_before} → {step.features_after} features (removed {features_removed} highly correlated features)")
             elif step.type == "vif_analysis":
-                waterfall_steps.append(f"📈 **VIF Analysis{step_params}**: {step.features_before} → {step.features_after} features (removed {features_removed} multicollinear features)")
+                waterfall_steps.append(f"📈 VIF Analysis{step_params}: {step.features_before} → {step.features_after} features (removed {features_removed} multicollinear features)")
             elif step.type == "shap_analysis":
-                waterfall_steps.append(f"🎯 **SHAP Analysis{step_params}**: {step.features_before} → {step.features_after} features (removed {features_removed} low-importance features)")
+                waterfall_steps.append(f"🎯 SHAP Analysis{step_params}: {step.features_before} → {step.features_after} features (removed {features_removed} low-importance features)")
             else:
-                waterfall_steps.append(f"⚙️ **{step.type.title()}{step_params}**: {step.features_before} → {step.features_after} features (removed {features_removed} features)")
+                waterfall_steps.append(f"⚙️ {step.type.title()}{step_params}: {step.features_before} → {step.features_after} features (removed {features_removed} features)")
         
         # Calculate reduction percentage
         reduction_pct = (total_removed / original_features * 100) if original_features > 0 else 0
         
         newline = "\n"
-        summary = f"""📋 **Feature Selection Analysis Complete**
+        summary = f"""📋 Feature Selection Analysis Complete
 
-📊 **Final Results:**
+📊 Final Results:
 • Started with: {original_features} features
 • Ended with: {len(session.current_features)} features  
 • Total removed: {total_removed} features ({reduction_pct:.1f}% reduction)
 • Target column: {session.target_column}
 
-🏗️ **Waterfall Breakdown:**
+🏗️ Waterfall Breakdown:
 {newline.join(waterfall_steps)}
 
-✅ **Analysis complete!** Your optimized dataset is ready for modeling."""
+✅ Analysis complete! Your optimized dataset is ready for modeling."""
         
         say(summary)
         session.phase = "completed"
