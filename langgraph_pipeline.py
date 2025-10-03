@@ -1505,73 +1505,87 @@ Generate Python code to fulfill this request:"""
               state.interactive_session is not None and 
               state.interactive_session.get('needs_mode_selection', False)):
             
-            print_to_log(f"🎯 [Early Interception] Mode selection needed, checking query: '{query}'")
-            query_lower = query.lower().strip()
+            # CRITICAL: Skip mode selection if preprocessing is already complete
+            # This allows "yes" commands after preprocessing to flow through to feature selection
+            preprocessing_complete = (
+                (hasattr(state, 'cleaned_data') and state.cleaned_data is not None) or
+                (hasattr(state, 'preprocessing_state') and 
+                 state.preprocessing_state and 
+                 state.preprocessing_state.get('completed', False))
+            )
             
-            if 'fast' in query_lower:
-                print_to_log("⚡ [Early Interception] Fast mode selected")
-                state.interactive_session['needs_mode_selection'] = False
-                state.interactive_session['mode_selected'] = 'fast'
-                state.interactive_session['original_query'] = query  # Update original query to current 'fast' command
+            if preprocessing_complete:
+                print_to_log(f"⏭️ [Early Interception] Preprocessing complete - skipping mode selection, letting query flow to agent")
+                # Don't intercept - let the query continue to the preprocessing agent's completion handler
+                pass
+            else:
+                print_to_log(f"🎯 [Early Interception] Mode selection needed, checking query: '{query}'")
+                query_lower = query.lower().strip()
                 
-                self.slack_manager.send_message(session_id, "⚡ **Fast Mode Selected** - Starting automated ML pipeline...")
-                
-                # Call automated pipeline agent (preprocessing + feature selection + model building)
-                from automated_pipeline_agent import automated_pipeline_agent
-                
-                # Save state before calling automated pipeline agent
-                self._save_session_state(session_id, state)
-                
-                # Call automated pipeline agent directly
-                result_state = automated_pipeline_agent(state)
-                
-                # Save result and return
-                self._save_session_state(session_id, result_state)
-                
-                # CRITICAL: Process pending file uploads for automated pipeline (normal flow handles this in slack_bot.py)
-                if hasattr(result_state, 'process_pending_file_uploads'):
-                    pending_uploads = getattr(result_state, 'pending_file_uploads', None)
-                    if pending_uploads and pending_uploads.get('files'):
-                        print_to_log(f"🔍 [Automated Pipeline] Processing {len(pending_uploads['files'])} pending file uploads...")
-                        uploads_processed = result_state.process_pending_file_uploads()
-                        if uploads_processed:
-                            print_to_log("✅ [Automated Pipeline] Pending file uploads processed successfully")
-                        else:
-                            print_to_log("⚠️ [Automated Pipeline] No pending file uploads were processed")
-                
-                # CRITICAL: Don't override the model building agent's comprehensive response with generic message
-                return self._prepare_response(result_state)
-                
-            elif 'slow' in query_lower:
-                print_to_log("🎛️ [Early Interception] Slow mode selected")
-                state.interactive_session['needs_mode_selection'] = False
-                state.interactive_session['mode_selected'] = 'slow'
-                state.interactive_session['session_active'] = True
-                state.interactive_session['agent_type'] = 'preprocessing'
-                state.interactive_session['phase'] = 'waiting_input'
-                state.interactive_session['original_query'] = query  # Update original query to current 'slow' command
-                
-                self.slack_manager.send_message(session_id, "🎛️ **Slow Mode Selected** - Starting interactive preprocessing...")
-                
-                # CRITICAL: Start slow mode preprocessing immediately instead of going through orchestrator again
-                print_to_log("🐌 Starting slow mode preprocessing workflow directly...")
-                self._save_session_state(session_id, state)
-                
-                # Initialize preprocessing state without calling the agent yet
-                # This avoids "unknown command" errors and lets us send a clean intro message
-                if not hasattr(state, 'preprocessing_state') or not state.preprocessing_state:
-                    state.preprocessing_state = {
-                        'current_phase': 'overview',
-                        'status': 'waiting',
-                        'completed_phases': []
-                    }
-                
-                # Update interactive session to show we're ready for preprocessing
-                state.interactive_session['current_phase'] = 'overview'
-                state.interactive_session['phase'] = 'waiting_input'
-                
-                # Send preprocessing intro message
-                self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
+                if 'fast' in query_lower:
+                    print_to_log("⚡ [Early Interception] Fast mode selected")
+                    state.interactive_session['needs_mode_selection'] = False
+                    state.interactive_session['mode_selected'] = 'fast'
+                    state.interactive_session['original_query'] = query  # Update original query to current 'fast' command
+                    
+                    self.slack_manager.send_message(session_id, "⚡ **Fast Mode Selected** - Starting automated ML pipeline...")
+                    
+                    # Call automated pipeline agent (preprocessing + feature selection + model building)
+                    from automated_pipeline_agent import automated_pipeline_agent
+                    
+                    # Save state before calling automated pipeline agent
+                    self._save_session_state(session_id, state)
+                    
+                    # Call automated pipeline agent directly
+                    result_state = automated_pipeline_agent(state)
+                    
+                    # Save result and return
+                    self._save_session_state(session_id, result_state)
+                    
+                    # CRITICAL: Process pending file uploads for automated pipeline (normal flow handles this in slack_bot.py)
+                    if hasattr(result_state, 'process_pending_file_uploads'):
+                        pending_uploads = getattr(result_state, 'pending_file_uploads', None)
+                        if pending_uploads and pending_uploads.get('files'):
+                            print_to_log(f"🔍 [Automated Pipeline] Processing {len(pending_uploads['files'])} pending file uploads...")
+                            uploads_processed = result_state.process_pending_file_uploads()
+                            if uploads_processed:
+                                print_to_log("✅ [Automated Pipeline] Pending file uploads processed successfully")
+                            else:
+                                print_to_log("⚠️ [Automated Pipeline] No pending file uploads were processed")
+                    
+                    # CRITICAL: Don't override the model building agent's comprehensive response with generic message
+                    return self._prepare_response(result_state)
+                    
+                elif 'slow' in query_lower:
+                    print_to_log("🎛️ [Early Interception] Slow mode selected")
+                    state.interactive_session['needs_mode_selection'] = False
+                    state.interactive_session['mode_selected'] = 'slow'
+                    state.interactive_session['session_active'] = True
+                    state.interactive_session['agent_type'] = 'preprocessing'
+                    state.interactive_session['phase'] = 'waiting_input'
+                    state.interactive_session['original_query'] = query  # Update original query to current 'slow' command
+                    
+                    self.slack_manager.send_message(session_id, "🎛️ **Slow Mode Selected** - Starting interactive preprocessing...")
+                    
+                    # CRITICAL: Start slow mode preprocessing immediately instead of going through orchestrator again
+                    print_to_log("🐌 Starting slow mode preprocessing workflow directly...")
+                    self._save_session_state(session_id, state)
+                    
+                    # Initialize preprocessing state without calling the agent yet
+                    # This avoids "unknown command" errors and lets us send a clean intro message
+                    if not hasattr(state, 'preprocessing_state') or not state.preprocessing_state:
+                        state.preprocessing_state = {
+                            'current_phase': 'overview',
+                            'status': 'waiting',
+                            'completed_phases': []
+                        }
+                    
+                    # Update interactive session to show we're ready for preprocessing
+                    state.interactive_session['current_phase'] = 'overview'
+                    state.interactive_session['phase'] = 'waiting_input'
+                    
+                    # Send preprocessing intro message
+                    self.slack_manager.send_message(session_id, """🎛️ **Interactive Preprocessing Started**
 
 📋 **Preprocessing Workflow:**
 **Phase 1:** 🚨 Outliers - Handle extreme values
@@ -1590,17 +1604,17 @@ I'll detect extreme values that might affect your model and recommend handling s
 • Type `explain` - Learn more about outliers
 
 **Ready to proceed?**""")
-                
-                # Clear last_response to prevent stale messages
-                state.last_response = "Interactive preprocessing started. Ready for outlier analysis."
-                
-                # Save state and return
-                self._save_session_state(session_id, state)
-                return self._prepare_response(state, "Interactive preprocessing started. Ready for outlier analysis.")
-                
-            else:
-                self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
-                return self._prepare_response(state, "Please choose fast or slow mode.")
+                    
+                    # Clear last_response to prevent stale messages
+                    state.last_response = "Interactive preprocessing started. Ready for outlier analysis."
+                    
+                    # Save state and return
+                    self._save_session_state(session_id, state)
+                    return self._prepare_response(state, "Interactive preprocessing started. Ready for outlier analysis.")
+                    
+                else:
+                    self.slack_manager.send_message(session_id, "❓ Please choose: Type `fast` for automated pipeline or `slow` for interactive mode")
+                    return self._prepare_response(state, "Please choose fast or slow mode.")
         
         # Clear pending file uploads for new queries - they should only be relevant to current query
         if state.pending_file_uploads:
