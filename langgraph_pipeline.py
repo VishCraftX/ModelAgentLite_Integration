@@ -1524,7 +1524,7 @@ Generate Python code to fulfill this request:"""
                     print_to_log("⚡ [Early Interception] Fast mode selected")
                     state.interactive_session['needs_mode_selection'] = False
                     state.interactive_session['mode_selected'] = 'fast'
-                    state.interactive_session['original_query'] = query  # Update original query to current 'fast' command
+                    # DO NOT overwrite original_query - preserve the user's actual intent from before mode selection
                     
                     self.slack_manager.send_message(session_id, "⚡ Fast Mode Selected - Starting automated ML pipeline...")
                     
@@ -1561,7 +1561,7 @@ Generate Python code to fulfill this request:"""
                     state.interactive_session['session_active'] = True
                     state.interactive_session['agent_type'] = 'preprocessing'
                     state.interactive_session['phase'] = 'waiting_input'
-                    state.interactive_session['original_query'] = query  # Update original query to current 'slow' command
+                    # DO NOT overwrite original_query - preserve the user's actual intent from before mode selection
                     
                     self.slack_manager.send_message(session_id, "🎛️ Slow Mode Selected - Starting interactive preprocessing...")
                     

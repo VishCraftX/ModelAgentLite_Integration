@@ -2740,8 +2740,10 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                         print_to_log(f"🔍 Full probabilities received: {len(full_probabilities)} probability arrays")
                     
                     # Add predictions and probabilities to pipeline state
-                    if hasattr(state, 'add_predictions_to_dataset'):
-                        success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
+                    # Note: state is a dict (GraphState), need to access PipelineState within it
+                    pipeline_state = state.get('pipeline_state') if isinstance(state, dict) else state
+                    if pipeline_state and hasattr(pipeline_state, 'add_predictions_to_dataset'):
+                        success = pipeline_state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
                         if success:
                             print_to_log(f"✅ Added predictions and probabilities to dataset")
                             
@@ -2759,7 +2761,7 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                                 
                                 # Create filename with model name
                                 timestamp = int(time.time())
-                                predictions_file = state.save_predictions_dataset(
+                                predictions_file = pipeline_state.save_predictions_dataset(
                                     os.path.join(artifacts_dir, f"predictions_dataset_{model_name}_{timestamp}.csv")
                                 )
                                 if predictions_file:
