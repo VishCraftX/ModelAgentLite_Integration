@@ -597,6 +597,11 @@ class StateManager:
             state.predictions_dataset.to_pickle(predictions_data_path)
             state_dict["predictions_dataset"] = predictions_data_path
         
+        if state.processed_data is not None:
+            processed_data_path = os.path.join(session_dir, "processed_data.pkl")
+            state.processed_data.to_pickle(processed_data_path)
+            state_dict["processed_data"] = processed_data_path
+        
         # Handle trained model
         if state.trained_model is not None:
             model_path = os.path.join(session_dir, "trained_model.pkl")
@@ -643,6 +648,11 @@ class StateManager:
                 state_dict["predictions_dataset"] = pd.read_pickle(state_dict["predictions_dataset"])
             else:
                 state_dict["predictions_dataset"] = None
+            
+            if isinstance(state_dict.get("processed_data"), str) and os.path.exists(state_dict["processed_data"]):
+                state_dict["processed_data"] = pd.read_pickle(state_dict["processed_data"])
+            else:
+                state_dict["processed_data"] = None
             
             # Load trained model
             if isinstance(state_dict.get("trained_model"), str) and os.path.exists(state_dict["trained_model"]):

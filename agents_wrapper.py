@@ -2890,7 +2890,7 @@ I'm having trouble accessing detailed analysis data right now, but I can help wi
             
             # IMMEDIATE SAVE: Persist target column to session state for fallback
             try:
-                from state_management import state_manager
+                from pipeline_state import state_manager
                 state_manager.save_state(state)
                 print_to_log(f"💾 Immediately saved target column '{target_column}' to session state")
             except Exception as e:
@@ -3911,7 +3911,7 @@ class ModelBuildingAgentWrapper:
                         
                         # IMMEDIATE SAVE: Persist target column to session state for future queries
                         try:
-                            from state_management import state_manager
+                            from pipeline_state import state_manager
                             state_manager.save_state(state)
                             print_to_log(f"💾 Persisted target column '{agent_target}' to session state")
                         except Exception as e:
@@ -3925,7 +3925,7 @@ class ModelBuildingAgentWrapper:
                     
                     # Save the cleared session state
                     try:
-                        from state_management import state_manager
+                        from pipeline_state import state_manager
                         state_manager.save_state(state)
                         print_to_log(f"💾 Saved cleared interactive session to prevent future conflicts")
                     except Exception as e:
