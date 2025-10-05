@@ -774,6 +774,10 @@ def ExecutionAgent(code: str, df: pd.DataFrame, user_id="default_user", max_retr
             if verbose:
                 print_to_log(f"✅ Loaded existing model from {state['model_path']}")
                 print_to_log(f"📊 Model type: {type(env['current_model']).__name__}")
+                # Log model parameters to help debug performance issues
+                if hasattr(env['current_model'], 'get_params'):
+                    params = env['current_model'].get_params()
+                    print_to_log(f"🔧 Model parameters: {params}")
         except Exception as e:
             if verbose:
                 print_to_log(f"⚠️ Failed to load existing model: {e}")
@@ -1604,7 +1608,7 @@ def model_building_agent(state: AgentState) -> AgentState:
             # For model-specific requests, ask for data
             state["response"] = """📊 I need data to work with! Please upload a data file first.
 
-**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+Supported formats: CSV, Excel (.xlsx/.xls), JSON, TSV
 
 Once you upload your data, I can help you build models and analyze it! 🎯"""
             return state
@@ -1787,28 +1791,33 @@ VALIDATION METRICS PROCESS (when user asks for validation metrics, model perform
 5. This ensures proper validation on unseen data
 
 RANK ORDERING/SEGMENTATION PROCESS (when user asks for rank ordering, deciles, buckets):
-🚨 CRITICAL: Check if user specifies "test data" or "test dataset" in their request:
+🚨 CRITICAL DEFAULT: ALWAYS CREATE RANK ORDERING ON TEST DATA UNLESS USER EXPLICITLY ASKS FOR FULL DATASET
 
-IF USER ASKS FOR RANK ORDERING ON TEST DATA (mentions "test data", "test dataset", "test set"):
+DEFAULT BEHAVIOR (most queries):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Create test split: X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 3. Get TEST probabilities: test_probabilities = current_model.predict_proba(X_test)[:,1]
-4. Create rank_df with TEST data only: pd.DataFrame({'actual': y_test.values, 'probability': test_probabilities})
+4. Create rank_df with TEST data only: pd.DataFrame({{'actual': y_test.values, 'probability': test_probabilities}})
 5. Create segments with pd.qcut(test_probabilities, q=N, duplicates='drop')
 6. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
+7. Store ONLY in 'rank_ordering_table': result['rank_ordering_table'] = rank_metrics.to_dict('records')
 
-IF USER ASKS FOR GENERAL RANK ORDERING (no "test" specification - for business analysis):
+ONLY IF USER EXPLICITLY ASKS FOR FULL DATASET (mentions "full data", "full dataset", "all data", "entire dataset"):
 1. Split data: X = sample_data.drop('TARGET_COLUMN', axis=1); y = sample_data['TARGET_COLUMN']
 2. Get FULL dataset probabilities: full_probabilities = current_model.predict_proba(X)[:,1]
-3. Create rank_df with FULL data: pd.DataFrame({'actual': y.values, 'probability': full_probabilities})
+3. Create rank_df with FULL data: pd.DataFrame({{'actual': y.values, 'probability': full_probabilities}})
 4. Create segments with pd.qcut(full_probabilities, q=N, duplicates='drop')
 5. Calculate badrate, coverage, cumulative metrics per the RANK_ORDERING_PROMPT guidelines
+6. Store in 'rank_ordering_table_full': result['rank_ordering_table_full'] = rank_metrics.to_dict('records')
+
+🚨 DO NOT CREATE BOTH TABLES UNLESS EXPLICITLY REQUESTED
+🚨 DEFAULT: Use TEST data only and store as 'rank_ordering_table' (without _test or _full suffix)
 
 ALWAYS include ALL required columns: bucket, badrate, totalUsersCount, cum_badrate, coverage, avg_probability, min_threshold, max_threshold
 
 Your specific task: {query}
 
-REMEMBER: Use 'current_model' for everything. Do not create any new models. Use train_test_split for validation metrics AND when user specifically asks for rank ordering on test data."""
+REMEMBER: Use 'current_model' for everything. Do not create any new models. DEFAULT to TEST data rank ordering only."""
         
     elif routing_decision == "no_model_available":
         state["response"] = """❌ You're asking to use an existing model, but no model has been built yet in this session.
@@ -1996,14 +2005,56 @@ else:
         if data is None:
             state["response"] = """📊 I need data to work with! Please upload a data file first.
 
-**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+Supported formats: CSV, Excel (.xlsx/.xls), JSON, TSV
 
 Once you upload your data, I can build multiple models and compare them! 🎯"""
             return state
         
-        # Generate multi-model comparison code with enhanced robustness
-        # Generate multi-model comparison code with enhanced robustness
-        multi_model_prompt = f"""You are building a comprehensive multi-model comparison system. 
+        # NEW MODULAR ORCHESTRATOR APPROACH - No more massive prompts!
+        try:
+            result = handle_multi_model_orchestrator(query, data, user_id, progress_callback)
+            
+            if result and isinstance(result, dict):
+                # Use format_multi_model_response for rich, detailed output
+                response = format_multi_model_response(result, query)
+                state["response"] = response
+                state["model_building_state"] = result
+                state["execution_result"] = result
+                
+                # Handle plot uploads for multi-model comparison
+                plots = result.get('comparison_plots', {})
+                if plots:
+                    plot_files = []
+                    for plot_type, plot_path in plots.items():
+                        if plot_path and os.path.exists(plot_path):
+                            plot_files.append({
+                                "path": plot_path, 
+                                "title": f"Multi-Model {plot_type.replace('_', ' ').title()}", 
+                                "type": "comparison_plot"
+                            })
+                    
+                    if plot_files:
+                        state["artifacts"] = state.get("artifacts", {})
+                        state["artifacts"]["files"] = plot_files
+                        result["artifacts"] = {"files": plot_files}
+                        print_to_log(f"📊 {len(plot_files)} comparison plots ready for upload")
+                
+                return state
+            else:
+                state["response"] = "❌ Multi-model comparison failed: Orchestrator returned no results"
+                return state
+                
+        except Exception as e:
+            print_to_log(f"❌ Multi-model orchestrator failed: {str(e)}")
+            import traceback
+            print_to_log(f"💥 Full traceback: {traceback.format_exc()}")
+            state["response"] = f"❌ Multi-model comparison failed: {str(e)}"
+            return state
+        
+        # DEAD CODE BELOW - TO BE REMOVED IN NEXT COMMIT
+        multi_model_prompt = f"""DEAD CODE - This entire prompt is dead code and will never execute.
+
+You are building a comprehensive multi-model comparison system. 
 
 USER REQUEST: {query}
 
@@ -2417,7 +2468,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 # User configuration
                 user_config = result.get('user_config', {})
                 if user_config:
-                    response_parts.append(f"⚙️ **Configuration:**")
+                    response_parts.append(f"⚙️ Configuration:")
                     response_parts.append(f"   • Models Requested: {', '.join(user_config.get('models_requested', []))}")
                     response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
                     response_parts.append(f"   • Selection Metric: {user_config.get('selection_metric', 'accuracy')}")
@@ -2425,7 +2476,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 
                 # Model performance summary
                 models = result.get('models', {})
-                response_parts.append(f"📊 **Model Performance Summary:**")
+                response_parts.append(f"📊 Model Performance Summary:")
                 for model_name, model_data in models.items():
                     metrics = model_data.get('metrics', {})
                     training_time = model_data.get('training_time', 0)
@@ -2436,53 +2487,53 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                         acc = metrics.get('accuracy', 0)
                         auc = metrics.get('roc_auc', 0)
                         f1 = metrics.get('f1_score', 0)
-                        response_parts.append(f"   🤖 **{model_name}**: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
+                        response_parts.append(f"   🤖 {model_name}: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
                     else:  # regression
                         r2 = metrics.get('r2_score', 0)
                         mae = metrics.get('mae', 0)
                         rmse = metrics.get('rmse', 0)
-                        response_parts.append(f"   🤖 **{model_name}**: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
+                        response_parts.append(f"   🤖 {model_name}: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
                 
                 # Model ranking
                 ranking = result.get('model_ranking', [])
                 if ranking and len(ranking) > 1:
-                    response_parts.append(f"\n🏅 **Model Ranking:**")
+                    response_parts.append(f"\n🏅 Model Ranking:")
                     for rank_info in ranking[:3]:  # Show top 3
                         rank = rank_info.get('rank', 0)
                         model_name = rank_info.get('model_name', 'Unknown')
                         score = rank_info.get('score', 0)
                         metric = rank_info.get('metric_used', 'score')
-                        response_parts.append(f"   #{rank}. **{model_name}**: {metric.upper()} = {score:.3f}")
+                        response_parts.append(f"   #{rank}. {model_name}: {metric.upper()} = {score:.3f}")
                 
                 # Best model details
                 best_model = result.get('best_model', {})
                 if best_model:
-                    response_parts.append(f"\n🏆 **Winner: {best_model.get('name', 'Unknown')}**")
-                    response_parts.append(f"   📈 **Selection:** {best_model.get('selection_criteria', 'Not specified')}")
+                    response_parts.append(f"\n🏆 Winner: {best_model.get('name', 'Unknown')}")
+                    response_parts.append(f"   📈 Selection: {best_model.get('selection_criteria', 'Not specified')}")
                     improvement = best_model.get('improvement_over_worst', '')
                     if improvement:
-                        response_parts.append(f"   📊 **Performance:** {improvement}")
+                        response_parts.append(f"   📊 Performance: {improvement}")
                 
                 # Summary insights
                 summary_data = result.get('summary', {})
                 if isinstance(summary_data, dict):
-                    response_parts.append(f"\n📋 **Analysis:**")
-                    response_parts.append(f"   • Best: **{summary_data.get('best_model', 'Unknown')}** ({summary_data.get('best_score', 0):.3f})")
-                    response_parts.append(f"   • Worst: **{summary_data.get('worst_model', 'Unknown')}** ({summary_data.get('worst_score', 0):.3f})")
+                    response_parts.append(f"\n📋 Analysis:")
+                    response_parts.append(f"   • Best: {summary_data.get('best_model', 'Unknown')} ({summary_data.get('best_score', 0):.3f})")
+                    response_parts.append(f"   • Worst: {summary_data.get('worst_model', 'Unknown')} ({summary_data.get('worst_score', 0):.3f})")
                     spread = summary_data.get('performance_spread', '')
                     if spread:
                         response_parts.append(f"   • Performance Spread: {spread}")
                     
                     recommendation = summary_data.get('recommendation', '')
                     if recommendation:
-                        response_parts.append(f"\n💡 **Recommendation:** {recommendation}")
+                        response_parts.append(f"\n💡 Recommendation: {recommendation}")
                 elif isinstance(summary_data, str) and summary_data:
-                    response_parts.append(f"\n📋 **Summary:** {summary_data}")
+                    response_parts.append(f"\n📋 Summary: {summary_data}")
                 
                 # Visualizations
                 plots = result.get('comparison_plots', {})
                 if plots:
-                    response_parts.append(f"\n📊 **Visualizations Generated:**")
+                    response_parts.append(f"\n📊 Visualizations Generated:")
                     if plots.get('roc_curves'):
                         response_parts.append(f"   • ROC Curves Comparison Plot")
                     if plots.get('metrics_table'):
@@ -2491,7 +2542,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 # Detailed comparison
                 detailed_comparison = result.get('detailed_comparison', '')
                 if detailed_comparison:
-                    response_parts.append(f"\n🔍 **Detailed Analysis:**")
+                    response_parts.append(f"\n🔍 Detailed Analysis:")
                     response_parts.append(f"{detailed_comparison}")
                 
                 state["response"] = "\n".join(response_parts)
@@ -2523,14 +2574,14 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 
                 state["response"] = f"""❌ Multi-model comparison failed: Result format issue
 
-🔍 **Diagnostic Information:**
+🔍 Diagnostic Information:
 • Result type: Dictionary
 • Available keys: {', '.join(available_keys)}
 • Missing required key: 'models'
 • Execution status: {execution_status}
 • Error details: {error_info}
 
-💡 **This suggests the generated code didn't complete successfully or didn't return the expected result format.**"""
+💡 This suggests the generated code didn't complete successfully or didn't return the expected result format."""
                 
             else:
                 # Result is not a dict at all
@@ -2540,12 +2591,12 @@ Generate complete, executable Python code that implements this dynamic multi-mod
                 
                 state["response"] = f"""❌ Multi-model comparison failed: Unexpected result format
 
-🔍 **Diagnostic Information:**
+🔍 Diagnostic Information:
 • Expected: Dictionary with 'models' key
 • Received: {result_type}
 • Content preview: {result_preview}
 
-💡 **This suggests the code execution failed or returned an unexpected data type.**"""
+💡 This suggests the code execution failed or returned an unexpected data type."""
             
             return state
             
@@ -2562,7 +2613,7 @@ Generate complete, executable Python code that implements this dynamic multi-mod
             # For model building requests without data, ask for data upload
             state["response"] = """📊 I need data to work with! Please upload a data file first.
 
-**Supported formats:** CSV, Excel (.xlsx/.xls), JSON, TSV
+Supported formats: CSV, Excel (.xlsx/.xls), JSON, TSV
 
 Once you upload your data, I can help you build models and analyze it! 🎯"""
             return state
@@ -2750,14 +2801,27 @@ Once you upload your data, I can help you build models and analyze it! 🎯"""
                             # Save predictions dataset to artifacts
                             artifacts_dir = os.path.join(os.path.dirname(result.get('model_path', '')), '..')
                             if os.path.exists(artifacts_dir):
-                                # Extract model name from result
+                                # Extract model name from result or model_path
                                 model_name = "unknown_model"
+                                
+                                # Try to get from result first
                                 if 'model' in result:
                                     model = result['model']
                                     if hasattr(model, '__class__'):
                                         model_name = model.__class__.__name__.lower()
                                     elif hasattr(model, 'name'):
                                         model_name = model.name.lower()
+                                
+                                # If still unknown, try to extract from model_path
+                                if model_name == "unknown_model":
+                                    model_path = result.get('model_path') or global_model_states.get(user_id, {}).get('model_path', '')
+                                    if model_path:
+                                        # Extract from filename: "LightGBM_model.joblib" -> "lightgbm"
+                                        filename = os.path.basename(model_path)
+                                        if '_model.joblib' in filename:
+                                            model_name = filename.replace('_model.joblib', '').lower()
+                                        elif '.joblib' in filename:
+                                            model_name = filename.replace('.joblib', '').lower()
                                 
                                 # Create filename with model name
                                 timestamp = int(time.time())
@@ -3579,6 +3643,538 @@ def create_agent_graph() -> StateGraph:
     
     return workflow.compile()
 
+# =============================================================================
+# MODULAR MULTI-MODEL ORCHESTRATOR
+# =============================================================================
+
+CONFIG_PARSER_PROMPT = """You are a CONFIG PARSING agent for a model comparison system.
+
+INPUT:
+- USER_QUERY: "{query}"
+
+TASK:
+1. Parse and extract these fields:
+   - models_requested: list of canonical model keys (see mapping below)
+   - test_size: float between 0 and 1 (default 0.2)
+   - selection_metric: string (default: accuracy for classification, r2 for regression)
+   - problem_type: "classification" or "regression"
+
+CANONICAL KEYS:
+- 'lgbm', 'xgboost', 'random_forest', 'decision_tree', 'neural_network', 'logistic_regression', 'svm'
+
+OUTPUT:
+Return STRICT JSON only (no explanation) with exactly these keys:
+{{
+  "models_requested": ["random_forest", "xgboost"],
+  "test_size": 0.2,
+  "selection_metric": "accuracy",
+  "problem_type": "classification"
+}}
+"""
+
+def handle_multi_model_orchestrator(query: str, sample_data, user_id: str, progress_callback=None):
+    """
+    Modular orchestrator that breaks multi-model comparison into focused steps.
+    Each step uses ExecutionAgent to run small, focused code blocks.
+    """
+    print_to_log("🎯 Starting modular multi-model orchestrator...")
+    
+    try:
+        # Step 0: Create artifacts directory
+        artifacts_dir = None
+        try:
+            if "_" in user_id:
+                from agent_utils import get_username_for_user_id
+                user, thread_ts = user_id.split("_", 1)
+                username = get_username_for_user_id(user)
+                thread_dir = os.path.join("user_data", username, thread_ts)
+                artifacts_dir = os.path.join(thread_dir, "artifacts")
+                if not os.path.exists(artifacts_dir):
+                    os.makedirs(artifacts_dir, exist_ok=True)
+                    print_to_log(f"📁 Created artifacts directory: {artifacts_dir}")
+                else:
+                    print_to_log(f"📁 Using artifacts directory: {artifacts_dir}")
+        except Exception as e:
+            print_to_log(f"⚠️ Failed to create artifacts directory: {e}")
+            artifacts_dir = "."  # Fallback to current directory
+        
+        # Step A: Config parsing using focused LLM prompt
+        print_to_log("📋 Step A: Parsing configuration...")
+        if progress_callback:
+            progress_callback("📋 Parsing request configuration...", "Config Parsing")
+        
+        config_prompt = CONFIG_PARSER_PROMPT.format(query=query)
+        
+        try:
+            response = ollama.chat(
+                model=MAIN_MODEL,
+                messages=[{"role": "user", "content": config_prompt}]
+            )
+            config_json = response["message"]["content"].strip()
+            # Extract JSON from markdown code blocks if present
+            if "```json" in config_json:
+                config_json = config_json.split("```json")[1].split("```")[0].strip()
+            elif "```" in config_json:
+                config_json = config_json.split("```")[1].split("```")[0].strip()
+            
+            config = json.loads(config_json)
+            print_to_log(f"✅ Config parsed: {config}")
+            
+        except Exception as e:
+            print_to_log(f"⚠️ Config parsing failed, using defaults: {e}")
+            config = {
+                "models_requested": ["random_forest", "xgboost", "lgbm"],
+                "test_size": 0.2,
+                "selection_metric": "accuracy",
+                "problem_type": "classification"
+            }
+        
+        # Step B: Model availability check (DIRECT CODE EXECUTION - NO LLM)
+        print_to_log("🔧 Step B: Checking model availability...")
+        if progress_callback:
+            progress_callback("🔧 Checking available models...", "Model Setup")
+        
+        model_availability_code = f"""
+import re
+
+user_request = "{query}"
+user_request_lower = user_request.lower()
+models_requested = {config['models_requested']}
+
+available_models = {{}}
+
+try:
+    from sklearn.ensemble import RandomForestClassifier
+    available_models['Random Forest'] = RandomForestClassifier(random_state=42)
+except ImportError:
+    print("Warning: sklearn RandomForest not available")
+
+try:
+    from lightgbm import LGBMClassifier
+    available_models['LightGBM'] = LGBMClassifier(verbosity=-1, random_state=42)
+except ImportError:
+    print("Warning: LightGBM not available")
+
+try:
+    from xgboost import XGBClassifier
+    available_models['XGBoost'] = XGBClassifier(eval_metric='logloss', verbosity=0, random_state=42)
+except ImportError:
+    print("Warning: XGBoost not available")
+
+try:
+    from sklearn.neural_network import MLPClassifier
+    available_models['Neural Network'] = MLPClassifier(random_state=42, max_iter=500)
+except ImportError:
+    print("Warning: Neural Network not available")
+
+try:
+    from sklearn.tree import DecisionTreeClassifier
+    available_models['Decision Tree'] = DecisionTreeClassifier(max_depth=5, random_state=42)
+except ImportError:
+    print("Warning: Decision Tree not available")
+
+try:
+    from sklearn.linear_model import LogisticRegression
+    available_models['Logistic Regression'] = LogisticRegression(random_state=42, max_iter=1000)
+except ImportError:
+    print("Warning: Logistic Regression not available")
+
+try:
+    from sklearn.svm import SVC
+    available_models['SVM'] = SVC(random_state=42, probability=True)
+except ImportError:
+    print("Warning: SVM not available")
+
+print(f"Available models: {{list(available_models.keys())}}")
+
+model_name_mapping = {{
+    'lgbm': 'LightGBM',
+    'xgboost': 'XGBoost',
+    'random_forest': 'Random Forest',
+    'decision_tree': 'Decision Tree',
+    'neural_network': 'Neural Network',
+    'logistic_regression': 'Logistic Regression',
+    'svm': 'SVM'
+}}
+
+models_to_train = {{}}
+for requested_model in models_requested:
+    mapped_name = model_name_mapping.get(requested_model)
+    if mapped_name and mapped_name in available_models:
+        models_to_train[mapped_name] = available_models[mapped_name]
+    else:
+        print(f"Warning: {{requested_model}} -> {{mapped_name}} not available")
+
+if len(models_to_train) < 2:
+    available_list = list(available_models.keys())
+    requested_list = models_requested
+    error_msg = f"Insufficient Models for Comparison. Requested: {{requested_list}}, Available: {{available_list}}, Found: {{len(models_to_train)}} (need minimum 2)"
+    raise ValueError(error_msg)
+
+print(f"Final models to build: {{list(models_to_train.keys())}}")
+"""
+        
+        # Execute model availability code
+        env_b = {'sample_data': sample_data}
+        exec(model_availability_code, env_b)
+        models_to_train = env_b['models_to_train']
+        print_to_log(f"✅ Models to train: {list(models_to_train.keys())}")
+        
+        # Step C: Training (DIRECT CODE EXECUTION - NO LLM)
+        print_to_log("🏋️ Step C: Training models...")
+        if progress_callback:
+            progress_callback(f"🏋️ Training {len(models_to_train)} models...", "Model Training")
+        
+        training_code = f"""
+import numpy as np
+import pandas as pd
+import time
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
+                           roc_auc_score, confusion_matrix, log_loss, roc_curve)
+import warnings
+warnings.filterwarnings('ignore')
+
+X = sample_data.drop('target', axis=1)
+y = sample_data['target']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size={config['test_size']}, random_state=42)
+
+models_results = {{}}
+
+for model_name, model in models_to_train.items():
+    try:
+        print(f"Training {{model_name}}...")
+        start_time = time.time()
+        model.fit(X_train, y_train)
+        training_time = time.time() - start_time
+
+        y_pred = model.predict(X_test)
+        y_proba = model.predict_proba(X_test) if hasattr(model, 'predict_proba') else None
+
+        metrics = {{
+            'accuracy': accuracy_score(y_test, y_pred),
+            'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
+            'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
+            'f1': f1_score(y_test, y_pred, average='weighted', zero_division=0),
+            'roc_auc': roc_auc_score(y_test, y_proba[:, 1]) if y_proba is not None and y_proba.shape[1] == 2 else None,
+        }}
+
+        # Save model to artifacts directory with full path
+        model_filename = f'{{model_name.replace(" ", "_")}}_model.joblib'
+        model_full_path = os.path.join(artifacts_dir, model_filename)
+        model_path = safe_joblib_dump(model, model_full_path)
+
+        models_results[model_name] = {{
+            'model': model,
+            'model_path': model_path,
+            'metrics': metrics,
+            'predictions': y_pred.tolist(),
+            'probabilities': y_proba.tolist() if y_proba is not None else None,
+            'training_time': training_time,
+            'model_type': 'classification'
+        }}
+
+        print(f"✅ {{model_name}} completed - accuracy: {{metrics['accuracy']:.4f}}")
+        
+    except Exception as e:
+        print(f"❌ Error training {{model_name}}: {{e}}")
+        continue
+
+print(f"✅ Trained {{len(models_results)}} models successfully")
+"""
+        
+        # Execute training code
+        env_c = {
+            'sample_data': sample_data, 
+            'models_to_train': models_to_train, 
+            'safe_joblib_dump': safe_joblib_dump,
+            'artifacts_dir': artifacts_dir
+        }
+        exec(training_code, env_c)
+        models_results = env_c['models_results']
+        X_test = env_c['X_test']
+        y_test = env_c['y_test']
+        print_to_log(f"✅ Trained {len(models_results)} models")
+        
+        # Step D: Visualization (DIRECT CODE EXECUTION - NO LLM)  
+        print_to_log("📊 Step D: Creating visualizations...")
+        if progress_callback:
+            progress_callback("📊 Generating comparison plots...", "Visualization")
+        
+        plotting_code = """
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+from sklearn.metrics import roc_curve
+
+comparison_plots = {}
+
+# ROC Curves
+try:
+    plt.figure(figsize=(10, 8))
+    plotted = False
+    for model_name, result in models_results.items():
+        if result['probabilities'] is not None:
+            y_proba_array = np.array(result['probabilities'])
+            if y_proba_array.ndim == 2 and y_proba_array.shape[1] >= 2:
+                fpr, tpr, _ = roc_curve(y_test, y_proba_array[:, 1])
+            else:
+                fpr, tpr, _ = roc_curve(y_test, y_proba_array)
+            roc_auc = result['metrics'].get('roc_auc', 0)
+            plt.plot(fpr, tpr, label=f'{model_name} (AUC = {roc_auc:.2f})')
+            plotted = True
+    
+    if plotted:
+        plt.plot([0, 1], [0, 1], 'k--', lw=2)
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic (ROC) Curves')
+        plt.legend(loc="lower right")
+        
+        # Save to artifacts directory with full path
+        roc_filename = 'roc_comparison.png'
+        roc_full_path = os.path.join(artifacts_dir, roc_filename)
+        roc_plot_path = safe_plt_savefig(roc_full_path)
+        comparison_plots['roc_curves'] = roc_plot_path
+        print(f"✅ Saved ROC curves to: {roc_plot_path}")
+        
+except Exception as e:
+    print(f"Error creating ROC curves: {e}")
+    comparison_plots['roc_curves'] = None
+
+# Metrics table
+try:
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.axis('tight')
+    ax.axis('off')
+    
+    table_data = []
+    headers = ['Model', 'Accuracy', 'Precision', 'Recall', 'F1', 'ROC AUC', 'Time (s)']
+    
+    for model_name, result in models_results.items():
+        metrics = result['metrics']
+        row = [
+            model_name,
+            f"{metrics.get('accuracy', 0):.4f}",
+            f"{metrics.get('precision', 0):.4f}",
+            f"{metrics.get('recall', 0):.4f}",
+            f"{metrics.get('f1', 0):.4f}",
+            f"{metrics.get('roc_auc', 0):.4f}" if metrics.get('roc_auc') else 'N/A',
+            f"{result.get('training_time', 0):.2f}"
+        ]
+        table_data.append(row)
+    
+    table = ax.table(cellText=table_data, colLabels=headers, cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 2)
+    
+    plt.title('Model Performance Comparison', fontsize=14, pad=20)
+    
+    # Save to artifacts directory with full path
+    metrics_filename = 'metrics_table.png'
+    metrics_full_path = os.path.join(artifacts_dir, metrics_filename)
+    metrics_plot_path = safe_plt_savefig(metrics_full_path)
+    comparison_plots['metrics_table'] = metrics_plot_path
+    print(f"✅ Saved metrics table to: {metrics_plot_path}")
+    
+except Exception as e:
+    print(f"Error creating metrics table: {e}")
+    comparison_plots['metrics_table'] = None
+
+print(f"✅ Created {len(comparison_plots)} visualizations")
+"""
+        
+        # Execute plotting code
+        env_d = {
+            'models_results': models_results,
+            'X_test': X_test,
+            'y_test': y_test,
+            'safe_plt_savefig': safe_plt_savefig,
+            'artifacts_dir': artifacts_dir
+        }
+        exec(plotting_code, env_d)
+        comparison_plots = env_d['comparison_plots']
+        print_to_log(f"✅ Created {len(comparison_plots)} visualizations")
+        
+        # Step E: Best model selection (DIRECT CODE EXECUTION - NO LLM)
+        print_to_log("🏆 Step E: Selecting best model...")
+        if progress_callback:
+            progress_callback("🏆 Selecting best model...", "Model Selection")
+        
+        selection_code = f"""
+selection_metric = '{config['selection_metric']}'
+
+# Get scores for all models
+scores = {{model_name: result['metrics'].get(selection_metric, 0) 
+          for model_name, result in models_results.items()}}
+
+# Find best and worst
+best_model_name = max(scores, key=scores.get)
+worst_model_name = min(scores, key=scores.get)
+best_score = scores[best_model_name]
+worst_score = scores[worst_model_name]
+
+# Calculate improvement
+improvement_percent = ((best_score - worst_score) / worst_score * 100) if worst_score != 0 else 0
+
+# Create ranking
+ranking_list = []
+for rank, (model_name, score) in enumerate(sorted(scores.items(), key=lambda x: x[1], reverse=True), 1):
+    ranking_list.append({{
+        'rank': rank,
+        'model_name': model_name,
+        'score': score,
+        'metric_used': selection_metric
+    }})
+
+# Build final result
+result = {{
+    'user_config': {{
+        'models_requested': {config['models_requested']},
+        'test_size': {config['test_size']},
+        'selection_metric': selection_metric,
+        'total_models_built': len(models_results)
+    }},
+    'models': models_results,
+    'best_model': {{
+        'name': best_model_name,
+        'model': models_results[best_model_name]['model'],
+        'model_path': models_results[best_model_name]['model_path'],
+        'metrics': models_results[best_model_name]['metrics'],
+        'selection_criteria': f'{{selection_metric}}: {{best_score:.4f}}',
+        'improvement_over_worst': f'{{improvement_percent:.2f}}% better than worst model'
+    }},
+    'comparison_plots': comparison_plots,
+    'model_ranking': ranking_list,
+    'summary': {{
+        'total_models': len(models_results),
+        'best_model': best_model_name,
+        'best_score': best_score,
+        'worst_model': worst_model_name,
+        'worst_score': worst_score,
+        'performance_spread': f'{{improvement_percent:.2f}}% difference',
+        'recommendation': f'Use {{best_model_name}} with {{selection_metric}} of {{best_score:.4f}}'
+    }},
+    'detailed_comparison': '\\n'.join([f"{{r['rank']}}. {{r['model_name']}}: {{r['score']:.4f}}" for r in ranking_list])
+}}
+
+print("✅ Best model selection completed")
+"""
+        
+        # Execute selection code
+        env_e = {
+            'models_results': models_results,
+            'comparison_plots': comparison_plots,
+            'config': config
+        }
+        exec(selection_code, env_e)
+        result = env_e['result']
+        
+        print_to_log("✅ Multi-model orchestrator completed successfully!")
+        return result
+        
+    except Exception as e:
+        print_to_log(f"❌ Orchestrator failed: {e}")
+        import traceback
+        print_to_log(f"💥 Traceback: {traceback.format_exc()}")
+        return None
+
+def format_multi_model_response(result: Dict, query: str) -> str:
+    """Format comprehensive multi-model comparison response with rich details"""
+    try:
+        response_parts = ["✅ 🎯 Multi-Model Comparison Completed Successfully!\n"]
+        
+        # User configuration
+        user_config = result.get('user_config', {})
+        if user_config:
+            response_parts.append("⚙️ Configuration:")
+            models_req = user_config.get('models_requested', [])
+            response_parts.append(f"   • Models Requested: {', '.join([m.title() for m in models_req])}")
+            response_parts.append(f"   • Test Split: {user_config.get('test_size', 0.2):.0%}")
+            response_parts.append(f"   • Selection Metric: {user_config.get('selection_metric', 'accuracy')}")
+            response_parts.append(f"   • Models Built: {user_config.get('total_models_built', 0)}\n")
+        
+        # Model performance summary
+        models = result.get('models', {})
+        if models:
+            response_parts.append("📊 Model Performance Summary:")
+            for model_name, model_data in models.items():
+                metrics = model_data.get('metrics', {})
+                training_time = model_data.get('training_time', 0)
+                model_type = model_data.get('model_type', 'classification')
+                
+                # Show relevant metrics based on problem type
+                if model_type == 'classification':
+                    acc = metrics.get('accuracy', 0)
+                    auc = metrics.get('roc_auc', 0)
+                    f1 = metrics.get('f1', 0)
+                    response_parts.append(f"   🤖 {model_name}: Acc: {acc:.3f} | AUC: {auc:.3f} | F1: {f1:.3f} | Time: {training_time:.2f}s")
+                else:  # regression
+                    r2 = metrics.get('r2_score', 0)
+                    mae = metrics.get('mae', 0)
+                    rmse = metrics.get('rmse', 0)
+                    response_parts.append(f"   🤖 {model_name}: R²: {r2:.3f} | MAE: {mae:.3f} | RMSE: {rmse:.3f} | Time: {training_time:.2f}s")
+        
+        # Model ranking
+        ranking = result.get('model_ranking', [])
+        if ranking and len(ranking) > 1:
+            response_parts.append("\n🏅 Model Ranking:")
+            for rank_info in ranking:
+                rank = rank_info.get('rank', 0)
+                model_name = rank_info.get('model_name', 'Unknown')
+                score = rank_info.get('score', 0)
+                metric = rank_info.get('metric_used', 'score')
+                response_parts.append(f"   #{rank}. {model_name}: {metric.upper()} = {score:.3f}")
+        
+        # Best model details
+        best_model = result.get('best_model', {})
+        if best_model:
+            response_parts.append(f"\n🏆 Winner: {best_model.get('name', 'Unknown')}")
+            response_parts.append(f"   📈 Selection: {best_model.get('selection_criteria', 'Not specified')}")
+            improvement = best_model.get('improvement_over_worst', '')
+            if improvement:
+                response_parts.append(f"   📊 Performance: {improvement}")
+        
+        # Summary insights
+        summary_data = result.get('summary', {})
+        if isinstance(summary_data, dict):
+            response_parts.append("\n📋 Analysis:")
+            response_parts.append(f"   • Best: {summary_data.get('best_model', 'Unknown')} ({summary_data.get('best_score', 0):.3f})")
+            response_parts.append(f"   • Worst: {summary_data.get('worst_model', 'Unknown')} ({summary_data.get('worst_score', 0):.3f})")
+            spread = summary_data.get('performance_spread', '')
+            if spread:
+                response_parts.append(f"   • Performance Spread: {spread}")
+            
+            recommendation = summary_data.get('recommendation', '')
+            if recommendation:
+                response_parts.append(f"\n💡 Recommendation: {recommendation}")
+        
+        # Visualizations
+        plots = result.get('comparison_plots', {})
+        if plots:
+            response_parts.append("\n📊 Visualizations Generated:")
+            if plots.get('roc_curves'):
+                response_parts.append("   • ROC Curves Comparison Plot")
+            if plots.get('metrics_table'):
+                response_parts.append("   • Metrics Comparison Table")
+        
+        # Detailed comparison
+        detailed_comparison = result.get('detailed_comparison', '')
+        if detailed_comparison:
+            response_parts.append("\n🔍 Detailed Analysis:")
+            response_parts.append(f"Comprehensive textual comparison of all models with strengths/weaknesses")
+            response_parts.append(detailed_comparison)
+        
+        return "\n".join(response_parts)
+        
+    except Exception as e:
+        print_to_log(f"⚠️ Error formatting multi-model response: {e}")
+        return f"✅ Multi-model comparison completed with {len(result.get('models', {}))} models"
+
 def format_model_response(result: Dict, routing_decision: str, query: str) -> str:
     """Format detailed response with model metrics for Slack display"""
     try:
@@ -3589,13 +4185,13 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
         if result.get("execution_status") == "failed_missing_library":
             missing_lib = result.get("error", "").replace("Missing library: ", "")
             response_parts = [
-                f"📦 **Missing Library: {missing_lib}**",
+                f"📦 Missing Library: {missing_lib}",
                 f"",
-                f"🔒 **For System Administrator:**",
+                f"🔒 For System Administrator:",
                 f"• {result.get('admin_message', 'Please install the required library')}",
                 f"• Description: {result.get('description', 'External library required')}",
                 f"",
-                f"🔄 **Available Alternatives:**"
+                f"🔄 Available Alternatives:"
             ]
             
             alternatives = result.get('alternatives', [])
@@ -3607,7 +4203,7 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             
             response_parts.extend([
                 f"",
-                f"💡 **Next Steps:**",
+                f"💡 Next Steps:",
                 f"1. Contact your system administrator to install the library",
                 f"2. Or ask me to try a different approach using available libraries",
                 f"3. Or specify which libraries you have available"
@@ -3891,8 +4487,8 @@ def format_model_response(result: Dict, routing_decision: str, query: str) -> st
             
             # Check if there are validation metrics to display
             if any(key in result for key in ['accuracy', 'precision', 'recall', 'f1_score']):
-                response_parts.append("✅ **Existing Model Analysis Completed!**\n")
-                response_parts.append("📊 **Model Performance:**")
+                response_parts.append("✅ Existing Model Analysis Completed!\n")
+                response_parts.append("📊 Model Performance:")
                 
                 if 'accuracy' in result:
                     response_parts.append(f"• Accuracy: {result['accuracy']:.4f} ({result['accuracy']*100:.2f}%)")
@@ -4175,7 +4771,7 @@ class LangGraphModelAgent:
             if recent_models:
                 # PRIORITY 1: Check if we have best model info from previous multi-model result
                 best_model_path = None
-                last_result = global_model_info.get('last_result', {})
+                last_result = global_model_states.get(user_id, {}).get('last_result', {})
                 
                 if isinstance(last_result, dict) and 'best_model' in last_result:
                     best_model_info = last_result['best_model']

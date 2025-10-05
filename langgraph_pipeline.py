@@ -294,9 +294,10 @@ I'll help you build a machine learning model. Let's start!
         # Send mode selection message to Slack
         self.slack_manager.send_message(state.chat_session, mode_choice_msg)
         
-        # DON'T set last_response here - it will be handled by Early Interception logic
-        # This prevents stale responses from being cached and returned later
-        print_to_log(f"⏭️ [Preprocessing] Skipping last_response assignment - letting Early Interception handle it")
+        # CRITICAL: Clear last_response to prevent old cached responses from being returned
+        # This prevents the previous bot introduction message from being displayed again
+        state.last_response = None
+        print_to_log(f"🧹 [Preprocessing] Cleared last_response to prevent cached response display")
         
         return state
     
@@ -982,11 +983,21 @@ Generate Python code to fulfill this request:"""
                         state_dict['raw_data'] = pd.read_csv(raw_data_file)
                         print_to_log(f"📂 Restored raw_data: {state_dict['raw_data'].shape}")
                 
-                if state_dict.get('processed_data') and isinstance(state_dict['processed_data'], dict):
-                    processed_data_file = os.path.join(user_dir, state_dict['processed_data']['file'])
-                    if os.path.exists(processed_data_file):
-                        state_dict['processed_data'] = pd.read_csv(processed_data_file)
-                        print_to_log(f"📂 Restored processed_data: {state_dict['processed_data'].shape}")
+                if state_dict.get('processed_data'):
+                    if isinstance(state_dict['processed_data'], dict):
+                        processed_data_file = os.path.join(user_dir, state_dict['processed_data']['file'])
+                        if os.path.exists(processed_data_file):
+                            state_dict['processed_data'] = pd.read_csv(processed_data_file)
+                            print_to_log(f"📂 Restored processed_data: {state_dict['processed_data'].shape}")
+                        else:
+                            state_dict['processed_data'] = None
+                            print_to_log(f"🔧 DEBUG LOAD_SESSION: processed_data file not found, set to None")
+                    elif isinstance(state_dict['processed_data'], str):
+                        # Handle case where processed_data was saved as string repr instead of file path
+                        state_dict['processed_data'] = None
+                        print_to_log(f"🔧 DEBUG LOAD_SESSION: processed_data was string, set to None")
+                else:
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: No processed_data in state_dict or not dict format")
                 
                 if state_dict.get('cleaned_data') and isinstance(state_dict['cleaned_data'], dict):
                     cleaned_data_file = os.path.join(user_dir, state_dict['cleaned_data']['file'])

@@ -124,7 +124,7 @@ class SlackMLBot:
                     user_data_dir_path = get_username_user_data_dir(user_id_part, thread_ts)
                     
                     session_info_message = (
-                        f"📁 **Session Directory:** `{user_data_dir_path}/`\n"
+                        f"📁 Session Directory: `{user_data_dir_path}/`\n"
                         f"💾 All artifacts, models, and debug logs for this conversation will be stored here.\n"
                         f"🔧 This information is provided for reference and debugging purposes if needed."
                     )
@@ -203,9 +203,9 @@ class SlackMLBot:
 • Tab-separated files (.tsv)
 
 *🎯 Pipeline Stages:*
-1. **Data Preprocessing** - Cleaning, missing values, outliers
-2. **Feature Selection** - IV analysis, correlation, PCA
-3. **Model Building** - Training, evaluation, predictions
+1. Data Preprocessing - Cleaning, missing values, outliers
+2. Feature Selection - IV analysis, correlation, PCA
+3. Model Building - Training, evaluation, predictions
 
 *💡 Slash Commands:*
 • `/pipeline_status` - Check your pipeline status

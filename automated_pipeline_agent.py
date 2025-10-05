@@ -371,7 +371,8 @@ Reply with the target column name (e.g., 'f_segment')"""
                 original_query = state.user_query
                 print_to_log(f"🔍 Using current user query: '{original_query}'")
             else:
-                original_query = "build a machine learning model with comprehensive metrics and visualizations"
+                # Default to decision tree for fast pipeline (ensures proper plot generation)
+                original_query = "build a decision tree model with comprehensive metrics and visualizations"
                 print_to_log(f"🔍 Using default query: '{original_query}'")
             
             # CRITICAL: Do NOT enhance the query - pass original user intent directly

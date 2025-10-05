@@ -1465,29 +1465,29 @@ def generate_overview_summary(state: SequentialState) -> str:
     """
     overview = state.phase_results.get('overview', {})
     
-    summary = f"""📊 **Dataset Analysis Complete**
+    summary = f"""📊 Dataset Analysis Complete
 
-🎯 **{overview.get('total_columns', 0)} columns analyzed** targeting `{state.target_column}`
+🎯 {overview.get('total_columns', 0)} columns analyzed targeting `{state.target_column}`
 
-📋 **Preprocessing Phases Identified:**
-⚠️  **Phase 1: Outliers** - {overview.get('outlier_columns', 0)} columns need attention
-📈 **Phase 2: Missing Values** - {overview.get('missing_columns', 0)} columns need imputation  
-🏷️  **Phase 3: Encoding** - {overview.get('categorical_columns', 0)} categorical columns
-🔄 **Phase 4: Transformations** - Will analyze distribution shapes
+📋 Preprocessing Phases Identified:
+⚠️  Phase 1: Outliers - {overview.get('outlier_columns', 0)} columns need attention
+📈 Phase 2: Missing Values - {overview.get('missing_columns', 0)} columns need imputation  
+🏷️  Phase 3: Encoding - {overview.get('categorical_columns', 0)} categorical columns
+🔄 Phase 4: Transformations - Will analyze distribution shapes
 
-💡 **What You Can Do:**
+💡 What You Can Do:
 • `proceed` - Start with Phase 1 (Outliers)
 • `skip outliers` - Jump to missing values
 • `overview details` - See column breakdown
 • `help` - Get preprocessing guidance
 • `set config` - Adjust thresholds
 
-**Ready to start Phase 1 (Outliers)?**"""
+Ready to start Phase 1 (Outliers)?"""
 
     if state.suggestions_enabled:
         summary += f"""
 
-🧠 **Educational Note:**
+🧠 Educational Note:
 Outliers can significantly impact model performance. We'll analyze {overview.get('outlier_columns', 0)} columns using multiple detection methods (IQR, Z-score) and recommend treatment strategies based on statistical properties and domain context."""
 
     return summary
@@ -1906,7 +1906,7 @@ def create_sequential_preprocessing_agent():
             })
             
             if not outlier_results['outlier_columns']:
-                summary = "✅ **No Outliers Detected**\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
+                summary = "✅ No Outliers Detected\n\nAll numeric columns are within normal ranges. Ready to proceed to Phase 2 (Missing Values)?"
             else:
                 outlier_cols = outlier_results['outlier_columns']
                 recommendations = outlier_results['llm_recommendations']
@@ -1916,23 +1916,23 @@ def create_sequential_preprocessing_agent():
                 moderate_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'moderate']
             mild_cols = [col for col, rec in recommendations.items() if rec.get('severity') == 'mild']
             
-            summary = f"""⚠️  **Outlier Detection Results ({len(outlier_cols)} columns):**
+            summary = f"""⚠️  Outlier Detection Results ({len(outlier_cols)} columns):
 
-🔴 **Severe (>15%):** {len(severe_cols)} columns
+🔴 Severe (>15%): {len(severe_cols)} columns
 {chr(10).join([f'• {col}: {recommendations.get(col, {}).get("treatment", "N/A")} - {recommendations.get(col, {}).get("reasoning", "N/A")[:50]}...' for col in severe_cols[:5]])}
 
-🟡 **Moderate (5-15%):** {len(moderate_cols)} columns  
+🟡 Moderate (5-15%): {len(moderate_cols)} columns  
 {chr(10).join([f'• {col}: {recommendations.get(col, {}).get("treatment", "N/A")} - {recommendations.get(col, {}).get("reasoning", "N/A")[:50]}...' for col in moderate_cols[:5]])}
 
-🟢 **Mild (<5%):** {len(mild_cols)} columns
+🟢 Mild (<5%): {len(mild_cols)} columns
 {chr(10).join([f'• {col}: {recommendations.get(col, {}).get("treatment", "N/A")}' for col in mild_cols[:3]])}
 
-💡 **Recommended Strategy:**
+💡 Recommended Strategy:
 • Winsorize/clip severe outliers to preserve data while reducing impact
 • Keep mild outliers as they may contain valuable information  
 • Transform highly skewed distributions
 
-**Options:**
+Options:
 • `proceed` - Apply recommended treatments
 • `show details` - See full analysis for specific columns
 • `modify [column]` - Override treatment for specific columns
@@ -1987,7 +1987,7 @@ def create_sequential_preprocessing_agent():
             })
         
         if not missing_results['missing_columns']:
-            summary = "✅ **No Missing Values Detected**\n\nAll columns are complete. Ready to proceed to Phase 3 (Encoding)?"
+            summary = "✅ No Missing Values Detected\n\nAll columns are complete. Ready to proceed to Phase 3 (Encoding)?"
         else:
             missing_cols = missing_results['missing_columns']
             recommendations = missing_results['llm_recommendations']
@@ -1999,27 +1999,27 @@ def create_sequential_preprocessing_agent():
             mode_cols = [col for col, rec in recommendations.items() if rec.get('strategy') == 'mode']
             model_cols = [col for col, rec in recommendations.items() if rec.get('strategy') == 'model_based']
             
-            summary = f"""📈 **Missing Value Analysis ({len(missing_cols)} columns):**
+            summary = f"""📈 Missing Value Analysis ({len(missing_cols)} columns):
 
-🗑️ **Drop Columns (>70% missing):** {len(drop_cols)}
+🗑️ Drop Columns (>70% missing): {len(drop_cols)}
 {', '.join(drop_cols[:5]) + ('...' if len(drop_cols) > 5 else '')}
 
-📊 **Mean Imputation (Normal distribution):** {len(mean_cols)}
+📊 Mean Imputation (Normal distribution): {len(mean_cols)}
 {', '.join(mean_cols[:5]) + ('...' if len(mean_cols) > 5 else '')}
 
-📊 **Median Imputation (Skewed distribution):** {len(median_cols)}
+📊 Median Imputation (Skewed distribution): {len(median_cols)}
 {', '.join(median_cols[:5]) + ('...' if len(median_cols) > 5 else '')}
 
-📊 **Mode Imputation (Categorical):** {len(mode_cols)}
+📊 Mode Imputation (Categorical): {len(mode_cols)}
 {', '.join(mode_cols[:5]) + ('...' if len(mode_cols) > 5 else '')}
 
-🤖 **Model-based Imputation (High correlation):** {len(model_cols)}
+🤖 Model-based Imputation (High correlation): {len(model_cols)}
 {', '.join(model_cols[:3])}
 
-💡 **Strategy Summary:**
+💡 Strategy Summary:
 Imputation choices based on distribution shape, missing percentage, and target correlation.
 
-**Options:**
+Options:
 • `proceed` - Apply recommended imputation
 • `show details` - See reasoning for specific columns  
 • `modify [column]` - Change strategy for specific columns
@@ -2052,7 +2052,7 @@ Imputation choices based on distribution shape, missing percentage, and target c
         encoding_results = analyze_encoding_with_llm(state)
         
         if not encoding_results['categorical_columns']:
-            summary = "✅ **No Categorical Columns Detected**\n\nAll features are numeric. Ready to proceed to Phase 4 (Transformations)?"
+            summary = "✅ No Categorical Columns Detected\n\nAll features are numeric. Ready to proceed to Phase 4 (Transformations)?"
         else:
             cat_cols = encoding_results['categorical_columns']
             recommendations = encoding_results['llm_recommendations']
@@ -2075,29 +2075,29 @@ Imputation choices based on distribution shape, missing percentage, and target c
                 else:
                     total_new_cols += 1
             
-            summary = f"""🏷️  **Categorical Encoding Strategy ({len(cat_cols)} columns):**
+            summary = f"""🏷️  Categorical Encoding Strategy ({len(cat_cols)} columns):
 
-🎯 **One-Hot Encoding (Low cardinality):** {len(onehot_cols)}
+🎯 One-Hot Encoding (Low cardinality): {len(onehot_cols)}
 {', '.join(onehot_cols[:5]) + ('...' if len(onehot_cols) > 5 else '')}
 
-🎯 **One-Hot + "Other" (Medium cardinality):** {len(onehot_top_cols)}
+🎯 One-Hot + "Other" (Medium cardinality): {len(onehot_top_cols)}
 {', '.join(onehot_top_cols[:3])} - Keep top {state.onehot_top_categories} categories
 
-🎯 **Target Encoding (High cardinality):** {len(target_cols)}
+🎯 Target Encoding (High cardinality): {len(target_cols)}
 {', '.join(target_cols[:3])}
 
-🔢 **Label Encoding (Ordinal):** {len(label_cols)}
+🔢 Label Encoding (Ordinal): {len(label_cols)}
 {', '.join(label_cols[:3])}
 
-🗑️ **Drop (Very high cardinality/ID):** {len(drop_cols)}
+🗑️ Drop (Very high cardinality/ID): {len(drop_cols)}
 {', '.join(drop_cols[:3])}
 
-📊 **Dimensionality Impact:** ~{total_new_cols} total encoded columns
+📊 Dimensionality Impact: ~{total_new_cols} total encoded columns
 
-💡 **Smart One-Hot Strategy:**
+💡 Smart One-Hot Strategy:
 For medium cardinality columns, we keep the most frequent categories and group the rest as "Other" to control dimensionality while preserving information.
 
-**Options:**
+Options:
 • `proceed` - Apply encoding strategies
 • `show details` - See cardinality analysis
 • `modify [column]` - Change encoding for specific columns  
@@ -2129,7 +2129,7 @@ For medium cardinality columns, we keep the most frequent categories and group t
         transformation_results = analyze_transformations_with_llm(state)
         
         if not transformation_results['transformation_columns']:
-            summary = "✅ **No Transformations Needed**\n\nAll numeric distributions are acceptable. Ready to complete preprocessing!"
+            summary = "✅ No Transformations Needed\n\nAll numeric distributions are acceptable. Ready to complete preprocessing!"
         else:
             transform_cols = transformation_results['transformation_columns']
             recommendations = transformation_results['llm_recommendations']
@@ -2142,27 +2142,27 @@ For medium cardinality columns, we keep the most frequent categories and group t
             scale_cols = [col for col, rec in recommendations.items() if rec.get("transformation") in ["standardize", "robust_scale"]]
             other_cols = [col for col, rec in recommendations.items() if rec.get('transformation') not in ['log', 'log1p', 'sqrt', 'standardize', 'robust_scale']]
             
-            summary = f"""🔄 **Distribution Transformation Analysis ({len(transform_cols)} columns):**
+            summary = f"""🔄 Distribution Transformation Analysis ({len(transform_cols)} columns):
 
-📈 **Log Transformations (Right skew):** {len(log_cols)}
+📈 Log Transformations (Right skew): {len(log_cols)}
 {', '.join(log_cols[:5]) + ('...' if len(log_cols) > 5 else '')}
 
-📈 **Square Root (Moderate skew):** {len(sqrt_cols)}
+📈 Square Root (Moderate skew): {len(sqrt_cols)}
 {', '.join(sqrt_cols[:3])}
 
-⚖️ **Scaling (Different magnitudes):** {len(scale_cols)}
+⚖️ Scaling (Different magnitudes): {len(scale_cols)}
 {', '.join(scale_cols[:3])}
 
-🔄 **Other Transformations:** {len(other_cols)}
+🔄 Other Transformations: {len(other_cols)}
 {', '.join(other_cols[:3])}
 
-💡 **Transformation Benefits:**
+💡 Transformation Benefits:
 • Improve normality for better model performance
 • Handle different scales between features
 • Reduce impact of outliers through scaling
 • Better linear relationships
 
-**Options:**
+Options:
 • `proceed` - Apply transformation strategies
 • `show details` - See skewness analysis
 • `modify [column]` - Change transformation for specific columns
@@ -2194,13 +2194,13 @@ For medium cardinality columns, we keep the most frequent categories and group t
         total_phases = len([p for p in [PreprocessingPhase.OUTLIERS, PreprocessingPhase.MISSING_VALUES, 
                            PreprocessingPhase.ENCODING, PreprocessingPhase.TRANSFORMATIONS] if p in completed])
         
-        summary = f"""🎉 **Preprocessing Complete!**
+        summary = f"""🎉 Preprocessing Complete!
 
-✅ **Phases Completed:** {len(completed_phases)}
-📊 **Dataset:** {df.shape[0]:,} rows × {df.shape[1]:,} columns
-🎯 **Target:** {state.target_column}
+✅ Phases Completed: {len(completed_phases)}
+📊 Dataset: {df.shape[0]:,} rows × {df.shape[1]:,} columns
+🎯 Target: {state.target_column}
 
-**Next Steps:**
+Next Steps:
 • Your data is now ready for machine learning
 • All preprocessing steps have been applied
 
@@ -2780,25 +2780,25 @@ def export_cleaned_dataset(state: SequentialState, output_path: str = None) -> s
                     onehot_count += len(onehot_cols)
     
     # Generate detailed summary report
-    summary = f"""📊 **Dataset Export Summary**
+    summary = f"""📊 Dataset Export Summary
 
-📁 **File:** {output_path}
-📈 **Original Shape:** {df.shape[0]} rows, {df.shape[1]} columns
-📊 **Cleaned Shape:** {df_cleaned.shape[0]} rows, {df_cleaned.shape[1]} columns
-🎯 **Target Column:** {state.target_column}
+📁 File: {output_path}
+📈 Original Shape: {df.shape[0]} rows, {df.shape[1]} columns
+📊 Cleaned Shape: {df_cleaned.shape[0]} rows, {df_cleaned.shape[1]} columns
+🎯 Target Column: {state.target_column}
 
-**Column Changes:**
+Column Changes:
 • Original columns: {original_cols}
 • Final columns: {cleaned_cols}
 • Columns added: {added_cols} (including {onehot_count} one-hot encoded)
 
-**Preprocessing Applied:**
+Preprocessing Applied:
 • Outliers: {'✓' if 'outliers' in state.completed_phases else '✗'}
 • Missing Values: {'✓' if 'missing_values' in state.completed_phases else '✗'}
 • Encoding: {'✓' if 'encoding' in state.completed_phases else '✗'}
 • Transformations: {'✓' if 'transformations' in state.completed_phases else '✗'}
 
-✅ **Dataset ready for model training!**"""
+✅ Dataset ready for model training!"""
     
     return output_path, summary
 
@@ -3390,7 +3390,7 @@ class ConfidenceBasedPreprocessor:
         print_to_log(f"   🎯 LLM calls saved: ~{(total_cols//10) - (len(uncertain_columns)//12 if uncertain_columns else 0)}")
         
         # Combine results
-        all_recommendations = {**high_conf_decisions, **llm_decisions}
+        all_recommendations = {high_conf_decisions, llm_decisions}
         
         return {
             f'{phase}_columns': list(all_recommendations.keys()),

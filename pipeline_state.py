@@ -337,7 +337,7 @@ class PipelineState(BaseModel):
         if not self.has_preprocessing_strategies():
             return "No preprocessing strategies saved."
         
-        summary = ["📋 **Saved Preprocessing Strategies:**\n"]
+        summary = ["📋 Saved Preprocessing Strategies:\n"]
         
         metadata = self.preprocessing_strategies.get("strategy_metadata", {})
         if metadata.get("created_date"):
@@ -351,7 +351,7 @@ class PipelineState(BaseModel):
         encoding_count = len(self.preprocessing_strategies.get("encoding_strategies", {}))
         transform_count = len(self.preprocessing_strategies.get("transformation_strategies", {}))
         
-        summary.append(f"\n**Strategy Counts:**")
+        summary.append(f"\nStrategy Counts:")
         summary.append(f"• Outlier treatments: {outlier_count} columns")
         summary.append(f"• Missing value strategies: {missing_count} columns") 
         summary.append(f"• Encoding strategies: {encoding_count} columns")
