@@ -3390,7 +3390,7 @@ class ConfidenceBasedPreprocessor:
         print_to_log(f"   🎯 LLM calls saved: ~{(total_cols//10) - (len(uncertain_columns)//12 if uncertain_columns else 0)}")
         
         # Combine results
-        all_recommendations = {high_conf_decisions, llm_decisions}
+        all_recommendations = {**high_conf_decisions, **llm_decisions}
         
         return {
             f'{phase}_columns': list(all_recommendations.keys()),
