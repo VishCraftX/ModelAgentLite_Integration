@@ -254,8 +254,18 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         
         if 'fast' in user_input or 'automated' in user_input:
             # SUCCESS: Fast mode selected - handle directly in orchestrator
+            
+            # CRITICAL: Preserve original user query before it gets overwritten
+            original_query = state.interactive_session.get('original_query', state.user_query)
+            print_to_log(f"⚡ [Mode Selection] Fast mode selected - preserving original query: '{original_query}'")
+            
+            # Store original query in preprocessing state for automated pipeline agent
+            if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                state.preprocessing_state = {}
+            state.preprocessing_state['original_user_query'] = original_query
+            
             state.interactive_session = None  # Clear interactive session
-            print_to_log(f"⚡ [Mode Selection] Fast mode selected - calling automated pipeline directly")
+            print_to_log(f"⚡ [Mode Selection] Calling automated pipeline with preserved query")
             
             try:
                 # Import and call automated pipeline agent directly
@@ -316,6 +326,7 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'session_id': state.chat_session,
             'phase': 'mode_selection',
             'original_intent': 'full_pipeline',
+            'original_query': state.user_query,  # CRITICAL: Store original user query
             'needs_mode_selection': True
         }
         
@@ -1390,6 +1401,13 @@ Examples:
             # Direct mode detection from query
             if any(word in query_lower for word in ["fast", "automated", "quick"]):
                 print_to_log("[Orchestrator] Fast mode detected in query - calling automated pipeline directly")
+                
+                # CRITICAL: Preserve original user query for automated pipeline
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                state.preprocessing_state['original_user_query'] = state.user_query
+                print_to_log(f"⚡ [Orchestrator] Preserved original query: '{state.user_query}'")
+                
                 try:
                     # Import and call automated pipeline agent directly
                     from automated_pipeline_agent import automated_pipeline_agent
