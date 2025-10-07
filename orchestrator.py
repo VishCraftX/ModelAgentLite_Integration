@@ -390,8 +390,16 @@ It's highly recommended to preprocess your data first for better model accuracy 
         
         if 'skip' in user_input or 'no' in user_input or 'clean' in user_input or 'No' in user_input:
             # SUCCESS: User wants to preprocess first
-            state.interactive_session = None  # Clear interactive session
+            original_query = state.interactive_session.get('original_query', state.user_query)
             print_to_log(f"✅ [Preprocessing Confirmation] User chose to preprocess first")
+            print_to_log(f"🔄 [Preprocessing Confirmation] Preserving original query for after preprocessing: '{original_query}'")
+            
+            # CRITICAL: Preserve original query for after preprocessing completes
+            if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                state.preprocessing_state = {}
+            state.preprocessing_state['original_user_query'] = original_query
+            
+            state.interactive_session = None  # Clear interactive session
             
             state.last_response = f"✅ Great choice! Starting data preprocessing to optimize your model performance..."
             
@@ -400,8 +408,14 @@ It's highly recommended to preprocess your data first for better model accuracy 
             
         elif 'Yes' in user_input or 'build' in user_input or 'yes' in user_input:
             # User wants to skip preprocessing and build model with raw data
-            state.interactive_session = None  # Clear interactive session
+            original_query = state.interactive_session.get('original_query', state.user_query)
             print_to_log(f"⚠️ [Preprocessing Confirmation] User chose to skip preprocessing")
+            print_to_log(f"🔄 [Preprocessing Confirmation] Restoring original query: '{original_query}'")
+            
+            # CRITICAL: Restore original query before routing to model building
+            state.user_query = original_query
+            
+            state.interactive_session = None  # Clear interactive session
             
             # Use raw data as cleaned data for model building
             if state.cleaned_data is None:
