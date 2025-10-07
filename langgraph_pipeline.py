@@ -252,21 +252,62 @@ class MultiAgentMLPipeline:
         if not hasattr(state, 'target_column') or not state.target_column:
             print_to_log(f"🎯 [Preprocessing] Target column not set - will prompt user during preprocessing")
         
-        # Create interactive session for mode selection
-        state.interactive_session = {
-            'agent_type': 'preprocessing',
-            'session_active': True,
-            'session_id': state.chat_session,
-            'phase': 'need_target' if not (hasattr(state, 'target_column') and state.target_column) else 'mode_selection',
-            'target_column': getattr(state, 'target_column', None),
-            'current_phase': 'overview',
-            'needs_target': not (hasattr(state, 'target_column') and state.target_column),
-            'needs_mode_selection': True,
-            'original_query': state.user_query  # CRITICAL: Store original query for fast pipeline
-        }
+        # Check if orchestrator already handled mode selection
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            state.interactive_session.get('mode_selected') == 'slow'):
+            
+            print_to_log(f"🎛️ [Preprocessing] Orchestrator already selected slow mode - proceeding with preprocessing")
+            
+            # Update existing session for preprocessing
+            state.interactive_session.update({
+                'agent_type': 'preprocessing',
+                'current_phase': 'overview',
+                'needs_mode_selection': False  # Mode already selected by orchestrator
+            })
+            
+        else:
+            # Create interactive session for mode selection (fallback case)
+            state.interactive_session = {
+                'agent_type': 'preprocessing',
+                'session_active': True,
+                'session_id': state.chat_session,
+                'phase': 'need_target' if not (hasattr(state, 'target_column') and state.target_column) else 'mode_selection',
+                'target_column': getattr(state, 'target_column', None),
+                'current_phase': 'overview',
+                'needs_target': not (hasattr(state, 'target_column') and state.target_column),
+                'needs_mode_selection': True,
+                'original_query': state.user_query  # CRITICAL: Store original query for fast pipeline
+            }
         
-        # Show mode selection message
-        if hasattr(state, 'target_column') and state.target_column:
+        # Show appropriate message based on mode selection status
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            state.interactive_session.get('mode_selected') == 'slow'):
+            
+            # Mode already selected - show preprocessing start message
+            mode_choice_msg = f"""🎛️ Slow Mode Selected - Starting interactive preprocessing...
+
+📋 Preprocessing Workflow:
+Phase 1: 🚨 Outliers - Handle extreme values
+Phase 2: 🗑️ Missing Values - Impute or remove nulls
+Phase 3: 🏷️ Encoding - Convert categorical to numeric
+Phase 4: 🔄 Transformations - Normalize and scale features
+
+---
+
+📊 Current Phase: Outlier Analysis
+I'll detect extreme values that might affect your model and recommend handling strategies.
+
+💬 Your Options:
+• Type `proceed` or `yes` - Start outlier analysis
+• Type `skip` - Skip this phase
+• Type `explain` - Learn more about outliers
+
+Ready to proceed?"""
+            
+        elif hasattr(state, 'target_column') and state.target_column:
+            # Target set but mode not selected - show mode selection
             mode_choice_msg = f"""✅ Target column set: `{state.target_column}`
 
 🚀 Choose Your ML Pipeline Mode
@@ -285,6 +326,7 @@ class MultiAgentMLPipeline:
 
 💬 Choose: Type `fast` or `slow`"""
         else:
+            # No target column - prompt for target
             mode_choice_msg = f"""👋 Welcome to ModelAgent PRO!
 
 📊 Dataset Uploaded: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
@@ -294,7 +336,7 @@ I'll help you build a machine learning model. Let's start!
 💬 Step 1: Type your target column name
 """
         
-        # Send mode selection message to Slack
+        # Send appropriate message to Slack
         self.slack_manager.send_message(state.chat_session, mode_choice_msg)
         
         # CRITICAL: Clear last_response to prevent old cached responses from being returned

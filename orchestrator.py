@@ -281,9 +281,11 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
                 return "general_response"
             
         elif 'slow' in user_input or 'interactive' in user_input:
-            # SUCCESS: Slow mode selected  
-            state.interactive_session = None  # Clear interactive session
-            print_to_log(f"🎛️ [Mode Selection] Slow mode selected")
+            # SUCCESS: Slow mode selected - update interactive session for preprocessing
+            state.interactive_session['phase'] = 'slow_mode_selected'
+            state.interactive_session['mode_selected'] = 'slow'
+            state.interactive_session['needs_mode_selection'] = False
+            print_to_log(f"🎛️ [Mode Selection] Slow mode selected - updated interactive session")
             
             state.last_response = f"🎛️ Slow Mode Selected - Starting interactive preprocessing..."
             
@@ -1798,11 +1800,6 @@ How can I help you with your ML workflow today?"""
 • Model building, training, and evaluation
 • Predictions and model performance analysis
 • Algorithm selection and hyperparameter tuning
-
-📈 **Data Visualization:**
-• Creating plots, charts, and visualizations
-• Model performance visualization
-• Data distribution analysis
 
 💬 **Please reframe your question** to focus on data science, machine learning, statistics, or data analysis tasks."""
             return "general_response"
