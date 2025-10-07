@@ -85,6 +85,106 @@ class Orchestrator:
             thread_id = session_id
         
         return get_thread_logger(user_id, thread_id)
+    
+    def _classify_with_single_llm(self, query: str) -> Dict[str, Any]:
+        """
+        Single LLM call for both data science relevance check and intent classification
+        Returns JSON with: {is_data_science: bool, intent: string, confidence: float}
+        """
+        if not LLM_AVAILABLE:
+            print_to_log("⚠️ LLM not available, using fallback")
+            return {
+                "is_data_science": True,
+                "intent": "general_query", 
+                "confidence": 0.5,
+                "explanation":""
+            }
+        
+        
+        classification_prompt = f"""You are a data science assistant classifier. Your job is to:
+1. Determine if the query is related to data science/machine learning
+2. If yes, This step is of very high priority. classify the intent into one of the predefined categories but be very sure about this classification. 
+3. Provide a confidence score
+4. provide an explanation for classification
+
+DATA SCIENCE RELEVANCE - Consider "yes" for:
+- Data preprocessing, cleaning, transformation, missing values, outliers
+- Feature selection, feature engineering, correlation analysis
+- Machine learning model building, training, evaluation, prediction
+- Statistical analysis, data visualization, plotting
+- Data exploration, descriptive statistics
+- ML algorithms (regression, classification, clustering, deep learning)
+- Model evaluation metrics, performance analysis
+- Data analysis programming (pandas, sklearn, etc.)
+- Business analytics, A/B testing, hypothesis testing
+
+Consider "no" for:
+- General programming unrelated to data (web dev, mobile apps)
+- Personal questions, casual conversation, weather, news
+- General knowledge unrelated to data/ML
+- Technical support for non-data tools
+- Creative writing, literature, gaming (unless data analysis related)
+
+INTENT CATEGORIES (if data science related):
+1. "preprocessing" - Data cleaning, preparation, transformation
+2. "feature_selection" - Feature selection, importance analysis, dimensionality reduction  
+3. "model_building" - Model training, evaluation, prediction, visualization
+4. "general_query" - Questions, explanations, greetings, capabilities
+5. "code_execution" - Data analysis code, calculations, plotting
+6. "full_pipeline" - Complete ML pipeline from start to finish
+
+USER QUERY: "{query}"
+
+Respond with ONLY a valid JSON object in this exact format:
+{{"is_data_science": true/false, "intent": "category_name", "confidence": 0.0-1.0, "explanation": "explanation for classification"}}
+
+Examples:
+- "Hello, what can you do?" → {{"is_data_science": true, "intent": "general_query", "confidence": 0.9, "explanation": "Greetings, help requests, system capabilities, status inquiries, general questions, conversational interactions, explanations, assistance, guidance, information requests, hello, hi, what can you do, how does this work, explain, describe, tell me about, what is, how to use, system information, help me, what are your capabilities, system overview, introduction, educational questions about machine learning concepts, what are saddle points, what is gradient descent, explain overfitting, what is bias variance tradeoff, describe neural networks, what are support vector machines, explain random forests, what is cross validation, describe regularization, what are hyperparameters, explain backpropagation, what is feature engineering, describe ensemble methods, what are decision trees, explain logistic regression, what is clustering, describe dimensionality reduction, what are outliers, explain normalization, what is correlation, describe statistical concepts, machine learning theory questions, algorithm explanations, concept clarifications, theoretical understanding, academic explanations, educational content about AI ML concepts, correlation coefficient calculation, correlation coefficient value, calculate correlation, mathematical correlation, statistical correlation formula, pearson correlation, equation correlation, if I have equation, what would correlation be, correlation between x and y, theoretical correlation questions, statistical formula questions, mathematical calculation questions."}}
+- "Clean this data" → {{"is_data_science": true, "intent": "preprocessing", "confidence": 0.95, "explanation": "Data cleaning, preprocessing, preparation, transformation, missing values, outliers, duplicates, data quality, normalization, scaling, encoding, sanitization, purification, data wrangling, cleansing, standardization, imputation, outlier detection, duplicate removal, data validation, quality assurance, clean my data, prepare my data, handle missing values, remove outliers, data preparation workflow, data cleaning pipeline, normalize features, standardize data, scale features, feature normalization, feature scaling, data normalization, feature standardization, analyze data, analyze dataset, data analysis, exploratory analysis, examine data, investigate data."}}
+- "What's the weather?" → {{"is_data_science": false, "intent": "general_query", "confidence": 0.9, "explanation": "General questions, greetings, capability questions, or unclear intent"}}
+- "Train a model" → {{"is_data_science": true, "intent": "model_building", "confidence": 0.95, "explanation": "Model training, evaluation, prediction, visualization"}}"""
+
+        try:
+            response = ollama.chat(
+                model=self.default_model,
+                messages=[{"role": "user", "content": classification_prompt}]
+            )
+            
+            result_text = response["message"]["content"].strip()
+            print_to_log(f"🤖 LLM Response: {result_text}")
+            
+            # Parse JSON response
+            import json
+            try:
+                result = json.loads(result_text)
+                
+                # Validate required fields
+                if not all(key in result for key in ["is_data_science", "intent", "confidence", "explanation"]):
+                    raise ValueError("Missing required fields in JSON response")
+                
+                # Validate intent is in allowed list
+                valid_intents = ["preprocessing", "feature_selection", "model_building", "general_query", "code_execution", "full_pipeline"]
+                if result["intent"] not in valid_intents:
+                    print_to_log(f"⚠️ Invalid intent '{result['intent']}', defaulting to general_query")
+                    result["intent"] = "general_query"
+                
+                # Ensure confidence is between 0 and 1
+                result["confidence"] = max(0.0, min(1.0, float(result["confidence"])))
+                
+                print_to_log(f"🎯 Parsed classification: {result}")
+                return result
+                
+            except (json.JSONDecodeError, ValueError, KeyError) as e:
+                print_to_log(f"⚠️ Failed to parse JSON response: {e}")
+                # Fallback parsing
+                return self._fallback_classify_intent(query)
+                
+        except Exception as e:
+            print_to_log(f"⚠️ LLM classification failed: {e}")
+            return self._fallback_classify_intent(query)
+    
+    
+    
     def __init__(self):
         self.default_model = os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M")
         
@@ -429,109 +529,9 @@ class Orchestrator:
         
         return matches
 
-    def classify_intent_with_llm(self, query: str, context: Dict[str, Any] = None) -> str:
-        """
-        Use LLM to classify user intent (fallback for ambiguous cases)
-        """
-        if not LLM_AVAILABLE:
-            print_to_log("⚠️ LLM not available, using fallback classification")
-            return self._fallback_classify_intent(query)
-        
-        # Build context information
-        context_parts = []
-        if context:
-            if context.get("has_raw_data"):
-                context_parts.append("User has uploaded data")
-            if context.get("has_cleaned_data"):
-                context_parts.append("Data has been preprocessed")
-            if context.get("has_selected_features"):
-                context_parts.append("Features have been selected")
-            if context.get("has_trained_model"):
-                context_parts.append("Model has been trained")
-        
-        context_info = f"CONVERSATION CONTEXT: {'; '.join(context_parts)}" if context_parts else "CONVERSATION CONTEXT: None"
-        
-        classification_prompt = f"""You are an intent classifier for a multi-agent ML pipeline system. Your job is to classify user queries into exactly one of these categories:
 
-1. "preprocessing" - User wants to clean, preprocess, or prepare data
-2. "feature_selection" - User wants to select features, analyze feature importance, or reduce dimensionality  
-3. "model_building" - User wants to work with models (build new, use existing, predict, evaluate, visualize)
-4. "general_query" - General questions, greetings, capability questions, or unclear intent
-5. "code_execution" - General Python code that needs to be executed (data analysis, calculations, plotting, etc.)
-6. "full_pipeline" - User wants to run the complete ML pipeline from start to finish
-
-{context_info}
-
-PRIORITY CLASSIFICATION RULES (check in this order):
-
-HIGHEST PRIORITY - "full_pipeline" if query contains:
-- "complete pipeline", "full pipeline", "end to end", "start to finish"
-- "build complete ML pipeline", "run entire pipeline", "do everything"
-
-SECOND PRIORITY - "preprocessing" if query contains:
-- "clean", "preprocess", "missing values", "outliers", "normalize", "standardize"
-- "encode categorical", "handle nulls", "remove duplicates", "data cleaning"
-
-THIRD PRIORITY - "feature_selection" if query contains:
-- "select features", "feature selection", "feature importance", "IV analysis"
-- "correlation analysis", "PCA", "dimensionality reduction", "VIF analysis"
-
-FOURTH PRIORITY - "model_building" if query contains:
-- "model", "train", "build", "predict", "score", "classify", "evaluate"
-- "use model", "existing model", "new model", "create model"
-- "lgbm", "xgboost", "random forest", "decision tree", "classifier", "regressor"
-- "visualize model", "model plot", "tree plot", "feature importance"
-- "segments", "deciles", "buckets", "rankings" (model-based operations)
-
-FIFTH PRIORITY - "code_execution" if query contains:
-- "calculate", "compute", "analyze", "plot", "graph", "chart", "visualize" (but NOT model-related)
-- "show me", "create plot", "data analysis", "statistics", "correlation", "distribution"
-- "write code", "python code", "code to", "script to"
-
-LOWEST PRIORITY - "general_query" for:
-- Greetings: "hello", "hi", "hey"
-- Capability questions: "what can you do", "help", "capabilities"
-- General questions without specific action requests
-
-EXAMPLES:
-- "Build a complete ML pipeline" → full_pipeline
-- "Clean this data and handle missing values" → preprocessing
-- "Select the most important features" → feature_selection
-- "Train a new model" → model_building
-- "Use existing model for predictions" → model_building
-- "Show model performance" → model_building
-- "Visualize decision tree" → model_building
-- "Calculate correlation between features" → code_execution (data analysis code needed)
-- "Hello, what can you do?" → general_query
-
-USER QUERY: "{query}"
-
-Respond with ONLY one word: preprocessing, feature_selection, model_building, general_query, code_execution, or full_pipeline"""
-
-        try:
-            response = ollama.chat(
-                model=self.default_model,
-                messages=[{"role": "user", "content": classification_prompt}]
-            )
-            
-            intent = response["message"]["content"].strip().lower()
-            
-            # Validate response
-            valid_intents = ["preprocessing", "feature_selection", "model_building", "general_query", "code_execution", "full_pipeline"]
-            if intent not in valid_intents:
-                # Fallback classification
-                intent = self._fallback_classify_intent(query)
-            
-            print_to_log(f"🎯 LLM Intent classified: {intent}")
-            return intent
-            
-        except Exception as e:
-            print_to_log(f"⚠️ LLM intent classification failed: {e}")
-            # If LLM fails, use fallback classification
-            return self._fallback_classify_intent(query)
-
-    def _fallback_classify_intent(self, query: str) -> str:
-        """Fallback keyword-based classification"""
+    def _fallback_classify_intent(self, query: str) -> Dict[str, Any]:
+        """Fallback keyword-based classification returning JSON structure"""
         query_lower = query.lower()
         
         # Count keyword matches for each category
@@ -546,13 +546,51 @@ Respond with ONLY one word: preprocessing, feature_selection, model_building, ge
         # Check for full pipeline indicators
         full_pipeline_phrases = ["complete pipeline", "full pipeline", "end to end", "build complete", "entire pipeline"]
         if any(phrase in query_lower for phrase in full_pipeline_phrases):
-            return "full_pipeline"
+            return {
+                "is_data_science": True,
+                "intent": "full_pipeline",
+                "confidence": 0.9,
+                "explanation": "Complete ML pipeline detected based on keyword matching"
+            }
         
         # Find the category with the highest score
+        best_category = "general_query"
+        best_score = 0
         if max(scores.values()) > 0:
-            return max(scores, key=scores.get)
+            best_category = max(scores, key=scores.get)
+            best_score = scores[best_category]
         
-        return "general_query"
+        # Check for non-data science keywords
+        non_data_science_keywords = ["weather", "news", "entertainment", "sports", "gaming", "cooking", "travel"]
+        non_data_science_score = sum(1 for kw in non_data_science_keywords if kw in query_lower)
+        
+        # Determine if data science related
+        total_data_science_score = sum(scores.values())
+        is_data_science = total_data_science_score > non_data_science_score
+        
+        # Calculate confidence
+        max_possible_score = 3  # Rough estimate
+        confidence = min(0.8, max(0.3, best_score / max_possible_score)) if best_score > 0 else 0.5
+        
+        # Create explanation
+        explanations = {
+            "preprocessing": "Data cleaning, preprocessing, preparation, transformation based on keyword matching",
+            "feature_selection": "Feature selection, importance analysis, dimensionality reduction based on keyword matching", 
+            "model_building": "Model training, evaluation, prediction, visualization based on keyword matching",
+            "general_query": "General questions, greetings, capability questions based on keyword matching",
+            "code_execution": "Data analysis code, calculations, plotting based on keyword matching",
+            "full_pipeline": "Complete ML pipeline from start to finish based on keyword matching"
+        }
+        
+        result = {
+            "is_data_science": is_data_science,
+            "intent": best_category,
+            "confidence": confidence,
+            "explanation": explanations.get(best_category, "Fallback classification based on keyword matching")
+        }
+        
+        print_to_log(f"🔧 Fallback classification: {result}")
+        return result
 
     def _classify_with_keyword_scoring(self, query: str) -> Tuple[str, Dict]:
         """
@@ -1328,7 +1366,7 @@ How can I help you with your ML workflow today?"""
 
     def route(self, state: PipelineState) -> str:
         """
-        Semantic-first routing: Embedding similarity with keyword and LLM fallbacks
+        Single LLM routing: Combined data science relevance + intent classification
         """
         if not state.user_query:
             return "general_response"  # Do nothing until user provides intent
@@ -1340,26 +1378,54 @@ How can I help you with your ML workflow today?"""
         if thread_logger:
             thread_logger.log_query(state.user_query, agent="orchestrator")
         
-        # Use universal pattern classifier for main intent classification
-        if self.pattern_classifier is None:
-            print_to_log("⚠️ Pattern classifier is None, using fallback classification")
-            intent = "general_response"
-            method_used = "fallback"
-        else:
-            intent, method_used = self.pattern_classifier.classify_pattern(
-                state.user_query,
-                self.intent_definitions,
-                use_case="intent_classification"
-            )
+        # Single LLM call for both relevance check and intent classification
+        classification_result = self._classify_with_single_llm(state.user_query)
         
-        print_to_log(f"[Orchestrator] Intent classification: {intent} (method: {method_used})")
+        # Check if query is data science related
+        if not classification_result["is_data_science"]:
+            print_to_log(f"[Orchestrator] Query blocked: Not data science related (confidence: {classification_result['confidence']:.2f})")
+            explanation = classification_result.get('explanation', '')
+            state.last_response = f"""❌ This query is not related to data science or machine learning.
+
+🤖 I'm a specialized data science and machine learning assistant. I can help you with:
+
+📊 **Data Analysis & Processing:**
+• Data cleaning, preprocessing, and transformation
+• Handling missing values, outliers, and duplicates
+• Data exploration and statistical analysis
+
+🔍 **Feature Engineering & Selection:**
+• Feature selection and importance analysis
+• Correlation analysis and dimensionality reduction
+• Feature engineering techniques
+
+🧠 **Machine Learning:**
+• Model building, training, and evaluation
+• Predictions and model performance analysis
+• Algorithm selection and hyperparameter tuning
+
+📈 **Data Visualization:**
+• Creating plots, charts, and visualizations
+• Model performance visualization
+• Data distribution analysis
+
+💬 **Please reframe your question** to focus on data science, machine learning, statistics, or data analysis tasks."""
+            return "general_response"
+        
+        # Use the classified intent
+        intent = classification_result["intent"]
+        confidence = classification_result["confidence"]
+        
+        print_to_log(f"[Orchestrator] Intent classification: {intent} (confidence: {confidence:.2f}) - {classification_result.get('explanation', '')[:100]}...")
         
         # Log classification results
         if thread_logger:
             thread_logger.log_classification(state.user_query, {
                 "intent": intent,
-                "method": method_used,
-                "confidence": getattr(self.pattern_classifier, "last_confidence", None)
+                "method": "single_llm",
+                "confidence": confidence,
+                "is_data_science": classification_result["is_data_science"],
+                "explanation": classification_result.get("explanation", "")
             })
         
         # Route by intent
