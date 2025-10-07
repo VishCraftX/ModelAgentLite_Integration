@@ -1032,6 +1032,31 @@ Examples:
         if intent == "full_pipeline":
             # Start from the beginning or continue from current state
             if state.raw_data is None:
+                # Check if user is mentioning file upload
+                query_lower = (state.user_query or "").lower()
+                upload_patterns = ["upload", "file", "dataset", "data", "csv", "excel"]
+                if any(pattern in query_lower for pattern in upload_patterns):
+                    print_to_log("[Orchestrator] User mentions file upload but no data available - prompting for upload")
+                    state.last_response = """📁 **Ready to help with your data analysis!**
+
+To get started with creating cohorts and analyzing prospect-to-disbursal ratios, please upload your dataset.
+
+📊 **Supported formats:**
+• CSV files (.csv)
+• Excel files (.xlsx, .xls)
+
+📤 **How to upload:**
+• Drag and drop your file into this chat
+• Or use the attachment button to select your file
+
+Once you upload your data, I'll help you:
+• Clean and preprocess the data
+• Create cohorts based on your criteria
+• Calculate prospect-to-disbursal ratios
+• Identify segments with maximum conversion potential
+
+Ready when you are! 🚀"""
+                    return "general_response"
                 return "preprocessing"
             elif state.cleaned_data is None:
                 return "preprocessing"

@@ -231,7 +231,7 @@ class MultiAgentMLPipeline:
         # CRITICAL: Check if we have raw data before proceeding
         if state.raw_data is None:
             print_to_log(f"❌ [Preprocessing] No raw data available - cannot start preprocessing")
-            state.response = "❌ No data available for preprocessing. Please upload a dataset first."
+            state.last_response = "❌ No data available for preprocessing. Please upload a dataset first."
             return state
         
         # CRITICAL: Skip if we already have an interactive session for mode selection
