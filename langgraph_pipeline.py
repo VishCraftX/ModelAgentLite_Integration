@@ -1949,14 +1949,16 @@ Generate Python code to fulfill this request:"""
                 result_state = self.app.invoke(state)
                 
                 # LangGraph returns dict when ending at END node - convert back to PipelineState
-                if isinstance(result_state, dict):
+                if isinstance(result_state, dict) and not isinstance(result_state, PipelineState):
                     # Update original state with dict values
+                    print_to_log(f"🔧 Converting LangGraph dict result to PipelineState")
                     for key, value in result_state.items():
                         if hasattr(state, key):
                             setattr(state, key, value)
                     result_state = state
                 elif not isinstance(result_state, PipelineState):
                     # Fallback to original state for any other type
+                    print_to_log(f"🔧 Unexpected result type: {type(result_state)}, using original state")
                     result_state = state
             else:
                 # Simplified pipeline without LangGraph
