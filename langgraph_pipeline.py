@@ -1875,7 +1875,16 @@ Generate Python code to fulfill this request:"""
                 
                 # Route to the appropriate agent to continue the interactive session
                 agent_type = state.interactive_session['agent_type']
-                if agent_type == "preprocessing":
+                
+                # CRITICAL: Check if we're in mode selection phase - route to orchestrator instead
+                if (agent_type == "preprocessing" and 
+                    state.interactive_session.get('phase') == 'mode_selection'):
+                    print_to_log("🚀 DEBUG: Mode selection detected - routing to orchestrator instead of preprocessing")
+                    # Clear the interactive session temporarily so orchestrator can handle mode selection
+                    # The orchestrator will restore it or create a new one as needed
+                    return self._route_to_agent(state)
+                
+                elif agent_type == "preprocessing":
                     print_to_log("🔧 DEBUG: Routing to preprocessing interactive handler")
                     # Handle preprocessing commands directly
                     return self._handle_preprocessing_interaction(state, query)
