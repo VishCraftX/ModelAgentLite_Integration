@@ -72,6 +72,9 @@ class PipelineState(BaseModel):
     # Predictions dataset
     predictions_dataset: Optional[pd.DataFrame] = None  # Dataset with predictions column
     
+    # Non-data science query context
+    non_data_science_context: Optional[Dict] = None  # Context for intelligent non-DS responses
+    
     
     class Config:
         arbitrary_types_allowed = True
