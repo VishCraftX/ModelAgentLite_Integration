@@ -406,18 +406,40 @@ I'll help you build a machine learning model. Let's start!
             # Generate context-aware response
             query = state.user_query or ""
             
-            if state.raw_data is not None:
+            # Check if this is a non-data science query with context from orchestrator
+            if hasattr(state, 'non_data_science_context') and state.non_data_science_context:
+                print_to_log(f"🤖 Handling non-data science query with intelligent context")
+                context = state.non_data_science_context
+                
+                # Create intelligent prompt based on query type
+                context_prompt = f"""The user said: '{query}'
+
+This query was classified as not directly related to data science (confidence: {context['classification_confidence']:.2f}).
+
+INSTRUCTIONS FOR RESPONSE:
+1. If it's a greeting (hi, hello, hey, etc.) → Respond warmly and briefly introduce yourself as a data science assistant
+2. If it's a polite question somewhat related to data/analysis → Answer helpfully but gently guide toward data science topics
+3. If it's completely off-topic (weather, sports, etc.) → Politely redirect while being friendly
+4. If it's a general question about AI/ML concepts → Answer educationally and encourage specific data science tasks
+
+Be conversational, friendly, and helpful. Don't be harsh or robotic. Show personality while staying professional."""
+                
+                system_prompt = "You are a friendly, specialized AI assistant for data science and machine learning. You're helpful and conversational, but your expertise is in ML, data analysis, and statistics. Handle non-data science queries gracefully - be warm with greetings, helpful with related topics, and gently redirect off-topic queries while maintaining a friendly tone."
+                
+            elif state.raw_data is not None:
                 context_prompt = f"The user said: '{query}'. I have their dataset with {state.raw_data.shape[0]:,} rows and {state.raw_data.shape[1]} columns. Respond naturally and conversationally. Only mention specific capabilities if they ask 'what can you do' or similar questions."
+                system_prompt = "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."
             else:
                 context_prompt = f"The user said: '{query}'. Respond naturally and conversationally as an AI assistant. Don't list capabilities unless they specifically ask what you can do."
+                system_prompt = "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."
             
-            print_to_log(f"🔍 Generating conversational response for: '{query}'")
+            print_to_log(f"🔍 Generating contextual response for: '{query}'")
             
-            # Use LLM for conversational response
+            # Use LLM for intelligent contextual response
             response = ollama.chat(
                 model=os.getenv("DEFAULT_MODEL", "qwen2.5-coder:32b-instruct-q4_K_M"),  # Use environment variable
                 messages=[
-                    {"role": "system", "content": "You are a specialized AI assistant for data science and machine learning. You help users build models, analyze data, and work with datasets. When greeting users, be friendly and natural. When asked about capabilities, mention your ML/data science skills like building models, data analysis, visualization, etc. Keep responses conversational and concise."},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": context_prompt}
                 ]
             )
@@ -425,7 +447,11 @@ I'll help you build a machine learning model. Let's start!
             generated_response = response["message"]["content"].strip()
             state.last_response = generated_response
             
-            print_to_log(f"✅ Generated response: {generated_response[:100]}...")
+            # Clear non-data science context after use
+            if hasattr(state, 'non_data_science_context'):
+                state.non_data_science_context = None
+            
+            print_to_log(f"✅ Generated contextual response: {generated_response[:100]}...")
             
         except Exception as e:
             print_to_log(f"❌ Error generating conversational response: {e}")

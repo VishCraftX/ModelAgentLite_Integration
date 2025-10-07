@@ -594,7 +594,7 @@ INTENT CATEGORIES (if data science related):
 1. "preprocessing" - Data cleaning, preparation, transformation
 2. "feature_selection" - Feature selection, importance analysis, dimensionality reduction  
 3. "model_building" - ACTUAL model training/building with data (not questions about models)
-4. "general_query" - Questions, explanations, advice, learning, theoretical concepts, parameter guidance
+4. "general_query" - Questions, explanations, advice, learning, theoretical concepts, parameter guidance in model building, hyper parameter tuning guidance
 5. "code_execution" - Data analysis code, calculations, plotting
 6. "full_pipeline" - Complete ML pipeline from start to finish
 
@@ -1938,28 +1938,19 @@ How can I help you with your ML workflow today?"""
         
         # Check if query is data science related
         if not classification_result["is_data_science"]:
-            print_to_log(f"[Orchestrator] Query blocked: Not data science related (confidence: {classification_result['confidence']:.2f})")
+            print_to_log(f"[Orchestrator] Non-data science query detected - routing to contextual general response (confidence: {classification_result['confidence']:.2f})")
             explanation = classification_result.get('explanation', '')
-            state.last_response = f"""❌ This query is not related to data science or machine learning.
-
-🤖 I'm a specialized data science and machine learning assistant. I can help you with:
-
-📊 Data Analysis & Processing:
-• Data cleaning, preprocessing, and transformation
-• Handling missing values, outliers, and duplicates
-• Data exploration and statistical analysis
-
-🔍 Feature Engineering & Selection:
-• Feature selection and importance analysis
-• Correlation analysis and dimensionality reduction
-• Feature engineering techniques
-
-🧠 Machine Learning:
-• Model building, training, and evaluation
-• Predictions and model performance analysis
-• Algorithm selection and hyperparameter tuning
-
-💬 Please reframe your question to focus on data science, machine learning, statistics, or data analysis tasks."""
+            
+            # Instead of harsh rejection, inject context for intelligent general response
+            state.non_data_science_context = {
+                'original_query': state.user_query,
+                'classification_confidence': classification_result['confidence'],
+                'explanation': explanation,
+                'routing_reason': 'non_data_science_query'
+            }
+            
+            # Let general response agent handle this intelligently with context
+            print_to_log(f"[Orchestrator] Added non-data science context for intelligent response handling")
             return "general_response"
         
         # Use the classified intent
