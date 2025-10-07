@@ -283,7 +283,10 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
                 state.artifacts = result_state.artifacts
                 state.pending_file_uploads = result_state.pending_file_uploads
                 
-                return "general_response"  # Return the automated pipeline's response
+                # CRITICAL: Don't route to general_response - pipeline is complete
+                # The automated pipeline has already generated the final response
+                print_to_log(f"🎉 [Mode Selection] Fast pipeline completed - no further routing needed")
+                return "END"  # Signal that processing is finished
                 
             except Exception as e:
                 print_to_log(f"❌ [Mode Selection] Automated pipeline failed: {e}")
