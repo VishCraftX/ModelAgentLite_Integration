@@ -593,10 +593,18 @@ Consider "no" for:
 INTENT CATEGORIES (if data science related):
 1. "preprocessing" - Data cleaning, preparation, transformation
 2. "feature_selection" - Feature selection, importance analysis, dimensionality reduction  
-3. "model_building" - Model training, evaluation, prediction, visualization
-4. "general_query" - Questions, explanations, greetings, capabilities
+3. "model_building" - ACTUAL model training/building with data (not questions about models)
+4. "general_query" - Questions, explanations, advice, learning, theoretical concepts, parameter guidance
 5. "code_execution" - Data analysis code, calculations, plotting
 6. "full_pipeline" - Complete ML pipeline from start to finish
+
+CRITICAL DISTINCTION - "model_building" vs "general_query":
+- "model_building": User wants to BUILD/TRAIN an actual model with their data
+  Examples: "train a model", "build lgbm classifier", "create random forest"
+  
+- "general_query": User wants ADVICE, EXPLANATION, or LEARNING about ML concepts
+  Examples: "what parameters should I tune?", "I'm seeing poor performance, what should I do?", 
+  "how to improve my model?", "what causes overfitting?", "explain decision tree parameters"
 
 USER QUERY: "{query}"
 
@@ -1557,12 +1565,37 @@ Examples:
             # Check if this is actually an educational/explanatory query about ML concepts
             query_lower = (state.user_query or "").lower()
             educational_patterns = [
+                # Direct educational phrases
                 "tell me about", "tell me how", "explain", "what is", "how does", "how do",
-                "describe", "definition of", "meaning of", "concept of"
+                "describe", "definition of", "meaning of", "concept of",
+                
+                # Question patterns about parameters/concepts
+                "what are the parameters", "which parameters", "what parameters",
+                "how to tune", "how to adjust", "how to optimize", "how to improve",
+                "what should i", "what can i", "how can i",
+                
+                # Learning/advice seeking patterns
+                "i'm seeing", "i am seeing", "i'm getting", "i am getting",
+                "what causes", "why is", "why am", "why does",
+                "how to fix", "how to solve", "how to handle",
+                "advice", "suggest", "recommend", "guidance",
+                
+                # Problem description patterns (learning context)
+                "i have a problem", "i'm having trouble", "i am having trouble",
+                "i notice", "i observed", "i found that"
             ]
             
-            if any(pattern in query_lower for pattern in educational_patterns):
-                print_to_log("[Orchestrator] Educational query detected - routing to general response")
+            # Additional check for educational context indicators
+            educational_indicators = [
+                "?" in state.user_query,  # Questions are often educational
+                "parameters" in query_lower and ("what" in query_lower or "which" in query_lower),
+                "tweak" in query_lower and ("what" in query_lower or "how" in query_lower),
+                "seeing" in query_lower and ("what" in query_lower or "why" in query_lower)
+            ]
+            
+            if (any(pattern in query_lower for pattern in educational_patterns) or 
+                any(educational_indicators)):
+                print_to_log("[Orchestrator] Educational/advisory query detected - routing to general response")
                 return "general_response"
             
             # Check prerequisites for actual model building
