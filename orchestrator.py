@@ -346,6 +346,104 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         
         return "general_response"
     
+    def _prompt_for_preprocessing_confirmation(self, state: PipelineState) -> str:
+        """
+        Prompt user for confirmation when model building is requested but no cleaned data exists
+        """
+        # Set up interactive session for preprocessing confirmation
+        state.interactive_session = {
+            'agent_type': 'preprocessing_confirmation',
+            'session_active': True,
+            'session_id': state.chat_session,
+            'phase': 'preprocessing_confirmation',
+            'original_intent': 'model_building',
+            'original_query': state.user_query,
+            'needs_preprocessing_confirmation': True
+        }
+        
+        state.last_response = f"""⚠️ **Preprocessing Required for Better Results**
+
+🔍 **Current Situation:**
+• You want to build a model, but your data hasn't been preprocessed yet
+• Raw data may contain outliers, missing values, or unoptimized features
+• This could lead to poor model performance or training issues
+
+🎯 **Recommendation:**
+It's **highly recommended** to preprocess your data first for better model accuracy and reliability.
+
+📊 **Your Options:**
+
+1️⃣ **Recommended**: Preprocess data first
+   • Clean outliers and missing values
+   • Optimize features for better performance
+   • Then build your model
+
+2️⃣ **Skip preprocessing** (not recommended)
+   • Build model directly with raw data
+   • May result in suboptimal performance
+   • Potential training issues
+
+💬 **Do you want to still build model with out preprocessing?**
+• Type `Yes` - Build model with raw data anyway
+• Type `No` - Clean data first (recommended)
+"""
+        
+        return "general_response"
+    
+    def _handle_preprocessing_confirmation(self, state: PipelineState) -> str:
+        """
+        Handle user response to preprocessing confirmation
+        """
+        user_input = state.user_query.strip().lower()
+        original_intent = state.interactive_session.get('original_intent', 'model_building')
+        
+        print_to_log(f"🔧 [Preprocessing Confirmation] User input: '{user_input}'")
+        print_to_log(f"🔧 [Preprocessing Confirmation] Original intent: {original_intent}")
+        
+        if 'skip' in user_input or 'no' in user_input or 'clean' in user_input or 'No' in user_input:
+            # SUCCESS: User wants to preprocess first
+            state.interactive_session = None  # Clear interactive session
+            print_to_log(f"✅ [Preprocessing Confirmation] User chose to preprocess first")
+            
+            state.last_response = f"✅ Great choice! Starting data preprocessing to optimize your model performance..."
+            
+            # Route to preprocessing
+            return "preprocessing"
+            
+        elif 'Yes' in user_input or 'build' in user_input or 'yes' in user_input:
+            # User wants to skip preprocessing and build model with raw data
+            state.interactive_session = None  # Clear interactive session
+            print_to_log(f"⚠️ [Preprocessing Confirmation] User chose to skip preprocessing")
+            
+            # Use raw data as cleaned data for model building
+            if state.cleaned_data is None:
+                state.cleaned_data = state.raw_data.copy()
+                print_to_log("[Preprocessing Confirmation] Using raw data as cleaned data")
+            
+            # Use all columns as selected features
+            if state.selected_features is None:
+                state.selected_features = state.raw_data.copy()
+                print_to_log("[Preprocessing Confirmation] Using all columns as selected features")
+            
+            state.last_response = f"⚠️ Proceeding with raw data modeling (preprocessing skipped)..."
+            
+            # Route to model building
+            return "model_building"
+            
+        else:
+            # FAILURE: Invalid response, ask again
+            print_to_log(f"❌ [Preprocessing Confirmation] Invalid response: '{user_input}'")
+            
+            state.last_response = f"""❓ **Please choose one of the options:**
+
+💬 **Valid responses:**
+• Type `Yes` - Build model with raw data anyway
+• Type `No` - Clean data first (recommended)
+
+⚠️ Your response '{user_input}' was not recognized. Please try again."""
+            
+            return "general_response"
+    
     def _extract_target_from_query(self, query: str, available_columns: list) -> str:
         """
         Extract target column from user query using pattern matching
@@ -1489,10 +1587,10 @@ Examples:
                     print_to_log("[Orchestrator] Using all columns as selected features")
                 return "model_building"
             
-            # Normal pipeline flow
+            # Normal pipeline flow - check if preprocessing is needed
             elif state.cleaned_data is None:
-                print_to_log("[Orchestrator] Need to preprocess data first")
-                return "preprocessing"
+                print_to_log("[Orchestrator] No cleaned data available - prompting for preprocessing confirmation")
+                return self._prompt_for_preprocessing_confirmation(state)
             elif state.selected_features is None:
                 print_to_log("[Orchestrator] Need to select features first")
                 return "feature_selection"
@@ -1787,6 +1885,13 @@ How can I help you with your ML workflow today?"""
             state.interactive_session.get('phase') == 'target_selection'):
             print_to_log(f"🎯 [DEBUG] Entering target selection handler")
             return self._handle_target_selection(state)
+        
+        # CRITICAL: Check if we're in preprocessing confirmation mode
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            state.interactive_session.get('phase') == 'preprocessing_confirmation'):
+            print_to_log(f"🔧 [DEBUG] Entering preprocessing confirmation handler")
+            return self._handle_preprocessing_confirmation(state)
         
         # Get thread logger
         thread_logger = self._get_thread_logger(state)
