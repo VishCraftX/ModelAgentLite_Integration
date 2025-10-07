@@ -209,9 +209,10 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         """
         user_input = state.user_query.strip()
         available_columns = state.interactive_session.get('available_columns', [])
-        original_intent = state.interactive_session.get('original_intent', 'preprocessing')
+        original_intent = state.interactive_session.get('original_intent')
         
         print_to_log(f"🎯 [Target Selection] User input: '{user_input}'")
+        print_to_log(f"🎯 [Target Selection] Original intent: {original_intent}")
         print_to_log(f"🎯 [Target Selection] Available columns: {available_columns}")
         
         # Check if user input matches exactly any column name
@@ -229,20 +230,11 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             # FAILURE: Column not found, ask again
             print_to_log(f"❌ [Target Selection] Column '{user_input}' not found in dataset")
             
-            # Create column list for error message
-            column_list = []
-            for i, col in enumerate(available_columns, 1):
-                column_list.append(f"{i}. `{col}`")
-            columns_text = "\n".join(column_list)
-            
-            state.last_response = f"""❌ **Column '{user_input}' not found in dataset**
-
-📋 **Available Columns:**
-{columns_text}
+            state.last_response = f"""❌ **Column not found in dataset**
 
 💬 **Please type the EXACT column name (case-sensitive):**
 
-⚠️ **Tip:** Copy and paste the column name to avoid typos."""
+⚠️ **Important:** The column name must match exactly including case."""
             
             return "general_response"
     
