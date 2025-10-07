@@ -1906,9 +1906,8 @@ Generate Python code to fulfill this request:"""
                 if (agent_type == "preprocessing" and 
                     state.interactive_session.get('phase') == 'mode_selection'):
                     print_to_log("🚀 DEBUG: Mode selection detected - routing to orchestrator instead of preprocessing")
-                    # Clear the interactive session temporarily so orchestrator can handle mode selection
-                    # The orchestrator will restore it or create a new one as needed
-                    return self._route_to_agent(state)
+                    # Route directly to orchestrator node to handle mode selection
+                    return self._orchestrator_node(state)
                 
                 elif agent_type == "preprocessing":
                     print_to_log("🔧 DEBUG: Routing to preprocessing interactive handler")

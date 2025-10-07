@@ -1909,14 +1909,32 @@ How can I help you with your ML workflow today?"""
         
         # CRITICAL: Check if we're in mode selection mode
         if (hasattr(state, 'interactive_session') and 
-            state.interactive_session and 
-            state.interactive_session.get('phase') == 'mode_selection'):
-            print_to_log(f"🚀 [DEBUG] Entering mode selection handler")
-            return self._handle_mode_selection(state)
+            state.interactive_session):
+            
+            # DEBUG: Check type of interactive_session
+            print_to_log(f"🔍 [DEBUG] interactive_session type: {type(state.interactive_session)}")
+            print_to_log(f"🔍 [DEBUG] interactive_session value: {state.interactive_session}")
+            
+            # Handle case where interactive_session might be a string (JSON serialization issue)
+            if isinstance(state.interactive_session, str):
+                try:
+                    import json
+                    state.interactive_session = json.loads(state.interactive_session)
+                    print_to_log(f"🔧 [DEBUG] Converted string interactive_session to dict")
+                except Exception as e:
+                    print_to_log(f"❌ [DEBUG] Failed to parse interactive_session string: {e}")
+                    state.interactive_session = None
+            
+            if (state.interactive_session and 
+                isinstance(state.interactive_session, dict) and
+                state.interactive_session.get('phase') == 'mode_selection'):
+                print_to_log(f"🚀 [DEBUG] Entering mode selection handler")
+                return self._handle_mode_selection(state)
         
         # CRITICAL: Check if we're in target selection mode
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session and 
+            isinstance(state.interactive_session, dict) and
             state.interactive_session.get('phase') == 'target_selection'):
             print_to_log(f"🎯 [DEBUG] Entering target selection handler")
             return self._handle_target_selection(state)
@@ -1924,6 +1942,7 @@ How can I help you with your ML workflow today?"""
         # CRITICAL: Check if we're in preprocessing confirmation mode
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session and 
+            isinstance(state.interactive_session, dict) and
             state.interactive_session.get('phase') == 'preprocessing_confirmation'):
             print_to_log(f"🔧 [DEBUG] Entering preprocessing confirmation handler")
             return self._handle_preprocessing_confirmation(state)
