@@ -385,9 +385,21 @@ I'll help you build a machine learning model. Let's start!
         print_to_log(f"\n💬 [General Response] Generating conversational response")
         # Note: No progress update to Slack - user doesn't need routing details
         
-        # CRITICAL: Check if orchestrator already set a response (e.g., target selection prompt)
-        if state.last_response:
-            print_to_log(f"💬 [General Response] Using orchestrator-provided response: {state.last_response[:100]}...")
+        # Clear any stale response unless we're in an active interactive session
+        if not (hasattr(state, 'interactive_session') and 
+                state.interactive_session and 
+                isinstance(state.interactive_session, dict) and
+                state.interactive_session.get('session_active')):
+            state.last_response = None
+        
+        # CRITICAL: Only reuse orchestrator response if we're in an active interactive session
+        # This prevents reusing old responses from previous queries
+        if (state.last_response and 
+            hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            isinstance(state.interactive_session, dict) and
+            state.interactive_session.get('session_active')):
+            print_to_log(f"💬 [General Response] Using orchestrator-provided response for interactive session: {state.last_response[:100]}...")
             return state
         
         try:
@@ -418,11 +430,17 @@ This query was classified as not directly related to data science (confidence: {
 
 INSTRUCTIONS FOR RESPONSE:
 1. If it's a greeting (hi, hello, hey, etc.) → Respond warmly and briefly introduce yourself as a data science assistant
-2. If it's a polite question somewhat related to data/analysis → Answer helpfully but gently guide toward data science topics
-3. If it's completely off-topic (weather, sports, etc.) → Politely redirect while being friendly
+2. If it's a question about business/analytics tools → Try to answer helpfully if you can, then suggest data science approaches
+3. If it's completely off-topic (weather, sports, etc.) → Acknowledge it briefly, then gently redirect to data science
 4. If it's a general question about AI/ML concepts → Answer educationally and encourage specific data science tasks
+5. If it's incomplete/unclear → Ask for clarification while mentioning your data science capabilities
 
-Be conversational, friendly, and helpful. Don't be harsh or robotic. Show personality while staying professional."""
+RESPONSE STRUCTURE:
+- First: Try to address their actual question if possible (be helpful!)
+- Then: Gently guide toward data science topics you can help with
+- End: Ask how you can help with their data science needs
+
+Be conversational, friendly, and helpful. Don't just redirect - try to be genuinely useful first."""
                 
                 system_prompt = "You are a friendly, specialized AI assistant for data science and machine learning. You're helpful and conversational, but your expertise is in ML, data analysis, and statistics. Handle non-data science queries gracefully - be warm with greetings, helpful with related topics, and gently redirect off-topic queries while maintaining a friendly tone."
                 
