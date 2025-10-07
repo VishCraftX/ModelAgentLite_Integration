@@ -137,7 +137,10 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         if intent in target_required_intents:
             if not hasattr(state, 'target_column') or not state.target_column:
                 print_to_log(f"[Orchestrator] No target column set for intent '{intent}' - prompting for target")
-                return self._prompt_for_target_column(state, intent)
+                target_result = self._prompt_for_target_column(state, intent)
+                if target_result != "proceed":
+                    return target_result  # Return general_response if target selection needed
+                # If target_result == "proceed", continue to check if target is actually set
         
         # All prerequisites met
         return "proceed"
@@ -168,6 +171,7 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         if "target" in available_columns:
             state.target_column = "target"
             print_to_log("🎯 Found 'target' column - using automatically")
+            print_to_log(f"🎯 Set state.target_column = '{state.target_column}'")
             return "proceed"  # Continue with original intent
         
         # SECOND: Set up interactive session for target selection
@@ -1704,6 +1708,8 @@ How can I help you with your ML workflow today?"""
                     print_to_log(f"🎯 [Orchestrator] Extracted target column from query: {extracted_target}")
             
             prerequisite_check = self._check_prerequisites(state, intent)
+            print_to_log(f"🔍 [Orchestrator] Prerequisite check result: {prerequisite_check}")
+            print_to_log(f"🔍 [Orchestrator] Target column after check: {getattr(state, 'target_column', 'NOT_SET')}")
             if prerequisite_check == "proceed":
                 print_to_log(f"[Orchestrator] All prerequisites met, proceeding with {intent}")
             else:
