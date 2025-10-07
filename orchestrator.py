@@ -1634,10 +1634,18 @@ How can I help you with your ML workflow today?"""
         
         print_to_log(f"[Orchestrator] Processing query: '{state.user_query}'")
         
+        # DEBUG: Check interactive session state
+        print_to_log(f"🔍 [DEBUG] Has interactive_session: {hasattr(state, 'interactive_session')}")
+        if hasattr(state, 'interactive_session'):
+            print_to_log(f"🔍 [DEBUG] Interactive session: {state.interactive_session}")
+            if state.interactive_session:
+                print_to_log(f"🔍 [DEBUG] Phase: {state.interactive_session.get('phase')}")
+        
         # CRITICAL: Check if we're in target selection mode
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session and 
             state.interactive_session.get('phase') == 'target_selection'):
+            print_to_log(f"🎯 [DEBUG] Entering target selection handler")
             return self._handle_target_selection(state)
         
         # Get thread logger

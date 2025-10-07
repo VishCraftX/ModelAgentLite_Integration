@@ -340,6 +340,11 @@ I'll help you build a machine learning model. Let's start!
         print_to_log(f"\n💬 [General Response] Generating conversational response")
         # Note: No progress update to Slack - user doesn't need routing details
         
+        # CRITICAL: Check if orchestrator already set a response (e.g., target selection prompt)
+        if state.last_response:
+            print_to_log(f"💬 [General Response] Using orchestrator-provided response: {state.last_response[:100]}...")
+            return state
+        
         try:
             # Import LLM functionality
             try:
