@@ -86,6 +86,271 @@ class Orchestrator:
         
         return get_thread_logger(user_id, thread_id)
     
+    def _check_prerequisites(self, state: PipelineState, intent: str) -> str:
+        """
+        Check data upload and target column prerequisites for all non-general intents
+        Returns: "proceed" if all good, or "general_response" if prerequisites missing
+        """
+        # Step 1: Check if data is uploaded
+        if state.raw_data is None:
+            print_to_log(f"[Orchestrator] No data uploaded for intent '{intent}' - prompting for upload")
+            
+            # Check if user is mentioning file upload
+            query_lower = (state.user_query or "").lower()
+            upload_patterns = ["upload", "file", "dataset", "data", "csv", "excel"]
+            
+            if any(pattern in query_lower for pattern in upload_patterns):
+                # User is mentioning upload - provide specific upload guidance
+                state.last_response = f"""📁 **Ready to help with your {intent.replace('_', ' ')} task!**
+
+To get started, please upload your dataset first.
+
+📊 **Supported formats:**
+• CSV files (.csv)
+• Excel files (.xlsx, .xls)
+
+📤 **How to upload:**
+• Drag and drop your file into this chat
+• Or use the attachment button to select your file
+
+Once you upload your data, I'll help you with {self._get_intent_description(intent)}.
+
+Ready when you are! 🚀"""
+            else:
+                # User didn't mention upload - general data requirement message
+                state.last_response = f"""📊 **Data Required for {intent.replace('_', ' ').title()}**
+
+I need a dataset to help you with {self._get_intent_description(intent)}.
+
+📤 **Please upload your data:**
+• Drag and drop your CSV/Excel file into this chat
+• Or use the attachment button to select your file
+
+📋 **Supported formats:** CSV (.csv), Excel (.xlsx, .xls)
+
+Once your data is uploaded, I'll be ready to assist! 🚀"""
+            
+            return "general_response"
+        
+        # Step 2: Check if target column is set (for intents that need it)
+        target_required_intents = ["preprocessing", "feature_selection", "model_building", "full_pipeline", "code_execution"]
+        if intent in target_required_intents:
+            if not hasattr(state, 'target_column') or not state.target_column:
+                print_to_log(f"[Orchestrator] No target column set for intent '{intent}' - prompting for target")
+                return self._prompt_for_target_column(state, intent)
+        
+        # All prerequisites met
+        return "proceed"
+    
+    def _get_intent_description(self, intent: str) -> str:
+        """Get user-friendly description of what the intent does"""
+        descriptions = {
+            "preprocessing": "data cleaning, preprocessing, and preparation",
+            "feature_selection": "feature selection and importance analysis", 
+            "model_building": "machine learning model building and evaluation",
+            "code_execution": "data analysis and code execution",
+            "full_pipeline": "complete machine learning pipeline from data preparation to model building"
+        }
+        return descriptions.get(intent, intent.replace('_', ' '))
+    
+    def _prompt_for_target_column(self, state: PipelineState, intent: str) -> str:
+        """
+        Smart target column detection and selection
+        """
+        if state.raw_data is None:
+            state.last_response = "❌ No data available for target column selection. Please upload data first."
+            return "general_response"
+        
+        available_columns = list(state.raw_data.columns)
+        print_to_log(f"📊 Available columns for target selection: {available_columns}")
+        
+        # FIRST: Check if "target" column exists - use it automatically
+        if "target" in available_columns:
+            state.target_column = "target"
+            print_to_log("🎯 Found 'target' column - using automatically")
+            return "proceed"  # Continue with original intent
+        
+        # SECOND: Set up interactive session for target selection
+        state.interactive_session = {
+            'agent_type': 'target_selection',
+            'session_active': True,
+            'session_id': state.chat_session,
+            'phase': 'target_selection',
+            'original_intent': intent,  # Store current intent
+            'available_columns': available_columns,
+            'needs_target': True
+        }
+        
+        # Create column list with numbering for easy selection
+        column_list = []
+        for i, col in enumerate(available_columns, 1):
+            column_list.append(f"{i}. `{col}`")
+        
+        columns_text = "\n".join(column_list)
+        
+        state.last_response = f"""🎯 **Target Column Selection Required**
+
+📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+
+📋 **Available Columns:**
+{columns_text}
+
+💬 **Please type the EXACT column name you want to use as target:**
+
+❓ **Which column should be used as the target variable for prediction?**
+
+⚠️ **Important:** Type only the exact column name (case-sensitive)."""
+        
+        return "general_response"
+    
+    def _handle_target_selection(self, state: PipelineState) -> str:
+        """
+        Handle target column selection from user input
+        """
+        user_input = state.user_query.strip()
+        available_columns = state.interactive_session.get('available_columns', [])
+        original_intent = state.interactive_session.get('original_intent', 'preprocessing')
+        
+        print_to_log(f"🎯 [Target Selection] User input: '{user_input}'")
+        print_to_log(f"🎯 [Target Selection] Available columns: {available_columns}")
+        
+        # Check if user input matches exactly any column name
+        if user_input in available_columns:
+            # SUCCESS: Set target column and continue with original intent
+            state.target_column = user_input
+            state.interactive_session = None  # Clear interactive session
+            print_to_log(f"✅ [Target Selection] Target column set to: {user_input}")
+            
+            state.last_response = f"✅ Target column set to: `{user_input}`\n\nProceeding with {original_intent.replace('_', ' ')}..."
+            
+            # Continue with original intent
+            return self._route_by_intent(state, original_intent)
+        else:
+            # FAILURE: Column not found, ask again
+            print_to_log(f"❌ [Target Selection] Column '{user_input}' not found in dataset")
+            
+            # Create column list for error message
+            column_list = []
+            for i, col in enumerate(available_columns, 1):
+                column_list.append(f"{i}. `{col}`")
+            columns_text = "\n".join(column_list)
+            
+            state.last_response = f"""❌ **Column '{user_input}' not found in dataset**
+
+📋 **Available Columns:**
+{columns_text}
+
+💬 **Please type the EXACT column name (case-sensitive):**
+
+⚠️ **Tip:** Copy and paste the column name to avoid typos."""
+            
+            return "general_response"
+    
+    def _extract_target_from_query(self, query: str, available_columns: list) -> str:
+        """
+        Extract target column from user query using pattern matching
+        Handles: "use revenue as target", "target price", "predict sales", etc.
+        """
+        if not query or not available_columns:
+            return None
+        
+        query_lower = query.lower().strip()
+        
+        # Pattern 1: "target column_name" - exact format
+        if query_lower.startswith('target '):
+            target_candidate = query[7:].strip().split()[0]  # Get first word after "target"
+            match = self._fuzzy_match_column(target_candidate, available_columns)
+            if match:
+                print_to_log(f"🎯 [Target Extraction] Pattern 1 match: '{target_candidate}' → '{match}'")
+                return match
+        
+        # Pattern 2: "set target to column_name" or "set target column_name"
+        if 'set target' in query_lower:
+            parts = query_lower.split('set target')
+            if len(parts) > 1:
+                target_part = parts[1].strip()
+                if target_part.startswith('to '):
+                    target_part = target_part[3:].strip()
+                target_candidate = target_part.split()[0] if target_part.split() else ""
+                match = self._fuzzy_match_column(target_candidate, available_columns)
+                if match:
+                    print_to_log(f"🎯 [Target Extraction] Pattern 2 match: '{target_candidate}' → '{match}'")
+                    return match
+        
+        # Pattern 3: "use column_name as target"
+        if 'as target' in query_lower:
+            parts = query_lower.split('as target')[0]
+            if 'use ' in parts:
+                target_candidate = parts.split('use ')[-1].strip()
+                match = self._fuzzy_match_column(target_candidate, available_columns)
+                if match:
+                    print_to_log(f"🎯 [Target Extraction] Pattern 3 match: '{target_candidate}' → '{match}'")
+                    return match
+        
+        # Pattern 4: "predict column_name" or "predicting column_name"
+        predict_patterns = ['predict ', 'predicting ', 'prediction of ', 'forecasting ', 'forecast ']
+        for pattern in predict_patterns:
+            if pattern in query_lower:
+                parts = query_lower.split(pattern)
+                if len(parts) > 1:
+                    target_candidate = parts[1].strip().split()[0]  # Get first word after pattern
+                    match = self._fuzzy_match_column(target_candidate, available_columns)
+                    if match:
+                        print_to_log(f"🎯 [Target Extraction] Pattern 4 match: '{target_candidate}' → '{match}'")
+                        return match
+        
+        # Pattern 5: Direct column name mention with fuzzy matching
+        # Find all columns that have fuzzy matches in the query
+        fuzzy_matches = []
+        for col in available_columns:
+            if self._is_fuzzy_match(col.lower(), query_lower):
+                fuzzy_matches.append(col)
+        
+        # If exactly one fuzzy match, use it
+        if len(fuzzy_matches) == 1:
+            print_to_log(f"🎯 [Target Extraction] Single fuzzy match: '{fuzzy_matches[0]}'")
+            return fuzzy_matches[0]
+        
+        return None
+    
+    def _fuzzy_match_column(self, candidate: str, available_columns: list) -> str:
+        """
+        Find the best fuzzy match for a candidate column name
+        """
+        candidate_lower = candidate.lower().strip()
+        
+        # Exact match first
+        for col in available_columns:
+            if col.lower() == candidate_lower:
+                return col
+        
+        # Partial match (candidate is substring of column)
+        for col in available_columns:
+            if candidate_lower in col.lower():
+                return col
+        
+        # Reverse partial match (column is substring of candidate)
+        for col in available_columns:
+            if col.lower() in candidate_lower:
+                return col
+        
+        return None
+    
+    def _is_fuzzy_match(self, column_name: str, query: str) -> bool:
+        """
+        Check if a column name has a fuzzy match in the query
+        """
+        # Direct substring match
+        if column_name in query:
+            return True
+        
+        # Clean column name and check
+        clean_col = column_name.replace('_', ' ').replace('-', ' ')
+        if clean_col in query:
+            return True
+        
+        return False
+    
     def _classify_with_single_llm(self, query: str) -> Dict[str, Any]:
         """
         Single LLM call for both data science relevance check and intent classification
@@ -1030,34 +1295,9 @@ Examples:
             return skip_routing
         
         if intent == "full_pipeline":
-            # Start from the beginning or continue from current state
+            # Prerequisites already checked - determine next step based on current state
             if state.raw_data is None:
-                # Check if user is mentioning file upload
-                query_lower = (state.user_query or "").lower()
-                upload_patterns = ["upload", "file", "dataset", "data", "csv", "excel"]
-                if any(pattern in query_lower for pattern in upload_patterns):
-                    print_to_log("[Orchestrator] User mentions file upload but no data available - prompting for upload")
-                    state.last_response = """📁 **Ready to help with your data analysis!**
-
-To get started with creating cohorts and analyzing prospect-to-disbursal ratios, please upload your dataset.
-
-📊 **Supported formats:**
-• CSV files (.csv)
-• Excel files (.xlsx, .xls)
-
-📤 **How to upload:**
-• Drag and drop your file into this chat
-• Or use the attachment button to select your file
-
-Once you upload your data, I'll help you:
-• Clean and preprocess the data
-• Create cohorts based on your criteria
-• Calculate prospect-to-disbursal ratios
-• Identify segments with maximum conversion potential
-
-Ready when you are! 🚀"""
-                    return "general_response"
-                return "preprocessing"
+                return "preprocessing"  # This shouldn't happen due to prerequisite check
             elif state.cleaned_data is None:
                 return "preprocessing"
             elif state.selected_features is None:
@@ -1398,6 +1638,12 @@ How can I help you with your ML workflow today?"""
         
         print_to_log(f"[Orchestrator] Processing query: '{state.user_query}'")
         
+        # CRITICAL: Check if we're in target selection mode
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            state.interactive_session.get('phase') == 'target_selection'):
+            return self._handle_target_selection(state)
+        
         # Get thread logger
         thread_logger = self._get_thread_logger(state)
         if thread_logger:
@@ -1452,6 +1698,25 @@ How can I help you with your ML workflow today?"""
                 "is_data_science": classification_result["is_data_science"],
                 "explanation": classification_result.get("explanation", "")
             })
+        
+        # CRITICAL: For any intent except general_query, check data and target prerequisites
+        if intent != "general_query":
+            # Store current intent for interactive session
+            state._current_intent = intent
+            
+            # First, try to extract target column from current query if not set
+            if state.raw_data is not None and (not hasattr(state, 'target_column') or not state.target_column):
+                extracted_target = self._extract_target_from_query(state.user_query, state.raw_data.columns.tolist())
+                if extracted_target:
+                    state.target_column = extracted_target
+                    print_to_log(f"🎯 [Orchestrator] Extracted target column from query: {extracted_target}")
+            
+            prerequisite_check = self._check_prerequisites(state, intent)
+            if prerequisite_check == "proceed":
+                print_to_log(f"[Orchestrator] All prerequisites met, proceeding with {intent}")
+            else:
+                print_to_log(f"[Orchestrator] Prerequisites not met, returning: {prerequisite_check}")
+                return prerequisite_check
         
         # Route by intent
         route_decision = self._route_by_intent(state, intent)
