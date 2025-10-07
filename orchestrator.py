@@ -101,15 +101,15 @@ class Orchestrator:
             
             if any(pattern in query_lower for pattern in upload_patterns):
                 # User is mentioning upload - provide specific upload guidance
-                state.last_response = f"""📁 **Ready to help with your {intent.replace('_', ' ')} task!**
+                state.last_response = f"""📁 Ready to help with your {intent.replace('_', ' ')} task!
 
 To get started, please upload your dataset first.
 
-📊 **Supported formats:**
+📊 Supported formats:
 • CSV files (.csv)
 • Excel files (.xlsx, .xls)
 
-📤 **How to upload:**
+📤 How to upload:
 • Drag and drop your file into this chat
 • Or use the attachment button to select your file
 
@@ -118,15 +118,15 @@ Once you upload your data, I'll help you with {self._get_intent_description(inte
 Ready when you are! 🚀"""
             else:
                 # User didn't mention upload - general data requirement message
-                state.last_response = f"""📊 **Data Required for {intent.replace('_', ' ').title()}**
+                state.last_response = f"""📊 Data Required for {intent.replace('_', ' ').title()}
 
 I need a dataset to help you with {self._get_intent_description(intent)}.
 
-📤 **Please upload your data:**
+📤 Please upload your data:
 • Drag and drop your CSV/Excel file into this chat
 • Or use the attachment button to select your file
 
-📋 **Supported formats:** CSV (.csv), Excel (.xlsx, .xls)
+📋 Supported formats: CSV (.csv), Excel (.xlsx, .xls)
 
 Once your data is uploaded, I'll be ready to assist! 🚀"""
             
@@ -192,18 +192,18 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         
         columns_text = "\n".join(column_list)
         
-        state.last_response = f"""🎯 **Target Column Selection Required**
+        state.last_response = f"""🎯 Target Column Selection Required
 
-📊 **Dataset:** {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
+📊 Dataset: {state.raw_data.shape[0]:,} rows × {state.raw_data.shape[1]} columns
 
-📋 **Available Columns:**
+📋 Available Columns:
 {columns_text}
 
-💬 **Please type the EXACT column name you want to use as target:**
+💬 Please type the EXACT column name you want to use as target:
 
-❓ **Which column should be used as the target variable for prediction?**
+❓ Which column should be used as the target variable for prediction?
 
-⚠️ **Important:** Type only the exact column name (case-sensitive)."""
+⚠️ Important: Type only the exact column name (case-sensitive)."""
         
         return "general_response"
     
@@ -234,11 +234,11 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             # FAILURE: Column not found, ask again
             print_to_log(f"❌ [Target Selection] Column '{user_input}' not found in dataset")
             
-            state.last_response = f"""❌ **Column not found in dataset**
+            state.last_response = f"""❌ Column not found in dataset
 
-💬 **Please type the EXACT column name (case-sensitive):**
+💬 Please type the EXACT column name (case-sensitive):
 
-⚠️ **Important:** The column name must match exactly including case."""
+⚠️ Important: The column name must match exactly including case."""
             
             return "general_response"
     
@@ -306,12 +306,12 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             # FAILURE: Invalid mode selection, ask again
             print_to_log(f"❌ [Mode Selection] Invalid mode selection: '{user_input}'")
             
-            state.last_response = f"""❓ **Please choose your pipeline mode:**
+            state.last_response = f"""❓ Please choose your pipeline mode:
 
-⚡ **Fast Mode**: Type `fast` for automated pipeline
-🎛️ **Slow Mode**: Type `slow` for interactive mode
+⚡ Fast Mode: Type `fast` for automated pipeline
+🎛️ Slow Mode: Type `slow` for interactive mode
 
-💬 **Choose**: Type `fast` or `slow`"""
+💬 Choose: Type `fast` or `slow`"""
             
             return "general_response"
     
@@ -330,19 +330,19 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'needs_mode_selection': True
         }
         
-        state.last_response = f"""🚀 **Choose Your ML Pipeline Mode**
+        state.last_response = f"""🚀 Choose Your ML Pipeline Mode
 
-⚡ **Fast Mode (Automated):**
+⚡ Fast Mode (Automated):
 • Complete ML pipeline without interaction
 • AI handles all preprocessing decisions
 • Get results in 2-3 minutes
 
-🎛️ **Slow Mode (Interactive):**
+🎛️ Slow Mode (Interactive):
 • Step-by-step guided process
 • Review and approve each phase
 • Full control over decisions
 
-💬 **Choose**: Type `fast` or `slow`"""
+💬 Choose: Type `fast` or `slow`"""
         
         return "general_response"
     
@@ -361,29 +361,17 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'needs_preprocessing_confirmation': True
         }
         
-        state.last_response = f"""⚠️ **Preprocessing Required for Better Results**
+        state.last_response = f"""⚠️ Preprocessing Required for Better Results
 
-🔍 **Current Situation:**
+🔍 Current Situation:
 • You want to build a model, but your data hasn't been preprocessed yet
 • Raw data may contain outliers, missing values, or unoptimized features
 • This could lead to poor model performance or training issues
 
-🎯 **Recommendation:**
-It's **highly recommended** to preprocess your data first for better model accuracy and reliability.
+🎯 Recommendation:
+It's highly recommended to preprocess your data first for better model accuracy and reliability.
 
-📊 **Your Options:**
-
-1️⃣ **Recommended**: Preprocess data first
-   • Clean outliers and missing values
-   • Optimize features for better performance
-   • Then build your model
-
-2️⃣ **Skip preprocessing** (not recommended)
-   • Build model directly with raw data
-   • May result in suboptimal performance
-   • Potential training issues
-
-💬 **Do you want to still build model with out preprocessing?**
+💬 Do you want to still build model with out preprocessing?
 • Type `Yes` - Build model with raw data anyway
 • Type `No` - Clean data first (recommended)
 """
@@ -434,9 +422,9 @@ It's **highly recommended** to preprocess your data first for better model accur
             # FAILURE: Invalid response, ask again
             print_to_log(f"❌ [Preprocessing Confirmation] Invalid response: '{user_input}'")
             
-            state.last_response = f"""❓ **Please choose one of the options:**
+            state.last_response = f"""❓ Please choose one of the options:
 
-💬 **Valid responses:**
+💬 Valid responses:
 • Type `Yes` - Build model with raw data anyway
 • Type `No` - Clean data first (recommended)
 
@@ -1909,22 +1897,22 @@ How can I help you with your ML workflow today?"""
 
 🤖 I'm a specialized data science and machine learning assistant. I can help you with:
 
-📊 **Data Analysis & Processing:**
+📊 Data Analysis & Processing:
 • Data cleaning, preprocessing, and transformation
 • Handling missing values, outliers, and duplicates
 • Data exploration and statistical analysis
 
-🔍 **Feature Engineering & Selection:**
+🔍 Feature Engineering & Selection:
 • Feature selection and importance analysis
 • Correlation analysis and dimensionality reduction
 • Feature engineering techniques
 
-🧠 **Machine Learning:**
+🧠 Machine Learning:
 • Model building, training, and evaluation
 • Predictions and model performance analysis
 • Algorithm selection and hyperparameter tuning
 
-💬 **Please reframe your question** to focus on data science, machine learning, statistics, or data analysis tasks."""
+💬 Please reframe your question to focus on data science, machine learning, statistics, or data analysis tasks."""
             return "general_response"
         
         # Use the classified intent
