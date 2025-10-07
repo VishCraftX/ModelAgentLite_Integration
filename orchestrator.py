@@ -242,6 +242,97 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             
             return "general_response"
     
+    def _handle_mode_selection(self, state: PipelineState) -> str:
+        """
+        Handle mode selection from user input (fast vs slow)
+        """
+        user_input = state.user_query.strip().lower()
+        original_intent = state.interactive_session.get('original_intent', 'full_pipeline')
+        
+        print_to_log(f"🚀 [Mode Selection] User input: '{user_input}'")
+        print_to_log(f"🚀 [Mode Selection] Original intent: {original_intent}")
+        
+        if 'fast' in user_input or 'automated' in user_input:
+            # SUCCESS: Fast mode selected - handle directly in orchestrator
+            state.interactive_session = None  # Clear interactive session
+            print_to_log(f"⚡ [Mode Selection] Fast mode selected - calling automated pipeline directly")
+            
+            try:
+                # Import and call automated pipeline agent directly
+                from automated_pipeline_agent import automated_pipeline_agent
+                
+                # Call automated pipeline
+                result_state = automated_pipeline_agent(state)
+                
+                # The automated pipeline agent handles its own response
+                print_to_log(f"✅ [Mode Selection] Automated pipeline completed successfully")
+                
+                # Update the current state with results
+                state.last_response = result_state.last_response
+                state.last_error = result_state.last_error
+                state.artifacts = result_state.artifacts
+                state.pending_file_uploads = result_state.pending_file_uploads
+                
+                return "general_response"  # Return the automated pipeline's response
+                
+            except Exception as e:
+                print_to_log(f"❌ [Mode Selection] Automated pipeline failed: {e}")
+                state.last_response = f"❌ Fast pipeline failed: {str(e)}"
+                return "general_response"
+            
+        elif 'slow' in user_input or 'interactive' in user_input:
+            # SUCCESS: Slow mode selected  
+            state.interactive_session = None  # Clear interactive session
+            print_to_log(f"🎛️ [Mode Selection] Slow mode selected")
+            
+            state.last_response = f"🎛️ Slow Mode Selected - Starting interactive preprocessing..."
+            
+            # Route to preprocessing for interactive mode
+            return "preprocessing"
+            
+        else:
+            # FAILURE: Invalid mode selection, ask again
+            print_to_log(f"❌ [Mode Selection] Invalid mode selection: '{user_input}'")
+            
+            state.last_response = f"""❓ **Please choose your pipeline mode:**
+
+⚡ **Fast Mode**: Type `fast` for automated pipeline
+🎛️ **Slow Mode**: Type `slow` for interactive mode
+
+💬 **Choose**: Type `fast` or `slow`"""
+            
+            return "general_response"
+    
+    def _prompt_for_mode_selection(self, state: PipelineState) -> str:
+        """
+        Prompt user for mode selection (fast vs slow)
+        """
+        # Set up interactive session for mode selection
+        state.interactive_session = {
+            'agent_type': 'mode_selection',
+            'session_active': True,
+            'session_id': state.chat_session,
+            'phase': 'mode_selection',
+            'original_intent': 'full_pipeline',
+            'needs_mode_selection': True
+        }
+        
+        state.last_response = f"""🚀 **Choose Your ML Pipeline Mode**
+
+⚡ **Fast Mode (Automated):**
+• Complete ML pipeline without interaction
+• AI handles all preprocessing decisions
+• Get results in 2-3 minutes
+
+🎛️ **Slow Mode (Interactive):**
+• Step-by-step guided process
+• Review and approve each phase
+• Full control over decisions
+
+💬 **Choose**: Type `fast` or `slow`"""
+        
+        return "general_response"
+    
     def _extract_target_from_query(self, query: str, available_columns: list) -> str:
         """
         Extract target column from user query using pattern matching
@@ -1291,17 +1382,39 @@ Examples:
             return skip_routing
         
         if intent == "full_pipeline":
-            # Prerequisites already checked - determine next step based on current state
-            if state.raw_data is None:
-                return "preprocessing"  # This shouldn't happen due to prerequisite check
-            elif state.cleaned_data is None:
-                return "preprocessing"
-            elif state.selected_features is None:
-                return "feature_selection"
-            elif state.trained_model is None:
-                return "model_building"
+            # Check if user specified mode preference in the query
+            query_lower = (state.user_query or "").lower()
+            
+            # Direct mode detection from query
+            if any(word in query_lower for word in ["fast", "automated", "quick"]):
+                print_to_log("[Orchestrator] Fast mode detected in query - calling automated pipeline directly")
+                try:
+                    # Import and call automated pipeline agent directly
+                    from automated_pipeline_agent import automated_pipeline_agent
+                    
+                    # Call automated pipeline
+                    result_state = automated_pipeline_agent(state)
+                    
+                    # Update the current state with results
+                    state.last_response = result_state.last_response
+                    state.last_error = result_state.last_error
+                    state.artifacts = result_state.artifacts
+                    state.pending_file_uploads = result_state.pending_file_uploads
+                    
+                    print_to_log(f"✅ [Orchestrator] Automated pipeline completed successfully")
+                    return "general_response"  # Return the automated pipeline's response
+                    
+                except Exception as e:
+                    print_to_log(f"❌ [Orchestrator] Automated pipeline failed: {e}")
+                    state.last_response = f"❌ Fast pipeline failed: {str(e)}"
+                    return "general_response"
+            elif any(word in query_lower for word in ["slow", "interactive", "step"]):
+                print_to_log("[Orchestrator] Slow mode detected in query")
+                return "preprocessing"  # Start with interactive preprocessing
             else:
-                return "model_building"  # Pipeline complete, can do additional operations
+                # Need to prompt for mode selection
+                print_to_log("[Orchestrator] No mode specified - prompting for mode selection")
+                return self._prompt_for_mode_selection(state)
         
         elif intent == "preprocessing":
             return "preprocessing"
@@ -1641,6 +1754,13 @@ How can I help you with your ML workflow today?"""
             if state.interactive_session:
                 print_to_log(f"🔍 [DEBUG] Phase: {state.interactive_session.get('phase')}")
         
+        # CRITICAL: Check if we're in mode selection mode
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            state.interactive_session.get('phase') == 'mode_selection'):
+            print_to_log(f"🚀 [DEBUG] Entering mode selection handler")
+            return self._handle_mode_selection(state)
+        
         # CRITICAL: Check if we're in target selection mode
         if (hasattr(state, 'interactive_session') and 
             state.interactive_session and 
@@ -1741,7 +1861,8 @@ How can I help you with your ML workflow today?"""
             "model_building": "Routing to model building - will train and evaluate ML models",
             "general_response": "Generating conversational response",
             "code_execution": "Executing custom code analysis",
-            "full_pipeline": "Running complete ML pipeline from start to finish"
+            "full_pipeline": "Running complete ML pipeline from start to finish",
+            "fast_pipeline": "Running automated ML pipeline - fast mode"
         }
         
         return explanations.get(routing_decision, f"Routing to {routing_decision}")
