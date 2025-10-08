@@ -340,6 +340,96 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
                 print_to_log(f"🔧 DEBUG ORCHESTRATOR POST-UPDATE: state.pending_file_uploads type: {type(state.pending_file_uploads)}")
                 print_to_log(f"🔧 DEBUG ORCHESTRATOR POST-UPDATE: state.pending_file_uploads value: {state.pending_file_uploads}")
                 
+                # 🔍 COMPREHENSIVE STATE DEBUG: Log all state variables that could cause serialization issues
+                print_to_log(f"🔧 COMPREHENSIVE STATE DEBUG - BEFORE ROUTING TO GENERAL_RESPONSE:")
+                print_to_log(f"  📊 raw_data: {type(state.raw_data)} - {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                print_to_log(f"  🧹 cleaned_data: {type(state.cleaned_data)} - {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+                print_to_log(f"  🔄 processed_data: {type(state.processed_data)} - {state.processed_data.shape if state.processed_data is not None else 'None'}")
+                print_to_log(f"  🎯 selected_features: {type(state.selected_features)} - {len(state.selected_features) if state.selected_features else 'None'}")
+                print_to_log(f"  🎯 target_column: {type(state.target_column)} - '{state.target_column}'")
+                print_to_log(f"  🤖 trained_model: {type(state.trained_model)} - {state.trained_model.__class__.__name__ if state.trained_model else 'None'}")
+                print_to_log(f"  📦 models: {type(state.models)} - {len(state.models) if state.models else 'None'} models")
+                print_to_log(f"  🏆 best_model: {type(state.best_model)} - '{state.best_model}'")
+                print_to_log(f"  📁 artifacts: {type(state.artifacts)} - {list(state.artifacts.keys()) if state.artifacts else 'None'}")
+                print_to_log(f"  💬 chat_session: {type(state.chat_session)} - '{state.chat_session}'")
+                print_to_log(f"  📈 progress: {type(state.progress)} - '{state.progress}'")
+                print_to_log(f"  ❓ user_query: {type(state.user_query)} - '{state.user_query}'")
+                print_to_log(f"  💻 last_code: {type(state.last_code)} - {len(state.last_code) if state.last_code else 'None'} chars")
+                print_to_log(f"  ❌ last_error: {type(state.last_error)} - '{state.last_error}'")
+                print_to_log(f"  💬 last_response: {type(state.last_response)} - {len(state.last_response) if state.last_response else 'None'} chars")
+                print_to_log(f"  🧹 preprocessing_state: {type(state.preprocessing_state)} - {list(state.preprocessing_state.keys()) if state.preprocessing_state else 'None'}")
+                print_to_log(f"  🔧 preprocessing_strategies: {type(state.preprocessing_strategies)} - {list(state.preprocessing_strategies.keys()) if state.preprocessing_strategies else 'None'}")
+                print_to_log(f"  🎯 feature_selection_state: {type(state.feature_selection_state)} - {list(state.feature_selection_state.keys()) if state.feature_selection_state else 'None'}")
+                print_to_log(f"  🤖 model_building_state: {type(state.model_building_state)} - {list(state.model_building_state.keys()) if state.model_building_state else 'None'}")
+                print_to_log(f"  🔄 interactive_session: {type(state.interactive_session)} - {state.interactive_session}")
+                print_to_log(f"  💬 slack_session_info: {type(state.slack_session_info)} - {list(state.slack_session_info.keys()) if state.slack_session_info else 'None'}")
+                print_to_log(f"  📱 pending_slack_message: {type(state.pending_slack_message)} - '{state.pending_slack_message}'")
+                print_to_log(f"  👤 current_agent: {type(state.current_agent)} - '{state.current_agent}'")
+                print_to_log(f"  📋 execution_history: {type(state.execution_history)} - {len(state.execution_history)} records")
+                print_to_log(f"  🆔 session_id: {type(state.session_id)} - '{state.session_id}'")
+                print_to_log(f"  📅 created_at: {type(state.created_at)} - {state.created_at}")
+                print_to_log(f"  🔄 updated_at: {type(state.updated_at)} - {state.updated_at}")
+                print_to_log(f"  📎 pending_file_uploads: {type(state.pending_file_uploads)} - {state.pending_file_uploads}")
+                print_to_log(f"  📊 predictions_dataset: {type(state.predictions_dataset)} - {state.predictions_dataset.shape if state.predictions_dataset is not None else 'None'}")
+                print_to_log(f"  🚫 non_data_science_context: {type(state.non_data_science_context)} - {state.non_data_science_context}")
+                
+                # 🔍 DEEP INSPECTION: Check for nested objects that might cause issues
+                print_to_log(f"🔧 DEEP INSPECTION - CHECKING FOR PROBLEMATIC NESTED OBJECTS:")
+                
+                # Check if trained_model contains complex objects
+                if state.trained_model is not None:
+                    print_to_log(f"  ⚠️ TRAINED_MODEL DETECTED: {type(state.trained_model)}")
+                    print_to_log(f"    - Class: {state.trained_model.__class__}")
+                    print_to_log(f"    - Module: {state.trained_model.__class__.__module__}")
+                    print_to_log(f"    - Has __dict__: {hasattr(state.trained_model, '__dict__')}")
+                    if hasattr(state.trained_model, '__dict__'):
+                        print_to_log(f"    - Dict keys: {list(state.trained_model.__dict__.keys())}")
+                
+                # Check models dictionary for complex objects
+                if state.models:
+                    print_to_log(f"  📦 MODELS DICT INSPECTION:")
+                    for model_key, model_data in state.models.items():
+                        print_to_log(f"    - {model_key}: {type(model_data)}")
+                        if isinstance(model_data, dict):
+                            for key, value in model_data.items():
+                                print_to_log(f"      - {key}: {type(value)}")
+                                if hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, list, dict)):
+                                    print_to_log(f"        ⚠️ COMPLEX OBJECT: {value.__class__}")
+                
+                # Check artifacts for complex objects
+                if state.artifacts:
+                    print_to_log(f"  📁 ARTIFACTS INSPECTION:")
+                    for key, value in state.artifacts.items():
+                        print_to_log(f"    - {key}: {type(value)}")
+                        if hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, list, dict)):
+                            print_to_log(f"      ⚠️ COMPLEX OBJECT: {value.__class__}")
+                
+                # Check preprocessing_state for complex objects
+                if state.preprocessing_state:
+                    print_to_log(f"  🧹 PREPROCESSING_STATE INSPECTION:")
+                    for key, value in state.preprocessing_state.items():
+                        print_to_log(f"    - {key}: {type(value)}")
+                        if hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, list, dict)):
+                            print_to_log(f"      ⚠️ COMPLEX OBJECT: {value.__class__}")
+                
+                # Check feature_selection_state for complex objects
+                if state.feature_selection_state:
+                    print_to_log(f"  🎯 FEATURE_SELECTION_STATE INSPECTION:")
+                    for key, value in state.feature_selection_state.items():
+                        print_to_log(f"    - {key}: {type(value)}")
+                        if hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, list, dict)):
+                            print_to_log(f"      ⚠️ COMPLEX OBJECT: {value.__class__}")
+                
+                # Check model_building_state for complex objects
+                if state.model_building_state:
+                    print_to_log(f"  🤖 MODEL_BUILDING_STATE INSPECTION:")
+                    for key, value in state.model_building_state.items():
+                        print_to_log(f"    - {key}: {type(value)}")
+                        if hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, list, dict)):
+                            print_to_log(f"      ⚠️ COMPLEX OBJECT: {value.__class__}")
+                
+                print_to_log(f"🔧 END COMPREHENSIVE STATE DEBUG - ABOUT TO ROUTE TO GENERAL_RESPONSE")
+                
                 return "general_response"  # Return the automated pipeline's response
                 
             except Exception as e:

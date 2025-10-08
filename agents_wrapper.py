@@ -3824,9 +3824,12 @@ class ModelBuildingAgentWrapper:
             state.last_response = result['response']
             print_to_log(f"📤 [{source}] Response: {result['response'][:100]}...")
         
-        # Extract model if built
+        # Extract model if built - but don't store the actual model object to avoid serialization issues
         if 'model' in result:
-            state.trained_model = result['model']
+            # Don't store the actual model object in state to avoid LangGraph serialization issues
+            # The model is already saved to disk via model_path
+            print_to_log(f"🔧 [{source}] Model object found but not stored in state (avoiding serialization issues)")
+            # state.trained_model = result['model']  # Commented out to prevent LangGraph serialization errors
         
         # Extract metrics if available
         if 'metrics' in result:
