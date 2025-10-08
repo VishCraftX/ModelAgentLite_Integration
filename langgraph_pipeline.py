@@ -395,34 +395,50 @@ I'll help you build a machine learning model. Let's start!
         print_to_log(f"\n💬 [General Response] Generating conversational response")
         # Note: No progress update to Slack - user doesn't need routing details
         
-        # Clear any stale response unless we're in an active interactive session
-        if not (hasattr(state, 'interactive_session') and 
+        # 🔧 DEBUG: Log state at start of general response
+        print_to_log(f"🔧 DEBUG GENERAL_RESPONSE START: State type: {type(state)}")
+        print_to_log(f"🔧 DEBUG GENERAL_RESPONSE START: pending_file_uploads type: {type(state.pending_file_uploads)}")
+        print_to_log(f"🔧 DEBUG GENERAL_RESPONSE START: Has interactive_session: {hasattr(state, 'interactive_session')}")
+        
+        try:
+            # Clear any stale response unless we're in an active interactive session
+            print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Checking interactive session for stale response clearing")
+            if not (hasattr(state, 'interactive_session') and 
+                    state.interactive_session and 
+                    isinstance(state.interactive_session, dict) and
+                    state.interactive_session.get('session_active')):
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Clearing stale response")
+                state.last_response = None
+            else:
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Interactive session active, keeping response")
+        
+            # CRITICAL: Only reuse orchestrator response if we're in an active interactive session
+            # This prevents reusing old responses from previous queries
+            print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Checking for orchestrator response reuse")
+            if (state.last_response and 
+                hasattr(state, 'interactive_session') and 
                 state.interactive_session and 
                 isinstance(state.interactive_session, dict) and
                 state.interactive_session.get('session_active')):
-            state.last_response = None
+                print_to_log(f"💬 [General Response] Using orchestrator-provided response for interactive session: {state.last_response[:100]}...")
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: About to return state from orchestrator response")
+                return state
         
-        # CRITICAL: Only reuse orchestrator response if we're in an active interactive session
-        # This prevents reusing old responses from previous queries
-        if (state.last_response and 
-            hasattr(state, 'interactive_session') and 
-            state.interactive_session and 
-            isinstance(state.interactive_session, dict) and
-            state.interactive_session.get('session_active')):
-            print_to_log(f"💬 [General Response] Using orchestrator-provided response for interactive session: {state.last_response[:100]}...")
-            return state
-        
-        try:
+            print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Starting LLM generation")
             # Import LLM functionality
             try:
                 import ollama
                 LLM_AVAILABLE = True
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Ollama available")
             except ImportError:
                 LLM_AVAILABLE = False
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Ollama not available")
             
             if not LLM_AVAILABLE:
                 # Fallback response when LLM not available
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Using fallback response")
                 state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, and model building. How can I assist you today?"
+                print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: About to return state from fallback")
                 return state
             
             # Generate context-aware response
@@ -480,13 +496,24 @@ Be conversational, friendly, and helpful. Don't just redirect - try to be genuin
                 state.non_data_science_context = None
             
             print_to_log(f"✅ Generated contextual response: {generated_response[:100]}...")
+            print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: About to return state from LLM generation")
             
         except Exception as e:
             print_to_log(f"❌ Error generating conversational response: {e}")
+            print_to_log(f"❌ DEBUG GENERAL_RESPONSE ERROR TYPE: {type(e)}")
+            print_to_log(f"❌ DEBUG GENERAL_RESPONSE ERROR ARGS: {e.args}")
             # Fallback response
             state.last_response = "Hello! I'm your ML assistant. I can help you with data preprocessing, feature selection, and model building. How can I assist you today?"
+            print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: About to return state from error fallback")
         
-        return state
+            print_to_log(f"🔧 DEBUG GENERAL_RESPONSE: Final return - pending_file_uploads type: {type(state.pending_file_uploads)}")
+            return state
+            
+        except Exception as outer_e:
+            print_to_log(f"❌ CRITICAL DEBUG GENERAL_RESPONSE OUTER ERROR: {outer_e}")
+            print_to_log(f"❌ CRITICAL DEBUG GENERAL_RESPONSE OUTER ERROR TYPE: {type(outer_e)}")
+            print_to_log(f"❌ CRITICAL DEBUG GENERAL_RESPONSE OUTER ERROR ARGS: {outer_e.args}")
+            raise outer_e
     
     def _fast_pipeline_node(self, state: PipelineState) -> PipelineState:
         """Fast pipeline node - runs automated ML pipeline"""

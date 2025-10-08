@@ -89,6 +89,14 @@ class PipelineState(BaseModel):
             self.created_at = datetime.now()
         self.updated_at = datetime.now()
     
+    def __getitem__(self, key):
+        """Make PipelineState subscriptable for LangGraph compatibility"""
+        return getattr(self, key)
+    
+    def __setitem__(self, key, value):
+        """Make PipelineState subscriptable for LangGraph compatibility"""
+        setattr(self, key, value)
+    
     def update_progress(self, message: str, agent: str = None):
         """Update progress with timestamp and agent info"""
         timestamp = datetime.now().strftime("%H:%M:%S")
