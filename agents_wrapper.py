@@ -3798,7 +3798,192 @@ class ModelBuildingAgentWrapper:
                 print_to_log("✅ Model building agent initialized")
             except Exception as e:
                 print_to_log(f"❌ Failed to initialize model building agent: {e}")
-                self.available = False
+    
+    @staticmethod
+    def handle_execution_result(state: PipelineState, result: dict, source: str = "model_building", model_agent=None) -> PipelineState:
+        """
+        Centralized execution result handling for consistent behavior across all flows
+        
+        Args:
+            state: PipelineState to update
+            result: Result dictionary from model building agent
+            source: Source of the call for logging purposes
+            model_agent: Optional model agent instance for target column extraction
+        
+        Returns:
+            Updated PipelineState
+        """
+        print_to_log(f"🔧 [{source}] Processing execution result...")
+        
+        if not result or not isinstance(result, dict):
+            print_to_log(f"⚠️ [{source}] No valid result to process")
+            return state
+        
+        # Extract response message (for no data cases, error messages, etc.)
+        if 'response' in result:
+            state.last_response = result['response']
+            print_to_log(f"📤 [{source}] Response: {result['response'][:100]}...")
+        
+        # Extract model if built
+        if 'model' in result:
+            state.trained_model = result['model']
+        
+        # Extract metrics if available
+        if 'metrics' in result:
+            state.model_building_state = {
+                "completed": True,
+                "timestamp": datetime.now().isoformat(),
+                "method": f"langgraph_{source}",
+                "metrics": result['metrics']
+            }
+        
+        # CRITICAL: Extract and persist target column from model building agent's internal state
+        # This ensures target column is available for subsequent queries
+        if model_agent and hasattr(model_agent, 'user_states') and state.chat_session and state.chat_session in model_agent.user_states:
+            agent_target = model_agent.user_states[state.chat_session].get("target_column")
+            if agent_target and not state.target_column:
+                state.target_column = agent_target
+                print_to_log(f"🎯 [{source}] Extracted target column from model agent: {agent_target}")
+                
+                # IMMEDIATE SAVE: Persist target column to session state for future queries
+                try:
+                    from pipeline_state import state_manager
+                    state_manager.save_state(state)
+                    print_to_log(f"💾 [{source}] Persisted target column '{agent_target}' to session state")
+                except Exception as e:
+                    print_to_log(f"⚠️ [{source}] Could not persist target column: {e}")
+        
+        # CRITICAL: Clear interactive session after successful model building
+        # This prevents future queries from getting stuck in preprocessing mode
+        if hasattr(state, 'interactive_session') and state.interactive_session is not None:
+            print_to_log(f"🔄 [{source}] Clearing interactive session after successful model building")
+            state.interactive_session = None
+            
+            # Save the cleared session state
+            try:
+                from pipeline_state import state_manager
+                state_manager.save_state(state)
+                print_to_log(f"💾 [{source}] Saved cleared interactive session to prevent future conflicts")
+            except Exception as e:
+                print_to_log(f"⚠️ [{source}] Could not save cleared session: {e}")
+        
+        # Store execution result for file uploads
+        execution_result = result.get('execution_result') if isinstance(result, dict) else None
+        
+        # Add files to pending uploads for batch processing later
+        if execution_result and isinstance(execution_result, dict):
+            print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Adding files to pending uploads...")
+            print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Execution result keys: {list(execution_result.keys())}")
+            
+            # Check for artifacts structure first
+            if 'artifacts' in execution_result and 'files' in execution_result['artifacts']:
+                print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Found artifacts files: {execution_result['artifacts']['files']}")
+                for file_info in execution_result['artifacts']['files']:
+                    if isinstance(file_info, dict):
+                        state.add_pending_file_upload(file_info)
+                    else:
+                        # Convert string path to file info dict
+                        state.add_pending_file_upload({
+                            "path": file_info,
+                            "title": ModelBuildingAgentWrapper._get_title_from_path(file_info),
+                            "comment": "Generated file"
+                        })
+            
+            # Check for direct plot_path (decision tree plots)
+            elif 'plot_path' in execution_result and execution_result['plot_path']:
+                plot_path = execution_result['plot_path']
+                print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Found plot_path: {plot_path}")
+                state.add_pending_plot_upload(
+                    plot_path, 
+                    title="Decision Tree Visualization", 
+                    comment=f"Generated from {source}"
+                )
+            
+            # Check for predictions dataset
+            if 'full_predictions' in execution_result:
+                full_predictions = execution_result['full_predictions']
+                full_probabilities = execution_result.get('full_probabilities', None)
+                print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Found full_predictions: {len(full_predictions)} predictions")
+                if full_probabilities is not None:
+                    print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Found full_probabilities: {len(full_probabilities)} probability arrays")
+                
+                # Add predictions and probabilities to pipeline state
+                success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
+                if success:
+                    print_to_log(f"✅ [{source}] Added predictions and probabilities to dataset")
+                    
+                    # Save predictions dataset to artifacts
+                    if 'model_path' in execution_result:
+                        artifacts_dir = os.path.dirname(execution_result['model_path'])
+                        
+                        # Extract model name from execution result
+                        model_name = "unknown_model"
+                        if 'model' in execution_result:
+                            model = execution_result['model']
+                            if hasattr(model, '__class__'):
+                                model_name = model.__class__.__name__.lower()
+                            elif hasattr(model, 'name'):
+                                model_name = model.name.lower()
+                        
+                        # Create filename with model name
+                        timestamp = int(time.time())
+                        predictions_file = state.save_predictions_dataset(
+                            os.path.join(artifacts_dir, f"predictions_dataset_{model_name}_{timestamp}.csv")
+                        )
+                        if predictions_file:
+                            print_to_log(f"✅ [{source}] Predictions dataset saved to: {predictions_file}")
+                            
+                            # Add predictions dataset to pending uploads
+                            state.add_pending_file_upload({
+                                "path": predictions_file,
+                                "title": f"Dataset with {model_name.title()} Predictions & Scores",
+                                "comment": f"Complete dataset with {model_name} model predictions and probability scores"
+                            })
+                else:
+                    print_to_log(f"⚠️ [{source}] Failed to add predictions to dataset")
+            
+            # Check for any other file paths in execution result
+            else:
+                print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Searching for file paths in execution result...")
+                for key, value in execution_result.items():
+                    if isinstance(value, str) and any(ext in value.lower() for ext in ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xlsx']):
+                        if os.path.exists(value):
+                            print_to_log(f"🔍 [{source}] UPLOAD DEBUG: Found file via key '{key}': {value}")
+                            state.add_pending_file_upload({
+                                "path": value,
+                                "title": ModelBuildingAgentWrapper._get_title_from_path(value),
+                                "comment": f"Generated from {source}"
+                            })
+        
+        print_to_log(f"✅ [{source}] Execution result processing completed")
+        return state
+    
+    @staticmethod
+    def _get_title_from_path(file_path: str) -> str:
+        """Generate appropriate title from file path - restored original implementation"""
+        if not file_path:
+            return "Generated File"
+        
+        filename = os.path.basename(file_path).lower()
+        
+        if 'decision_tree' in filename or 'tree' in filename:
+            return "Decision Tree Plot"
+        elif 'rank_order' in filename or 'rank' in filename:
+            return "Rank Order Table"  
+        elif 'confusion_matrix' in filename:
+            return "Confusion Matrix"
+        elif 'roc' in filename:
+            return "ROC Curve"
+        elif filename.endswith('.csv'):
+            return "Data Table (CSV)"
+        elif filename.endswith('.xlsx'):
+            return "Data Table (Excel)"
+        elif filename.endswith(('.png', '.jpg', '.jpeg')):
+            return "Generated Plot"
+        elif filename.endswith('.pdf'):
+            return "Generated Report"
+        else:
+            return "Generated File"
         
     def run(self, state: PipelineState) -> PipelineState:
         """Route to the actual working model building agent"""
@@ -3903,149 +4088,13 @@ class ModelBuildingAgentWrapper:
                 progress_callback=progress_callback
             )
             
-            # Extract results
+            # Use centralized execution result handling for consistency
             if result and isinstance(result, dict):
-                # Extract response message (for no data cases, error messages, etc.)
-                if 'response' in result:
-                    state.last_response = result['response']
-                    print_to_log(f"📤 Model building response: {result['response'][:100]}...")
-                
-                # Extract model if built
-                if 'model' in result:
-                    state.trained_model = result['model']
-                
-                # Extract metrics if available
-                if 'metrics' in result:
-                    state.model_building_state = {
-                        "completed": True,
-                        "timestamp": datetime.now().isoformat(),
-                        "method": "langgraph_interactive",
-                        "metrics": result['metrics']
-                    }
-                
-                # CRITICAL: Extract and persist target column from model building agent's internal state
-                # This ensures target column is available for subsequent queries
-                if state.chat_session and state.chat_session in self.agent.user_states:
-                    agent_target = self.agent.user_states[state.chat_session].get("target_column")
-                    if agent_target and not state.target_column:
-                        state.target_column = agent_target
-                        print_to_log(f"🎯 Extracted target column from model agent: {agent_target}")
-                        
-                        # IMMEDIATE SAVE: Persist target column to session state for future queries
-                        try:
-                            from pipeline_state import state_manager
-                            state_manager.save_state(state)
-                            print_to_log(f"💾 Persisted target column '{agent_target}' to session state")
-                        except Exception as e:
-                            print_to_log(f"⚠️ Could not persist target column: {e}")
-                
-                # CRITICAL: Clear interactive session after successful model building
-                # This prevents future queries from getting stuck in preprocessing mode
-                if hasattr(state, 'interactive_session') and state.interactive_session is not None:
-                    print_to_log(f"🔄 Clearing interactive session after successful model building")
-                    state.interactive_session = None
-                    
-                    # Save the cleared session state
-                    try:
-                        from pipeline_state import state_manager
-                        state_manager.save_state(state)
-                        print_to_log(f"💾 Saved cleared interactive session to prevent future conflicts")
-                    except Exception as e:
-                        print_to_log(f"⚠️ Could not save cleared session: {e}")
-                
-                # Store execution result for later file uploads (after response processing)
-                execution_result = result.get('execution_result') if isinstance(result, dict) else None
-            
-            # Add files to pending uploads for batch processing later
-            if execution_result and isinstance(execution_result, dict):
-                print_to_log(f"🔍 UPLOAD DEBUG: Adding files to pending uploads...")
-                print_to_log(f"🔍 UPLOAD DEBUG: Execution result keys: {list(execution_result.keys())}")
-                
-                # Check for artifacts structure first
-                if 'artifacts' in execution_result and 'files' in execution_result['artifacts']:
-                    print_to_log(f"🔍 UPLOAD DEBUG: Found artifacts files: {execution_result['artifacts']['files']}")
-                    for file_info in execution_result['artifacts']['files']:
-                        if isinstance(file_info, dict):
-                            state.add_pending_file_upload(file_info)
-                        else:
-                            # Convert string path to file info dict
-                            state.add_pending_file_upload({
-                                "path": file_info,
-                                "title": self._get_title_from_path(file_info),
-                                "comment": "Generated file"
-                            })
-                
-                # Check for direct plot_path (decision tree plots)
-                elif 'plot_path' in execution_result and execution_result['plot_path']:
-                    plot_path = execution_result['plot_path']
-                    print_to_log(f"🔍 UPLOAD DEBUG: Found plot_path: {plot_path}")
-                    state.add_pending_plot_upload(
-                        plot_path, 
-                        title="Decision Tree Visualization", 
-                        comment="Generated decision tree plot"
-                    )
-                
-                # Check for predictions dataset
-                if 'full_predictions' in execution_result:
-                    full_predictions = execution_result['full_predictions']
-                    full_probabilities = execution_result.get('full_probabilities', None)
-                    print_to_log(f"🔍 UPLOAD DEBUG: Found full_predictions: {len(full_predictions)} predictions")
-                    if full_probabilities is not None:
-                        print_to_log(f"🔍 UPLOAD DEBUG: Found full_probabilities: {len(full_probabilities)} probability arrays")
-                    
-                    # Add predictions and probabilities to pipeline state
-                    success = state.add_predictions_to_dataset(full_predictions, "predictions", full_probabilities)
-                    if success:
-                        print_to_log(f"✅ Added predictions and probabilities to dataset")
-                        
-                        # Save predictions dataset to artifacts
-                        if 'model_path' in execution_result:
-                            artifacts_dir = os.path.dirname(execution_result['model_path'])
-                            
-                            # Extract model name from execution result
-                            model_name = "unknown_model"
-                            if 'model' in execution_result:
-                                model = execution_result['model']
-                                if hasattr(model, '__class__'):
-                                    model_name = model.__class__.__name__.lower()
-                                elif hasattr(model, 'name'):
-                                    model_name = model.name.lower()
-                            
-                            # Create filename with model name
-                            timestamp = int(time.time())
-                            predictions_file = state.save_predictions_dataset(
-                                os.path.join(artifacts_dir, f"predictions_dataset_{model_name}_{timestamp}.csv")
-                            )
-                            if predictions_file:
-                                print_to_log(f"✅ Predictions dataset saved to: {predictions_file}")
-                                
-                                # Add predictions dataset to pending uploads
-                                state.add_pending_file_upload({
-                                    "path": predictions_file,
-                                    "title": f"Dataset with {model_name.title()} Predictions & Scores",
-                                    "comment": f"Complete dataset with {model_name} model predictions and probability scores"
-                                })
-                    else:
-                        print_to_log(f"⚠️ Failed to add predictions to dataset")
-                
-                # Check for any other file paths in execution result
-                else:
-                    print_to_log(f"🔍 UPLOAD DEBUG: Searching for file paths in execution result...")
-                    for key, value in execution_result.items():
-                        if isinstance(value, str) and any(ext in value.lower() for ext in ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xlsx']):
-                            if os.path.exists(value):
-                                print_to_log(f"🔍 UPLOAD DEBUG: Found file via key '{key}': {value}")
-                                state.add_pending_file_upload({
-                                    "path": value,
-                                    "title": self._get_title_from_path(value),
-                                    "comment": f"Generated {key}"
-                                })
+                state = self.handle_execution_result(state, result, "model_building_wrapper", self.agent)
                 
                 # Log pending uploads summary
                 if hasattr(state, 'get_pending_upload_summary'):
                     print_to_log(f"📎 {state.get_pending_upload_summary()}")
-            else:
-                print_to_log(f"🔍 UPLOAD DEBUG: No execution result or not a dict")
             
             print_to_log("✅ Model building completed")
             return state
@@ -4092,31 +4141,6 @@ class ModelBuildingAgentWrapper:
             import traceback
             print_to_log(f"🔍 UPLOAD DEBUG: Full traceback: {traceback.format_exc()}")
     
-    def _get_title_from_path(self, file_path):
-        """Generate appropriate title from file path"""
-        if not file_path:
-            return "Generated File"
-        
-        filename = os.path.basename(file_path).lower()
-        
-        if 'decision_tree' in filename or 'tree' in filename:
-            return "Decision Tree Plot"
-        elif 'rank_order' in filename or 'rank' in filename:
-            return "Rank Order Table"  
-        elif 'confusion_matrix' in filename:
-            return "Confusion Matrix"
-        elif 'roc' in filename:
-            return "ROC Curve"
-        elif filename.endswith('.csv'):
-            return "Data Table (CSV)"
-        elif filename.endswith('.xlsx'):
-            return "Data Table (Excel)"
-        elif filename.endswith(('.png', '.jpg', '.jpeg')):
-            return "Generated Plot"
-        elif filename.endswith('.pdf'):
-            return "Generated Report"
-        else:
-            return "Generated File"
 
 
 # Global instances - these are the agents the orchestrator will use

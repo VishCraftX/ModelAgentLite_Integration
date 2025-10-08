@@ -397,29 +397,56 @@ Reply with the target column name (e.g., 'f_segment')"""
                 print_to_log(f"⚠️ Could not update global model states: {e}")
             
             # CRITICAL: Route to model building agent and let it handle ALL outputs
-            # Automated pipeline agent's job is DONE after preprocessing + feature selection
+            # Step 3: Call Model Building Agent DIRECTLY (no wrapper needed)
+            print_to_log("🤖 [Automated Pipeline] Step 3: Model Building")
+            
+            # Restore original query for model building
+            original_query = state.preprocessing_state.get('original_user_query', state.user_query)
+            print_to_log(f"🔧 [Automated Pipeline] Using original query: '{original_query}'")
+            
             try:
-                from agents_wrapper import ModelBuildingAgentWrapper
-                model_agent = ModelBuildingAgentWrapper()
+                # Import model building agent directly (no wrapper)
+                from model_building_agent_impl import LangGraphModelAgent
+                model_agent = LangGraphModelAgent()
                 
-                if model_agent.available:
-                    print_to_log("🔧 Routing to model building agent...")
-                    print_to_log("✅ Automated pipeline work complete - handing over to model building agent")
+                # Determine which data to use for model building
+                data_to_use = None
+                if state.selected_features is not None and len(state.selected_features) > 0:
+                    # Use selected features if available
+                    if state.cleaned_data is not None and state.target_column:
+                        data_to_use = state.cleaned_data[state.selected_features + [state.target_column]]
+                        print_to_log(f"🎯 [Automated Pipeline] Using selected features: {len(state.selected_features)} features")
+                elif state.cleaned_data is not None:
+                    # Use cleaned data if no feature selection
+                    data_to_use = state.cleaned_data
+                    print_to_log(f"🧹 [Automated Pipeline] Using cleaned data: {state.cleaned_data.shape}")
+                elif state.raw_data is not None:
+                    # Fallback to raw data
+                    data_to_use = state.raw_data
+                    print_to_log(f"📊 [Automated Pipeline] Using raw data: {state.raw_data.shape}")
+                
+                if data_to_use is not None:
+                    # Load data into model agent
+                    model_agent.load_data(data_to_use, user_id=state.chat_session)
                     
-                    # Let model building agent handle everything from here
-                    return model_agent.run(state)
+                    # Process the original query with model building agent
+                    print_to_log(f"🤖 [Automated Pipeline] Processing query with model building agent: '{original_query}'")
+                    result = model_agent.process_query(original_query, user_id=state.chat_session)
                     
+                    # Use centralized execution result handling for consistency
+                    from agents_wrapper import ModelBuildingAgentWrapper
+                    state = ModelBuildingAgentWrapper.handle_execution_result(state, result, "automated_pipeline", model_agent)
+                    
+                    print_to_log("✅ [Automated Pipeline] Model building completed successfully")
                 else:
-                    print_to_log("⚠️ Model building agent not available")
-                    state.last_response = "⚠️ Model building agent not available"
-                    return state
+                    print_to_log("❌ [Automated Pipeline] No data available for model building")
+                    state.last_response = "❌ No data available for model building"
                     
             except Exception as e:
-                print_to_log(f"⚠️ Error calling model building agent: {e}")
-                state.last_response = f"⚠️ Model building failed: {str(e)}"
-                return state
+                print_to_log(f"❌ [Automated Pipeline] Model building failed: {e}")
+                state.last_response = f"❌ Model building failed: {str(e)}"
 
-            print_to_log("🎉 INTELLIGENT automated ML pipeline completed successfully!")
+            print_to_log("🎉 [Automated Pipeline] Simplified automated ML pipeline completed successfully!")
             return state
             
         except Exception as e:
