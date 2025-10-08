@@ -185,6 +185,11 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'needs_target': True
         }
         
+        # 🔍 DEBUG: Log interactive session creation
+        print_to_log(f"🔧 DEBUG TARGET_PROMPT: Created interactive_session: {state.interactive_session}")
+        print_to_log(f"🔧 DEBUG TARGET_PROMPT: Session ID: {state.chat_session}")
+        print_to_log(f"🔧 DEBUG TARGET_PROMPT: Original intent: {intent}")
+        
         # Create column list with numbering for easy selection
         column_list = []
         for i, col in enumerate(available_columns, 1):
@@ -219,12 +224,22 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         print_to_log(f"🎯 [Target Selection] Original intent: {original_intent}")
         print_to_log(f"🎯 [Target Selection] Available columns: {available_columns}")
         
+        # 🔍 DEBUG: Log current interactive session state
+        print_to_log(f"🔧 DEBUG TARGET_HANDLER: Current interactive_session: {state.interactive_session}")
+        print_to_log(f"🔧 DEBUG TARGET_HANDLER: Session ID: {state.chat_session}")
+        
         # Check if user input matches exactly any column name
         if user_input in available_columns:
             # SUCCESS: Set target column and continue with original intent
             state.target_column = user_input
+            
+            # 🔍 DEBUG: Log target column setting
+            print_to_log(f"🔧 DEBUG TARGET_HANDLER: Set state.target_column = '{state.target_column}'")
+            print_to_log(f"🔧 DEBUG TARGET_HANDLER: About to clear interactive_session")
+            
             state.interactive_session = None  # Clear interactive session
             print_to_log(f"✅ [Target Selection] Target column set to: {user_input}")
+            print_to_log(f"🔧 DEBUG TARGET_HANDLER: Cleared interactive_session, now: {state.interactive_session}")
             
             state.last_response = f"✅ Target column set to: `{user_input}`\n\nProceeding with {original_intent.replace('_', ' ')}..."
             
@@ -251,6 +266,10 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         
         print_to_log(f"🚀 [Mode Selection] User input: '{user_input}'")
         print_to_log(f"🚀 [Mode Selection] Original intent: {original_intent}")
+        
+        # 🔍 DEBUG: Log current interactive session state
+        print_to_log(f"🔧 DEBUG MODE_HANDLER: Current interactive_session: {state.interactive_session}")
+        print_to_log(f"🔧 DEBUG MODE_HANDLER: Session ID: {state.chat_session}")
         
         if 'fast' in user_input or 'automated' in user_input:
             # SUCCESS: Fast mode selected - handle directly in orchestrator
@@ -332,6 +351,11 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'original_query': state.user_query,  # CRITICAL: Store original user query
             'needs_mode_selection': True
         }
+        
+        # 🔍 DEBUG: Log interactive session creation
+        print_to_log(f"🔧 DEBUG MODE_PROMPT: Created interactive_session: {state.interactive_session}")
+        print_to_log(f"🔧 DEBUG MODE_PROMPT: Session ID: {state.chat_session}")
+        print_to_log(f"🔧 DEBUG MODE_PROMPT: Original query: {state.user_query}")
         
         state.last_response = f"""🚀 Choose Your ML Pipeline Mode
 

@@ -983,6 +983,16 @@ Generate Python code to fulfill this request:"""
             user_dir = self._get_user_session_dir(session_id)
             state_file = os.path.join(user_dir, "session_state.json")
             
+            # 🔍 DEBUG: Log what we're about to save
+            print_to_log(f"🔧 DEBUG SAVE_SESSION: About to save state for session {session_id}")
+            print_to_log(f"🔧 DEBUG SAVE_SESSION: State file path: {state_file}")
+            print_to_log(f"🔧 DEBUG SAVE_SESSION: Has interactive_session: {hasattr(state, 'interactive_session')}")
+            if hasattr(state, 'interactive_session'):
+                print_to_log(f"🔧 DEBUG SAVE_SESSION: Interactive session value: {state.interactive_session}")
+            print_to_log(f"🔧 DEBUG SAVE_SESSION: Has target_column: {hasattr(state, 'target_column')}")
+            if hasattr(state, 'target_column'):
+                print_to_log(f"🔧 DEBUG SAVE_SESSION: Target column value: {state.target_column}")
+            
             # Convert state to dict for JSON serialization
             state_dict = state.dict()
 
@@ -1074,11 +1084,22 @@ Generate Python code to fulfill this request:"""
                         return obj.isoformat()
                     return super().default(obj)
             
+            # 🔍 DEBUG: Log final state_dict before saving
+            print_to_log(f"🔧 DEBUG SAVE_SESSION: Final state_dict keys: {list(state_dict.keys())}")
+            if 'interactive_session' in state_dict:
+                print_to_log(f"🔧 DEBUG SAVE_SESSION: Final interactive_session in state_dict: {state_dict['interactive_session']}")
+            if 'target_column' in state_dict:
+                print_to_log(f"🔧 DEBUG SAVE_SESSION: Final target_column in state_dict: {state_dict['target_column']}")
+            
             with open(state_file, 'w') as f:
                 json.dump(state_dict, f, indent=2, cls=DateTimeEncoder)
+            
+            print_to_log(f"✅ DEBUG SAVE_SESSION: Successfully saved session state to {state_file}")
                 
         except Exception as e:
             print_to_log(f"⚠️ Failed to save session state: {e}")
+            import traceback
+            print_to_log(f"🔍 DEBUG SAVE_SESSION: Full traceback: {traceback.format_exc()}")
     
     def _load_session_state(self, session_id: str) -> Optional[Dict]:
         """Load session state from user directory including DataFrames"""
@@ -1146,6 +1167,18 @@ Generate Python code to fulfill this request:"""
                 
                 print_to_log(f"🔧 DEBUG LOAD_SESSION: Final state_dict keys: {list(state_dict.keys())}")
                 print_to_log(f"🔧 DEBUG LOAD_SESSION: cleaned_data is None: {state_dict.get('cleaned_data') is None}")
+                
+                # 🔍 DEBUG: Log critical session state values
+                if 'interactive_session' in state_dict:
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: Loaded interactive_session: {state_dict['interactive_session']}")
+                else:
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: No interactive_session in loaded state")
+                
+                if 'target_column' in state_dict:
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: Loaded target_column: {state_dict['target_column']}")
+                else:
+                    print_to_log(f"🔧 DEBUG LOAD_SESSION: No target_column in loaded state")
+                
                 return state_dict
             return None
             
