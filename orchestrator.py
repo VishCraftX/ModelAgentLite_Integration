@@ -238,6 +238,18 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             print_to_log(f"🔧 DEBUG TARGET_HANDLER: Set state.target_column = '{state.target_column}'")
             print_to_log(f"🔧 DEBUG TARGET_HANDLER: About to clear interactive_session")
             
+            # CRITICAL: Preserve original query for subsequent interactive sessions
+            # Store the TRUE original query from the interactive session before clearing it
+            original_query_from_session = state.interactive_session.get('original_query')
+            if original_query_from_session:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query for mode selection to find
+                state.preprocessing_state['original_user_query'] = original_query_from_session
+                print_to_log(f"💾 [Target Selection] Preserved original query for next interactive session: '{original_query_from_session}'")
+            
             state.interactive_session = None  # Clear interactive session
             print_to_log(f"✅ [Target Selection] Target column set to: {user_input}")
             print_to_log(f"🔧 DEBUG TARGET_HANDLER: Cleared interactive_session, now: {state.interactive_session}")

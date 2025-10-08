@@ -268,6 +268,16 @@ class MultiAgentMLPipeline:
             
         else:
             # Create interactive session for mode selection (fallback case)
+            # CRITICAL: Try to get the true original query from preprocessing_state first
+            original_query = state.user_query  # fallback
+            if (hasattr(state, 'preprocessing_state') and 
+                state.preprocessing_state and 
+                'original_user_query' in state.preprocessing_state):
+                original_query = state.preprocessing_state['original_user_query']
+                print_to_log(f"🔍 [LangGraph Preprocessing] Found original query in preprocessing_state: '{original_query}'")
+            else:
+                print_to_log(f"🔍 [LangGraph Preprocessing] Using current user_query as original: '{original_query}'")
+            
             state.interactive_session = {
                 'agent_type': 'preprocessing',
                 'session_active': True,
@@ -277,7 +287,7 @@ class MultiAgentMLPipeline:
                 'current_phase': 'overview',
                 'needs_target': not (hasattr(state, 'target_column') and state.target_column),
                 'needs_mode_selection': True,
-                'original_query': state.user_query  # CRITICAL: Store original query for fast pipeline
+                'original_query': original_query  # CRITICAL: Store TRUE original query for fast pipeline
             }
         
         # Show appropriate message based on mode selection status

@@ -214,6 +214,16 @@ class PreprocessingAgentWrapper:
             
             # Set up interactive session state for continuation (only if not already set)
             if not hasattr(state, 'interactive_session') or not state.interactive_session:
+                # CRITICAL: Try to get the true original query from preprocessing_state first
+                original_query = state.user_query  # fallback
+                if (hasattr(state, 'preprocessing_state') and 
+                    state.preprocessing_state and 
+                    'original_user_query' in state.preprocessing_state):
+                    original_query = state.preprocessing_state['original_user_query']
+                    print_to_log(f"🔍 [PreprocessingWrapper] Found original query in preprocessing_state: '{original_query}'")
+                else:
+                    print_to_log(f"🔍 [PreprocessingWrapper] Using current user_query as original: '{original_query}'")
+                
                 state.interactive_session = {
                     "agent_type": "preprocessing",
                     "session_active": True,
@@ -222,7 +232,8 @@ class PreprocessingAgentWrapper:
                     "target_column": state.target_column,
                     "current_phase": "overview",
                     "needs_target": (phase == "need_target"),
-                    "needs_mode_selection": False
+                    "needs_mode_selection": False,
+                    "original_query": original_query  # CRITICAL: Store TRUE original user query
                 }
             
             # Set preprocessing state as active
@@ -3740,12 +3751,22 @@ Example: `target is_fraud` or `is_fraud`"""
             }
             
             # ✅ SET INTERACTIVE SESSION - This was missing!
+            # CRITICAL: Try to get the true original query from preprocessing_state first
+            original_query = state.user_query  # fallback
+            if (hasattr(state, 'preprocessing_state') and 
+                state.preprocessing_state and 
+                'original_user_query' in state.preprocessing_state):
+                original_query = state.preprocessing_state['original_user_query']
+                print_to_log(f"🔍 [FeatureSelection] Found original query in preprocessing_state: '{original_query}'")
+            else:
+                print_to_log(f"🔍 [FeatureSelection] Using current user_query as original: '{original_query}'")
+            
             state.interactive_session = {
                 "agent_type": "feature_selection",
                 "session_active": True,
                 "phase": session.phase,
                 "current_phase": "menu",
-                "original_query": state.user_query  # CRITICAL: Store original user query
+                "original_query": original_query  # CRITICAL: Store TRUE original user query
             }
             
             print_to_log("✅ Feature selection session started - bot will handle Slack interactions")
