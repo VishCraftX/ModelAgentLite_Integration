@@ -181,6 +181,7 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'session_id': state.chat_session,
             'phase': 'target_selection',
             'original_intent': intent,  # Store current intent
+            'original_query': state.user_query,  # CRITICAL: Store original user query
             'available_columns': available_columns,
             'needs_target': True
         }
@@ -410,6 +411,69 @@ It's highly recommended to preprocess your data first for better model accuracy 
         
         return "general_response"
     
+    def _prompt_for_feature_selection_confirmation(self, state: PipelineState) -> str:
+        """
+        Prompt user for confirmation when feature selection is requested but no cleaned data exists
+        """
+        # Set up interactive session for feature selection confirmation
+        state.interactive_session = {
+            'agent_type': 'feature_selection_confirmation',
+            'session_active': True,
+            'session_id': state.chat_session,
+            'phase': 'feature_selection_confirmation',
+            'original_intent': 'feature_selection',
+            'original_query': state.user_query,
+            'needs_feature_selection_confirmation': True
+        }
+        
+        state.last_response = f"""⚠️ Preprocessing Recommended for Better Feature Selection
+
+🔍 Current Situation:
+• You want to perform feature selection, but your data hasn't been preprocessed yet
+• Raw data may contain outliers, missing values, or inconsistent formats
+• This could lead to suboptimal feature selection or analysis issues
+
+🎯 Recommendation:
+It's highly recommended to preprocess your data first for better feature selection results.
+
+💬 Do you want to proceed with feature selection on raw data?
+• Type `Yes` - Proceed with feature selection on raw data
+• Type `No` - Preprocess data first (recommended)"""
+        
+        return "general_response"
+    
+    def _prompt_for_preprocessing_reconfirmation(self, state: PipelineState) -> str:
+        """
+        Prompt user for confirmation when preprocessing is requested but cleaned data already exists
+        """
+        # Set up interactive session for preprocessing re-confirmation
+        state.interactive_session = {
+            'agent_type': 'preprocessing_reconfirmation',
+            'session_active': True,
+            'session_id': state.chat_session,
+            'phase': 'preprocessing_reconfirmation',
+            'original_intent': 'preprocessing',
+            'original_query': state.user_query,
+            'needs_preprocessing_reconfirmation': True
+        }
+        
+        state.last_response = f"""⚠️ Cleaned Data Already Exists
+
+🔍 Current Situation:
+• You want to preprocess data, but cleaned data already exists
+• Re-preprocessing will overwrite your existing cleaned data
+• This might affect any subsequent analysis or models
+
+🎯 Options:
+• Keep existing cleaned data and proceed with next steps
+• Re-preprocess data (will overwrite existing cleaned data)
+
+💬 Do you want to re-preprocess the data?
+• Type `Yes` - Re-preprocess data (overwrite existing)
+• Type `No` - Keep existing cleaned data"""
+        
+        return "general_response"
+    
     def _handle_preprocessing_confirmation(self, state: PipelineState) -> str:
         """
         Handle user response to preprocessing confirmation
@@ -473,6 +537,120 @@ It's highly recommended to preprocess your data first for better model accuracy 
 💬 Valid responses:
 • Type `Yes` - Build model with raw data anyway
 • Type `No` - Clean data first (recommended)
+
+⚠️ Your response '{user_input}' was not recognized. Please try again."""
+            
+            return "general_response"
+    
+    def _handle_feature_selection_confirmation(self, state: PipelineState) -> str:
+        """
+        Handle user response to feature selection preprocessing confirmation
+        """
+        user_input = state.user_query.strip().lower()
+        original_intent = state.interactive_session.get('original_intent', 'feature_selection')
+        
+        print_to_log(f"🔧 [Feature Selection Confirmation] User input: '{user_input}'")
+        print_to_log(f"🔧 [Feature Selection Confirmation] Original intent: {original_intent}")
+        
+        if 'no' in user_input or 'preprocess' in user_input or 'clean' in user_input or 'No' in user_input:
+            # SUCCESS: User wants to preprocess first
+            original_query = state.interactive_session.get('original_query', state.user_query)
+            print_to_log(f"✅ [Feature Selection Confirmation] User chose to preprocess first")
+            print_to_log(f"🔄 [Feature Selection Confirmation] Preserving original query for after preprocessing: '{original_query}'")
+            
+            # CRITICAL: Preserve original query for after preprocessing completes
+            if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                state.preprocessing_state = {}
+            state.preprocessing_state['original_user_query'] = original_query
+            
+            state.interactive_session = None  # Clear interactive session
+            
+            state.last_response = f"✅ Great choice! Starting data preprocessing to optimize your feature selection..."
+            
+            # Route to preprocessing
+            return "preprocessing"
+            
+        elif 'yes' in user_input or 'proceed' in user_input or 'raw' in user_input or 'Yes' in user_input:
+            # User wants to proceed with feature selection on raw data
+            original_query = state.interactive_session.get('original_query', state.user_query)
+            print_to_log(f"⚠️ [Feature Selection Confirmation] User chose to proceed with raw data")
+            print_to_log(f"🔄 [Feature Selection Confirmation] Restoring original query: '{original_query}'")
+            
+            # CRITICAL: Restore original query before routing to feature selection
+            state.user_query = original_query
+            
+            state.interactive_session = None  # Clear interactive session
+            
+            # Use raw data as cleaned data for feature selection
+            if state.cleaned_data is None:
+                state.cleaned_data = state.raw_data.copy()
+                print_to_log("[Feature Selection Confirmation] Using raw data as cleaned data")
+            
+            state.last_response = f"⚠️ Proceeding with feature selection on raw data..."
+            
+            # Route to feature selection
+            return "feature_selection"
+            
+        else:
+            # FAILURE: Invalid response, ask again
+            print_to_log(f"❌ [Feature Selection Confirmation] Invalid response: '{user_input}'")
+            
+            state.last_response = f"""❓ Please choose one of the options:
+
+💬 Valid responses:
+• Type `Yes` - Proceed with feature selection on raw data
+• Type `No` - Preprocess data first (recommended)
+
+⚠️ Your response '{user_input}' was not recognized. Please try again."""
+            
+            return "general_response"
+    
+    def _handle_preprocessing_reconfirmation(self, state: PipelineState) -> str:
+        """
+        Handle user response to preprocessing re-confirmation
+        """
+        user_input = state.user_query.strip().lower()
+        original_intent = state.interactive_session.get('original_intent', 'preprocessing')
+        
+        print_to_log(f"🔧 [Preprocessing Reconfirmation] User input: '{user_input}'")
+        print_to_log(f"🔧 [Preprocessing Reconfirmation] Original intent: {original_intent}")
+        
+        if 'yes' in user_input or 'reprocess' in user_input or 'overwrite' in user_input or 'Yes' in user_input:
+            # SUCCESS: User wants to re-preprocess
+            original_query = state.interactive_session.get('original_query', state.user_query)
+            print_to_log(f"✅ [Preprocessing Reconfirmation] User chose to re-preprocess data")
+            print_to_log(f"🔄 [Preprocessing Reconfirmation] Restoring original query: '{original_query}'")
+            
+            # CRITICAL: Restore original query before routing to preprocessing
+            state.user_query = original_query
+            
+            state.interactive_session = None  # Clear interactive session
+            
+            state.last_response = f"✅ Re-preprocessing data (existing cleaned data will be overwritten)..."
+            
+            # Route to preprocessing
+            return "preprocessing"
+            
+        elif 'no' in user_input or 'keep' in user_input or 'existing' in user_input or 'No' in user_input:
+            # User wants to keep existing cleaned data
+            print_to_log(f"✅ [Preprocessing Reconfirmation] User chose to keep existing cleaned data")
+            
+            state.interactive_session = None  # Clear interactive session
+            
+            state.last_response = f"✅ Keeping existing cleaned data. You can now proceed with feature selection or model building."
+            
+            # Route to general response (user can make next choice)
+            return "general_response"
+            
+        else:
+            # FAILURE: Invalid response, ask again
+            print_to_log(f"❌ [Preprocessing Reconfirmation] Invalid response: '{user_input}'")
+            
+            state.last_response = f"""❓ Please choose one of the options:
+
+💬 Valid responses:
+• Type `Yes` - Re-preprocess data (overwrite existing)
+• Type `No` - Keep existing cleaned data
 
 ⚠️ Your response '{user_input}' was not recognized. Please try again."""
             
@@ -1577,20 +1755,18 @@ Examples:
                 return self._prompt_for_mode_selection(state)
         
         elif intent == "preprocessing":
+            # Check if cleaned data already exists
+            if state.cleaned_data is not None:
+                print_to_log("[Orchestrator] Cleaned data already exists - prompting for re-preprocessing confirmation")
+                return self._prompt_for_preprocessing_reconfirmation(state)
             return "preprocessing"
         
         elif intent == "feature_selection":
-            # ✅ ENHANCED DIRECT FEATURE SELECTION: BGE model classification with keyword fallback
+            # Check if cleaned data exists
             if state.cleaned_data is None and state.raw_data is not None:
-                # Use BGE model to classify if this is a direct feature selection request
-                is_direct_fs = self._classify_direct_feature_selection(state.user_query or "")
-                
-                if is_direct_fs:
-                    print_to_log("[Orchestrator] 🚀 Direct feature selection requested (BGE classified) - using raw data")
-                    return "feature_selection"
-                else:
-                    print_to_log("[Orchestrator] 📊 Standard feature selection request (BGE classified) - preprocessing first")
-                    return "preprocessing"
+                # Prompt user for confirmation: preprocess first or use raw data
+                print_to_log("[Orchestrator] No cleaned data available - prompting for feature selection preprocessing confirmation")
+                return self._prompt_for_feature_selection_confirmation(state)
             return "feature_selection"
         
         elif intent == "model_building":
@@ -1978,6 +2154,22 @@ How can I help you with your ML workflow today?"""
             state.interactive_session.get('phase') == 'preprocessing_confirmation'):
             print_to_log(f"🔧 [DEBUG] Entering preprocessing confirmation handler")
             return self._handle_preprocessing_confirmation(state)
+        
+        # Handle feature selection confirmation
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            isinstance(state.interactive_session, dict) and
+            state.interactive_session.get('phase') == 'feature_selection_confirmation'):
+            print_to_log(f"🔧 [DEBUG] Entering feature selection confirmation handler")
+            return self._handle_feature_selection_confirmation(state)
+        
+        # Handle preprocessing re-confirmation
+        if (hasattr(state, 'interactive_session') and 
+            state.interactive_session and 
+            isinstance(state.interactive_session, dict) and
+            state.interactive_session.get('phase') == 'preprocessing_reconfirmation'):
+            print_to_log(f"🔧 [DEBUG] Entering preprocessing reconfirmation handler")
+            return self._handle_preprocessing_reconfirmation(state)
         
         # Get thread logger
         thread_logger = self._get_thread_logger(state)

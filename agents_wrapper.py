@@ -3744,7 +3744,8 @@ Example: `target is_fraud` or `is_fraud`"""
                 "agent_type": "feature_selection",
                 "session_active": True,
                 "phase": session.phase,
-                "current_phase": "menu"
+                "current_phase": "menu",
+                "original_query": state.user_query  # CRITICAL: Store original user query
             }
             
             print_to_log("✅ Feature selection session started - bot will handle Slack interactions")
