@@ -2018,30 +2018,69 @@ Generate Python code to fulfill this request:"""
         
         try:
             if LANGGRAPH_AVAILABLE and self.app:
+                # 🔍 DEBUG: Log state BEFORE LangGraph processing
+                print_to_log(f"🔧 DEBUG PRE-LANGGRAPH: State type: {type(state)}")
+                print_to_log(f"🔧 DEBUG PRE-LANGGRAPH: pending_file_uploads type: {type(state.pending_file_uploads)}")
+                print_to_log(f"🔧 DEBUG PRE-LANGGRAPH: pending_file_uploads value: {state.pending_file_uploads}")
+                
                 # Run the full LangGraph pipeline
                 result_state = self.app.invoke(state)
+                
+                # 🔍 DEBUG: Log what LangGraph actually returned
+                print_to_log(f"🔧 DEBUG LANGGRAPH RESULT: Result type: {type(result_state)}")
+                print_to_log(f"🔧 DEBUG LANGGRAPH RESULT: Result value: {result_state}")
+                print_to_log(f"🔧 DEBUG LANGGRAPH RESULT: Is dict: {isinstance(result_state, dict)}")
+                print_to_log(f"🔧 DEBUG LANGGRAPH RESULT: Is PipelineState: {isinstance(result_state, PipelineState)}")
                 
                 # LangGraph returns dict when ending at END node - convert back to PipelineState
                 if isinstance(result_state, dict) and not isinstance(result_state, PipelineState):
                     # Update original state with dict values
-                    print_to_log(f"🔧 Converting LangGraph dict result to PipelineState")
+                    print_to_log(f"🔧 DEBUG CONVERSION: Converting LangGraph dict result to PipelineState")
+                    print_to_log(f"🔧 DEBUG CONVERSION: Dict keys: {list(result_state.keys())}")
+                    
+                    # 🔍 DEBUG: Check pending_file_uploads in dict
+                    if 'pending_file_uploads' in result_state:
+                        print_to_log(f"🔧 DEBUG CONVERSION: pending_file_uploads in dict - type: {type(result_state['pending_file_uploads'])}")
+                        print_to_log(f"🔧 DEBUG CONVERSION: pending_file_uploads in dict - value: {result_state['pending_file_uploads']}")
+                    
                     for key, value in result_state.items():
                         if hasattr(state, key):
+                            print_to_log(f"🔧 DEBUG CONVERSION: Setting {key} = {type(value)}")
                             setattr(state, key, value)
                     result_state = state
+                    
+                    # 🔍 DEBUG: Check state after conversion
+                    print_to_log(f"🔧 DEBUG POST-CONVERSION: pending_file_uploads type: {type(result_state.pending_file_uploads)}")
+                    print_to_log(f"🔧 DEBUG POST-CONVERSION: pending_file_uploads value: {result_state.pending_file_uploads}")
+                    
                 elif not isinstance(result_state, PipelineState):
                     # Fallback to original state for any other type
-                    print_to_log(f"🔧 Unexpected result type: {type(result_state)}, using original state")
+                    print_to_log(f"🔧 DEBUG FALLBACK: Unexpected result type: {type(result_state)}, using original state")
                     result_state = state
             else:
                 # Simplified pipeline without LangGraph
                 result_state = self._run_simplified_pipeline(state)
             
+            # 🔍 DEBUG: Log state before saving
+            print_to_log(f"🔧 DEBUG PRE-SAVE: Result state type: {type(result_state)}")
+            print_to_log(f"🔧 DEBUG PRE-SAVE: pending_file_uploads type: {type(result_state.pending_file_uploads)}")
+            print_to_log(f"🔧 DEBUG PRE-SAVE: pending_file_uploads value: {result_state.pending_file_uploads}")
+            
             # Save state (now guaranteed to be PipelineState)
             state_manager.save_state(result_state)
+            print_to_log(f"🔧 DEBUG POST-SAVE: State saved successfully")
+            
+            # 🔍 DEBUG: Log state before response preparation
+            print_to_log(f"🔧 DEBUG PRE-RESPONSE: About to call _prepare_response")
+            print_to_log(f"🔧 DEBUG PRE-RESPONSE: Result state type: {type(result_state)}")
+            print_to_log(f"🔧 DEBUG PRE-RESPONSE: pending_file_uploads type: {type(result_state.pending_file_uploads)}")
             
             # Prepare response
             response = self._prepare_response(result_state)
+            
+            # 🔍 DEBUG: Log response after preparation
+            print_to_log(f"🔧 DEBUG POST-RESPONSE: Response type: {type(response)}")
+            print_to_log(f"🔧 DEBUG POST-RESPONSE: Response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}")
             
             # Log performance and response
             processing_time = time.time() - start_time
@@ -2099,6 +2138,11 @@ Generate Python code to fulfill this request:"""
     
     def _prepare_response(self, state: PipelineState, custom_message: str = None) -> Dict[str, Any]:
         """Prepare response from final state"""
+        # 🔍 DEBUG: Log state at start of _prepare_response
+        print_to_log(f"🔧 DEBUG _prepare_response START: State type: {type(state)}")
+        print_to_log(f"🔧 DEBUG _prepare_response START: pending_file_uploads type: {type(state.pending_file_uploads)}")
+        print_to_log(f"🔧 DEBUG _prepare_response START: pending_file_uploads value: {state.pending_file_uploads}")
+        
         response = {
             "success": state.last_error is None,
             "session_id": state.session_id,
@@ -2109,18 +2153,31 @@ Generate Python code to fulfill this request:"""
             "execution_history": state.execution_history[-5:] if state.execution_history else []  # Last 5 records
         }
         
+        # 🔍 DEBUG: Log response creation
+        print_to_log(f"🔧 DEBUG _prepare_response CREATED: Response dict created successfully")
+        
         if state.last_error:
             response["error"] = state.last_error
+        
+        # 🔍 DEBUG: Log before session state saving
+        print_to_log(f"🔧 DEBUG _prepare_response PRE-SAVE: About to save session state")
+        print_to_log(f"🔧 DEBUG _prepare_response PRE-SAVE: pending_file_uploads type: {type(state.pending_file_uploads)}")
         
         # Save session state and conversation history (single point of truth)
         self._save_session_state(state.session_id, state)
         self._save_conversation_history(state.session_id, state.user_query, response["response"], state)
+        
+        print_to_log(f"🔧 DEBUG _prepare_response POST-SAVE: Session state saved")
         
         # Send any pending Slack message AFTER CSV files are saved
         if state.pending_slack_message and self.slack_manager and state.chat_session:
             print_to_log("📱 Sending pending Slack message after successful CSV save")
             self.slack_manager.send_message(state.chat_session, state.pending_slack_message)
             state.pending_slack_message = None  # Clear after sending
+        
+        # 🔍 DEBUG: Log before returning response
+        print_to_log(f"🔧 DEBUG _prepare_response RETURN: About to return response")
+        print_to_log(f"🔧 DEBUG _prepare_response RETURN: Response type: {type(response)}")
         
         return response
     

@@ -325,15 +325,25 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
                 # The automated pipeline agent handles its own response
                 print_to_log(f"✅ [Mode Selection] Automated pipeline completed successfully")
                 
+                # 🔍 DEBUG: Log state before updating
+                print_to_log(f"🔧 DEBUG ORCHESTRATOR PRE-UPDATE: state.pending_file_uploads type: {type(state.pending_file_uploads)}")
+                print_to_log(f"🔧 DEBUG ORCHESTRATOR PRE-UPDATE: result_state.pending_file_uploads type: {type(result_state.pending_file_uploads)}")
+                print_to_log(f"🔧 DEBUG ORCHESTRATOR PRE-UPDATE: result_state.pending_file_uploads value: {result_state.pending_file_uploads}")
+                
                 # Update the current state with results
                 state.last_response = result_state.last_response
                 state.last_error = result_state.last_error
                 state.artifacts = result_state.artifacts
                 state.pending_file_uploads = result_state.pending_file_uploads
                 
+                # 🔍 DEBUG: Log state after updating
+                print_to_log(f"🔧 DEBUG ORCHESTRATOR POST-UPDATE: state.pending_file_uploads type: {type(state.pending_file_uploads)}")
+                print_to_log(f"🔧 DEBUG ORCHESTRATOR POST-UPDATE: state.pending_file_uploads value: {state.pending_file_uploads}")
+                
                 # CRITICAL: Don't route to general_response - pipeline is complete
                 # The automated pipeline has already generated the final response
                 print_to_log(f"🎉 [Mode Selection] Fast pipeline completed - no further routing needed")
+                print_to_log(f"🔧 DEBUG ORCHESTRATOR END: About to return END")
                 return "END"  # Signal that processing is finished
                 
             except Exception as e:

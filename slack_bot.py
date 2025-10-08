@@ -333,27 +333,72 @@ Just upload your data and start asking questions in natural language! 🎉"""
             
             # Process any pending file uploads AFTER the response is sent
             # The system already has sophisticated plot detection logic - just process if there are pending uploads
-            print_to_log(f"🔍 UPLOAD DEBUG: Checking for pending file uploads...")
+            print_to_log(f"🔍 SLACK BOT UPLOAD DEBUG: Checking for pending file uploads...")
+            print_to_log(f"🔧 SLACK BOT DEBUG: session_id = {session_id}")
             
             if hasattr(self.ml_pipeline, 'state_manager'):
+                print_to_log(f"🔧 SLACK BOT DEBUG: ml_pipeline has state_manager")
+                
                 # Get the current state from the pipeline
+                print_to_log(f"🔧 SLACK BOT DEBUG: About to load state for session: {session_id}")
                 current_state = self.ml_pipeline.state_manager.load_state(session_id)
                 
-                if current_state and hasattr(current_state, 'process_pending_file_uploads'):
-                    # Check if there are actually pending uploads to process
-                    pending_uploads = getattr(current_state, 'pending_file_uploads', None)
-                    if pending_uploads and pending_uploads.get('files'):
-                        print_to_log(f"🔍 UPLOAD DEBUG: Found {len(pending_uploads['files'])} pending file uploads")
-                        print_to_log("🔍 UPLOAD DEBUG: Processing pending file uploads after response sent...")
-                        uploads_processed = current_state.process_pending_file_uploads()
-                        if uploads_processed:
-                            print_to_log("✅ Pending file uploads processed successfully")
-                        else:
-                            print_to_log("🔍 No pending file uploads to process")
+                print_to_log(f"🔧 SLACK BOT DEBUG: Loaded state type: {type(current_state)}")
+                print_to_log(f"🔧 SLACK BOT DEBUG: State is None: {current_state is None}")
+                
+                if current_state:
+                    print_to_log(f"🔧 SLACK BOT DEBUG: State loaded successfully")
+                    print_to_log(f"🔧 SLACK BOT DEBUG: Has process_pending_file_uploads: {hasattr(current_state, 'process_pending_file_uploads')}")
+                    
+                    # 🔍 CRITICAL DEBUG: Check pending_file_uploads type and value
+                    print_to_log(f"🔧 SLACK BOT DEBUG: pending_file_uploads type: {type(current_state.pending_file_uploads)}")
+                    print_to_log(f"🔧 SLACK BOT DEBUG: pending_file_uploads value: {current_state.pending_file_uploads}")
+                    
+                    if hasattr(current_state, 'process_pending_file_uploads'):
+                        # Check if there are actually pending uploads to process
+                        print_to_log(f"🔧 SLACK BOT DEBUG: About to get pending_file_uploads attribute")
+                        
+                        try:
+                            pending_uploads = getattr(current_state, 'pending_file_uploads', None)
+                            print_to_log(f"🔧 SLACK BOT DEBUG: getattr succeeded - type: {type(pending_uploads)}")
+                            print_to_log(f"🔧 SLACK BOT DEBUG: getattr succeeded - value: {pending_uploads}")
+                            
+                            if pending_uploads:
+                                print_to_log(f"🔧 SLACK BOT DEBUG: pending_uploads is not None/False")
+                                print_to_log(f"🔧 SLACK BOT DEBUG: About to call pending_uploads.get('files')")
+                                
+                                try:
+                                    files = pending_uploads.get('files') if isinstance(pending_uploads, dict) else None
+                                    print_to_log(f"🔧 SLACK BOT DEBUG: .get('files') succeeded - files: {files}")
+                                    
+                                    if files:
+                                        print_to_log(f"🔍 SLACK BOT UPLOAD DEBUG: Found {len(files)} pending file uploads")
+                                        print_to_log("🔍 SLACK BOT UPLOAD DEBUG: Processing pending file uploads after response sent...")
+                                        uploads_processed = current_state.process_pending_file_uploads()
+                                        if uploads_processed:
+                                            print_to_log("✅ Pending file uploads processed successfully")
+                                        else:
+                                            print_to_log("🔍 No pending file uploads to process")
+                                    else:
+                                        print_to_log("🔍 SLACK BOT UPLOAD DEBUG: No files in pending_uploads")
+                                        
+                                except Exception as e:
+                                    print_to_log(f"🚨 SLACK BOT ERROR: Failed to access pending_uploads.get('files'): {e}")
+                                    print_to_log(f"🚨 SLACK BOT ERROR: pending_uploads type: {type(pending_uploads)}")
+                                    import traceback
+                                    print_to_log(f"🚨 SLACK BOT ERROR: Traceback: {traceback.format_exc()}")
+                            else:
+                                print_to_log("🔍 SLACK BOT UPLOAD DEBUG: pending_uploads is None/False")
+                                
+                        except Exception as e:
+                            print_to_log(f"🚨 SLACK BOT ERROR: Failed to get pending_file_uploads: {e}")
+                            print_to_log(f"🚨 SLACK BOT ERROR: current_state type: {type(current_state)}")
+                            import traceback
+                            print_to_log(f"🚨 SLACK BOT ERROR: Traceback: {traceback.format_exc()}")
                     else:
-                        print_to_log("🔍 UPLOAD DEBUG: No pending file uploads found")
+                        print_to_log("⚠️ State does not have process_pending_file_uploads method")
                 else:
-                    print_to_log("⚠️ Could not load state or process_pending_file_uploads method not available")
+                    print_to_log("⚠️ Could not load state - current_state is None")
             else:
                 print_to_log("⚠️ ml_pipeline does not have state_manager")
             
