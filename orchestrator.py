@@ -283,6 +283,11 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
                 state.preprocessing_state = {}
             state.preprocessing_state['original_user_query'] = original_query
             
+            # CRITICAL FIX: Restore original query to state.user_query before calling automated pipeline
+            # This ensures the automated pipeline agent receives the correct original query
+            state.user_query = original_query
+            print_to_log(f"🔧 [Mode Selection] Restored state.user_query to original: '{state.user_query}'")
+            
             state.interactive_session = None  # Clear interactive session
             print_to_log(f"⚡ [Mode Selection] Calling automated pipeline with preserved query")
             

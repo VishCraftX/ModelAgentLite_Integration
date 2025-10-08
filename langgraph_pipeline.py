@@ -483,6 +483,18 @@ Be conversational, friendly, and helpful. Don't just redirect - try to be genuin
         print_to_log(f"\n⚡ [Fast Pipeline] Starting automated ML pipeline")
         
         try:
+            # CRITICAL: Preserve original user query for automated pipeline
+            # This handles cases where fast_pipeline_node is called directly
+            if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                state.preprocessing_state = {}
+            
+            # If original query not already preserved, preserve current query
+            if 'original_user_query' not in state.preprocessing_state:
+                state.preprocessing_state['original_user_query'] = state.user_query
+                print_to_log(f"🔧 [Fast Pipeline] Preserved original query: '{state.user_query}'")
+            else:
+                print_to_log(f"✅ [Fast Pipeline] Original query already preserved: '{state.preprocessing_state['original_user_query']}'")
+            
             # Import and run automated pipeline agent
             from automated_pipeline_agent import automated_pipeline_agent
             
