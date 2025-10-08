@@ -250,6 +250,17 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             # FAILURE: Column not found, ask again
             print_to_log(f"❌ [Target Selection] Column '{user_input}' not found in dataset")
             
+            # CRITICAL: Don't lose the original query even on error - preserve it in preprocessing_state
+            original_query_from_session = state.interactive_session.get('original_query')
+            if original_query_from_session:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query even on error for potential retry
+                state.preprocessing_state['original_user_query'] = original_query_from_session
+                print_to_log(f"💾 [Target Selection] Preserved original query even on error: '{original_query_from_session}'")
+            
             state.last_response = f"""❌ Column not found in dataset
 
 💬 Please type the EXACT column name (case-sensitive):
@@ -334,6 +345,17 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             # FAILURE: Invalid mode selection, ask again
             print_to_log(f"❌ [Mode Selection] Invalid mode selection: '{user_input}'")
             
+            # CRITICAL: Preserve original query even on error for retry
+            original_query = state.interactive_session.get('original_query')
+            if original_query:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query for retry
+                state.preprocessing_state['original_user_query'] = original_query
+                print_to_log(f"💾 [Mode Selection] Preserved original query even on error: '{original_query}'")
+            
             state.last_response = f"""❓ Please choose your pipeline mode:
 
 ⚡ Fast Mode: Type `fast` for automated pipeline
@@ -347,6 +369,22 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         """
         Prompt user for mode selection (fast vs slow)
         """
+        # CRITICAL: Preserve the TRUE original query from preprocessing_state or conversation history
+        # state.user_query might be overwritten by previous interactive session responses
+        true_original_query = None
+        
+        # Try to get original query from preprocessing_state (set by target selection)
+        if (hasattr(state, 'preprocessing_state') and 
+            state.preprocessing_state and 
+            'original_user_query' in state.preprocessing_state):
+            true_original_query = state.preprocessing_state['original_user_query']
+            print_to_log(f"🔍 [Mode Selection] Found original query in preprocessing_state: '{true_original_query}'")
+        
+        # Fallback: use current user_query if no preprocessing_state found
+        if not true_original_query:
+            true_original_query = state.user_query
+            print_to_log(f"🔍 [Mode Selection] Using current user_query as original: '{true_original_query}'")
+        
         # Set up interactive session for mode selection
         state.interactive_session = {
             'agent_type': 'mode_selection',
@@ -354,7 +392,7 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'session_id': state.chat_session,
             'phase': 'mode_selection',
             'original_intent': 'full_pipeline',
-            'original_query': state.user_query,  # CRITICAL: Store original user query
+            'original_query': true_original_query,  # CRITICAL: Store TRUE original user query
             'needs_mode_selection': True
         }
         
@@ -532,6 +570,17 @@ It's highly recommended to preprocess your data first for better feature selecti
             # FAILURE: Invalid response, ask again
             print_to_log(f"❌ [Preprocessing Confirmation] Invalid response: '{user_input}'")
             
+            # CRITICAL: Preserve original query even on error for retry
+            original_query = state.interactive_session.get('original_query')
+            if original_query:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query for retry
+                state.preprocessing_state['original_user_query'] = original_query
+                print_to_log(f"💾 [Preprocessing Confirmation] Preserved original query even on error: '{original_query}'")
+            
             state.last_response = f"""❓ Please choose one of the options:
 
 💬 Valid responses:
@@ -595,6 +644,17 @@ It's highly recommended to preprocess your data first for better feature selecti
             # FAILURE: Invalid response, ask again
             print_to_log(f"❌ [Feature Selection Confirmation] Invalid response: '{user_input}'")
             
+            # CRITICAL: Preserve original query even on error for retry
+            original_query = state.interactive_session.get('original_query')
+            if original_query:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query for retry
+                state.preprocessing_state['original_user_query'] = original_query
+                print_to_log(f"💾 [Feature Selection Confirmation] Preserved original query even on error: '{original_query}'")
+            
             state.last_response = f"""❓ Please choose one of the options:
 
 💬 Valid responses:
@@ -635,6 +695,17 @@ It's highly recommended to preprocess your data first for better feature selecti
             # User wants to keep existing cleaned data
             print_to_log(f"✅ [Preprocessing Reconfirmation] User chose to keep existing cleaned data")
             
+            # CRITICAL: Preserve original query for potential subsequent interactive sessions
+            original_query = state.interactive_session.get('original_query', state.user_query)
+            if original_query:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query for potential next interactive session
+                state.preprocessing_state['original_user_query'] = original_query
+                print_to_log(f"💾 [Preprocessing Reconfirmation] Preserved original query for next session: '{original_query}'")
+            
             state.interactive_session = None  # Clear interactive session
             
             state.last_response = f"✅ Keeping existing cleaned data. You can now proceed with feature selection or model building."
@@ -645,6 +716,17 @@ It's highly recommended to preprocess your data first for better feature selecti
         else:
             # FAILURE: Invalid response, ask again
             print_to_log(f"❌ [Preprocessing Reconfirmation] Invalid response: '{user_input}'")
+            
+            # CRITICAL: Preserve original query even on error for retry
+            original_query = state.interactive_session.get('original_query')
+            if original_query:
+                # Initialize preprocessing_state if it doesn't exist
+                if not hasattr(state, 'preprocessing_state') or state.preprocessing_state is None:
+                    state.preprocessing_state = {}
+                
+                # Store original query for retry
+                state.preprocessing_state['original_user_query'] = original_query
+                print_to_log(f"💾 [Preprocessing Reconfirmation] Preserved original query even on error: '{original_query}'")
             
             state.last_response = f"""❓ Please choose one of the options:
 

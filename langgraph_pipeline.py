@@ -2383,7 +2383,8 @@ What would you like to do?"""
                 "session_id": state.chat_session,
                 "phase": "waiting_input",
                 "target_column": state.target_column,
-                "current_phase": "overview"
+                "current_phase": "overview",
+                "original_query": state.user_query  # CRITICAL: Store original user query
             }
             
             # Don't send preprocessing intro here - it will be shown after mode selection
