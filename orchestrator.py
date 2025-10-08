@@ -433,6 +433,16 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
         """
         Prompt user for confirmation when model building is requested but no cleaned data exists
         """
+        # CRITICAL: Get the true original query from preprocessing_state (set by target selection)
+        true_original_query = state.user_query  # fallback
+        if (hasattr(state, 'preprocessing_state') and 
+            state.preprocessing_state and 
+            'original_user_query' in state.preprocessing_state):
+            true_original_query = state.preprocessing_state['original_user_query']
+            print_to_log(f"🔍 [Preprocessing Confirmation] Found original query in preprocessing_state: '{true_original_query}'")
+        else:
+            print_to_log(f"🔍 [Preprocessing Confirmation] Using current user_query as original: '{true_original_query}'")
+        
         # Set up interactive session for preprocessing confirmation
         state.interactive_session = {
             'agent_type': 'preprocessing_confirmation',
@@ -440,7 +450,7 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             'session_id': state.chat_session,
             'phase': 'preprocessing_confirmation',
             'original_intent': 'model_building',
-            'original_query': state.user_query,
+            'original_query': true_original_query,  # CRITICAL: Use TRUE original query
             'needs_preprocessing_confirmation': True
         }
         
@@ -465,6 +475,16 @@ It's highly recommended to preprocess your data first for better model accuracy 
         """
         Prompt user for confirmation when feature selection is requested but no cleaned data exists
         """
+        # CRITICAL: Get the true original query from preprocessing_state (set by target selection)
+        true_original_query = state.user_query  # fallback
+        if (hasattr(state, 'preprocessing_state') and 
+            state.preprocessing_state and 
+            'original_user_query' in state.preprocessing_state):
+            true_original_query = state.preprocessing_state['original_user_query']
+            print_to_log(f"🔍 [Feature Selection Confirmation] Found original query in preprocessing_state: '{true_original_query}'")
+        else:
+            print_to_log(f"🔍 [Feature Selection Confirmation] Using current user_query as original: '{true_original_query}'")
+        
         # Set up interactive session for feature selection confirmation
         state.interactive_session = {
             'agent_type': 'feature_selection_confirmation',
@@ -472,7 +492,7 @@ It's highly recommended to preprocess your data first for better model accuracy 
             'session_id': state.chat_session,
             'phase': 'feature_selection_confirmation',
             'original_intent': 'feature_selection',
-            'original_query': state.user_query,
+            'original_query': true_original_query,  # CRITICAL: Use TRUE original query
             'needs_feature_selection_confirmation': True
         }
         
@@ -496,6 +516,16 @@ It's highly recommended to preprocess your data first for better feature selecti
         """
         Prompt user for confirmation when preprocessing is requested but cleaned data already exists
         """
+        # CRITICAL: Get the true original query from preprocessing_state (set by target selection)
+        true_original_query = state.user_query  # fallback
+        if (hasattr(state, 'preprocessing_state') and 
+            state.preprocessing_state and 
+            'original_user_query' in state.preprocessing_state):
+            true_original_query = state.preprocessing_state['original_user_query']
+            print_to_log(f"🔍 [Preprocessing Reconfirmation] Found original query in preprocessing_state: '{true_original_query}'")
+        else:
+            print_to_log(f"🔍 [Preprocessing Reconfirmation] Using current user_query as original: '{true_original_query}'")
+        
         # Set up interactive session for preprocessing re-confirmation
         state.interactive_session = {
             'agent_type': 'preprocessing_reconfirmation',
@@ -503,7 +533,7 @@ It's highly recommended to preprocess your data first for better feature selecti
             'session_id': state.chat_session,
             'phase': 'preprocessing_reconfirmation',
             'original_intent': 'preprocessing',
-            'original_query': state.user_query,
+            'original_query': true_original_query,  # CRITICAL: Use TRUE original query
             'needs_preprocessing_reconfirmation': True
         }
         
