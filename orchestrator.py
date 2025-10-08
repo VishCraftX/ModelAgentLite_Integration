@@ -340,11 +340,7 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
                 print_to_log(f"🔧 DEBUG ORCHESTRATOR POST-UPDATE: state.pending_file_uploads type: {type(state.pending_file_uploads)}")
                 print_to_log(f"🔧 DEBUG ORCHESTRATOR POST-UPDATE: state.pending_file_uploads value: {state.pending_file_uploads}")
                 
-                # CRITICAL: Don't route to general_response - pipeline is complete
-                # The automated pipeline has already generated the final response
-                print_to_log(f"🎉 [Mode Selection] Fast pipeline completed - no further routing needed")
-                print_to_log(f"🔧 DEBUG ORCHESTRATOR END: About to return END")
-                return "END"  # Signal that processing is finished
+                return "general_response"  # Return the automated pipeline's response
                 
             except Exception as e:
                 print_to_log(f"❌ [Mode Selection] Automated pipeline failed: {e}")
