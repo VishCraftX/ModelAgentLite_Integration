@@ -2048,6 +2048,53 @@ Examples:
                 if state.selected_features is None:
                     state.selected_features = state.raw_data.copy()
                     print_to_log("[Orchestrator] Using all columns as selected features")
+                
+                # 🔧 COMPREHENSIVE STATE DEBUG - BEFORE ROUTING TO MODEL_BUILDING DIRECTLY:
+                print_to_log(f"🔧 COMPREHENSIVE STATE DEBUG - BEFORE ROUTING TO MODEL_BUILDING DIRECTLY:")
+                print_to_log(f"  📊 raw_data: {type(state.raw_data)} - {state.raw_data.shape if state.raw_data is not None else 'None'}")
+                print_to_log(f"  🧹 cleaned_data: {type(state.cleaned_data)} - {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+                print_to_log(f"  🔄 processed_data: {type(state.processed_data)} - {state.processed_data.shape if state.processed_data is not None else 'None'}")
+                print_to_log(f"  🎯 selected_features: {type(state.selected_features)} - {len(state.selected_features) if state.selected_features is not None else 'None'}")
+                print_to_log(f"  🎯 target_column: {type(state.target_column)} - '{state.target_column}'")
+                print_to_log(f"  🤖 trained_model: {type(state.trained_model)} - {state.trained_model.__class__.__name__ if state.trained_model is not None else 'None'}")
+                print_to_log(f"  📦 models: {type(state.models)} - {f'{len(state.models)} models' if state.models else 'None models'}")
+                print_to_log(f"  🏆 best_model: {type(state.best_model)} - '{state.best_model}'")
+                print_to_log(f"  📁 artifacts: {type(state.artifacts)} - {list(state.artifacts.keys()) if state.artifacts else 'None'}")
+                print_to_log(f"  💬 chat_session: {type(state.chat_session)} - '{state.chat_session}'")
+                print_to_log(f"  📈 progress: {type(state.progress)} - '{state.progress}'")
+                print_to_log(f"  ❓ user_query: {type(state.user_query)} - '{state.user_query}'")
+                print_to_log(f"  💻 last_code: {type(state.last_code)} - {f'{len(state.last_code)} chars' if state.last_code else 'None chars'}")
+                print_to_log(f"  ❌ last_error: {type(state.last_error)} - '{state.last_error}'")
+                print_to_log(f"  💬 last_response: {type(state.last_response)} - {f'{len(state.last_response)} chars' if state.last_response else 'None chars'}")
+                print_to_log(f"  🧹 preprocessing_state: {type(state.preprocessing_state)} - {list(state.preprocessing_state.keys()) if state.preprocessing_state else 'None'}")
+                print_to_log(f"  🔧 preprocessing_strategies: {type(state.preprocessing_strategies)} - {state.preprocessing_strategies}")
+                print_to_log(f"  🎯 feature_selection_state: {type(state.feature_selection_state)} - {state.feature_selection_state}")
+                print_to_log(f"  🤖 model_building_state: {type(state.model_building_state)} - {state.model_building_state}")
+                print_to_log(f"  🔄 interactive_session: {type(state.interactive_session)} - {state.interactive_session}")
+                print_to_log(f"  💬 slack_session_info: {type(state.slack_session_info)} - {state.slack_session_info}")
+                print_to_log(f"  📱 pending_slack_message: {type(state.pending_slack_message)} - '{state.pending_slack_message}'")
+                print_to_log(f"  👤 current_agent: {type(state.current_agent)} - '{state.current_agent}'")
+                print_to_log(f"  📋 execution_history: {type(state.execution_history)} - {len(state.execution_history)} records")
+                print_to_log(f"  🆔 session_id: {type(state.session_id)} - '{state.session_id}'")
+                print_to_log(f"  📅 created_at: {type(state.created_at)} - {state.created_at}")
+                print_to_log(f"  🔄 updated_at: {type(state.updated_at)} - {state.updated_at}")
+                print_to_log(f"  📎 pending_file_uploads: {type(state.pending_file_uploads)} - {state.pending_file_uploads}")
+                print_to_log(f"  📊 predictions_dataset: {type(state.predictions_dataset)} - {state.predictions_dataset.shape if state.predictions_dataset is not None else 'None'}")
+                print_to_log(f"  🚫 non_data_science_context: {type(state.non_data_science_context)} - {state.non_data_science_context}")
+                
+                print_to_log(f"🔧 DEEP INSPECTION - CHECKING FOR PROBLEMATIC NESTED OBJECTS:")
+                print_to_log(f"  📁 ARTIFACTS INSPECTION:")
+                if state.artifacts:
+                    for k, v in state.artifacts.items():
+                        print_to_log(f"    - {k}: {type(v)}")
+                
+                print_to_log(f"  🧹 PREPROCESSING_STATE INSPECTION:")
+                if state.preprocessing_state:
+                    for k, v in state.preprocessing_state.items():
+                        print_to_log(f"    - {k}: {type(v)}")
+                
+                print_to_log(f"🔧 END COMPREHENSIVE STATE DEBUG - ABOUT TO ROUTE TO MODEL_BUILDING DIRECTLY")
+                
                 return "model_building"
             
             # Normal pipeline flow - check if preprocessing is needed
@@ -2057,6 +2104,53 @@ Examples:
             elif state.selected_features is None:
                 print_to_log("[Orchestrator] Need to select features first")
                 return "feature_selection"
+            
+            # 🔧 COMPREHENSIVE STATE DEBUG - BEFORE ROUTING TO MODEL_BUILDING (NORMAL FLOW):
+            print_to_log(f"🔧 COMPREHENSIVE STATE DEBUG - BEFORE ROUTING TO MODEL_BUILDING (NORMAL FLOW WITH PREPROCESSING):")
+            print_to_log(f"  📊 raw_data: {type(state.raw_data)} - {state.raw_data.shape if state.raw_data is not None else 'None'}")
+            print_to_log(f"  🧹 cleaned_data: {type(state.cleaned_data)} - {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+            print_to_log(f"  🔄 processed_data: {type(state.processed_data)} - {state.processed_data.shape if state.processed_data is not None else 'None'}")
+            print_to_log(f"  🎯 selected_features: {type(state.selected_features)} - {len(state.selected_features) if state.selected_features is not None else 'None'}")
+            print_to_log(f"  🎯 target_column: {type(state.target_column)} - '{state.target_column}'")
+            print_to_log(f"  🤖 trained_model: {type(state.trained_model)} - {state.trained_model.__class__.__name__ if state.trained_model is not None else 'None'}")
+            print_to_log(f"  📦 models: {type(state.models)} - {f'{len(state.models)} models' if state.models else 'None models'}")
+            print_to_log(f"  🏆 best_model: {type(state.best_model)} - '{state.best_model}'")
+            print_to_log(f"  📁 artifacts: {type(state.artifacts)} - {list(state.artifacts.keys()) if state.artifacts else 'None'}")
+            print_to_log(f"  💬 chat_session: {type(state.chat_session)} - '{state.chat_session}'")
+            print_to_log(f"  📈 progress: {type(state.progress)} - '{state.progress}'")
+            print_to_log(f"  ❓ user_query: {type(state.user_query)} - '{state.user_query}'")
+            print_to_log(f"  💻 last_code: {type(state.last_code)} - {f'{len(state.last_code)} chars' if state.last_code else 'None chars'}")
+            print_to_log(f"  ❌ last_error: {type(state.last_error)} - '{state.last_error}'")
+            print_to_log(f"  💬 last_response: {type(state.last_response)} - {f'{len(state.last_response)} chars' if state.last_response else 'None chars'}")
+            print_to_log(f"  🧹 preprocessing_state: {type(state.preprocessing_state)} - {list(state.preprocessing_state.keys()) if state.preprocessing_state else 'None'}")
+            print_to_log(f"  🔧 preprocessing_strategies: {type(state.preprocessing_strategies)} - {state.preprocessing_strategies}")
+            print_to_log(f"  🎯 feature_selection_state: {type(state.feature_selection_state)} - {state.feature_selection_state}")
+            print_to_log(f"  🤖 model_building_state: {type(state.model_building_state)} - {state.model_building_state}")
+            print_to_log(f"  🔄 interactive_session: {type(state.interactive_session)} - {state.interactive_session}")
+            print_to_log(f"  💬 slack_session_info: {type(state.slack_session_info)} - {state.slack_session_info}")
+            print_to_log(f"  📱 pending_slack_message: {type(state.pending_slack_message)} - '{state.pending_slack_message}'")
+            print_to_log(f"  👤 current_agent: {type(state.current_agent)} - '{state.current_agent}'")
+            print_to_log(f"  📋 execution_history: {type(state.execution_history)} - {len(state.execution_history)} records")
+            print_to_log(f"  🆔 session_id: {type(state.session_id)} - '{state.session_id}'")
+            print_to_log(f"  📅 created_at: {type(state.created_at)} - {state.created_at}")
+            print_to_log(f"  🔄 updated_at: {type(state.updated_at)} - {state.updated_at}")
+            print_to_log(f"  📎 pending_file_uploads: {type(state.pending_file_uploads)} - {state.pending_file_uploads}")
+            print_to_log(f"  📊 predictions_dataset: {type(state.predictions_dataset)} - {state.predictions_dataset.shape if state.predictions_dataset is not None else 'None'}")
+            print_to_log(f"  🚫 non_data_science_context: {type(state.non_data_science_context)} - {state.non_data_science_context}")
+            
+            print_to_log(f"🔧 DEEP INSPECTION - CHECKING FOR PROBLEMATIC NESTED OBJECTS:")
+            print_to_log(f"  📁 ARTIFACTS INSPECTION:")
+            if state.artifacts:
+                for k, v in state.artifacts.items():
+                    print_to_log(f"    - {k}: {type(v)}")
+            
+            print_to_log(f"  🧹 PREPROCESSING_STATE INSPECTION:")
+            if state.preprocessing_state:
+                for k, v in state.preprocessing_state.items():
+                    print_to_log(f"    - {k}: {type(v)}")
+            
+            print_to_log(f"🔧 END COMPREHENSIVE STATE DEBUG - ABOUT TO ROUTE TO MODEL_BUILDING (NORMAL FLOW)")
+            
             return "model_building"
         
         

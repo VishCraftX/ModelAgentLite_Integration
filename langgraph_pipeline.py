@@ -388,7 +388,46 @@ I'll help you build a machine learning model. Let's start!
         print_to_log(f"🔍 [Model Building] Raw data: {'✅' if state.raw_data is not None else '❌'}")
         print_to_log(f"🔍 [Model Building] Cleaned data: {'✅' if state.cleaned_data is not None else '❌'}")
         print_to_log(f"🔍 [Model Building] Selected features: {'✅' if state.selected_features is not None else '❌'}")
-        return model_building_agent.run(state)
+        
+        # Run model building
+        result_state = model_building_agent.run(state)
+        
+        # 🔧 COMPREHENSIVE STATE DEBUG - AFTER MODEL BUILDING COMPLETES:
+        print_to_log(f"🔧 COMPREHENSIVE STATE DEBUG - AFTER MODEL BUILDING COMPLETES:")
+        print_to_log(f"  📊 raw_data: {type(result_state.raw_data)} - {result_state.raw_data.shape if result_state.raw_data is not None else 'None'}")
+        print_to_log(f"  🧹 cleaned_data: {type(result_state.cleaned_data)} - {result_state.cleaned_data.shape if result_state.cleaned_data is not None else 'None'}")
+        print_to_log(f"  🔄 processed_data: {type(result_state.processed_data)} - {result_state.processed_data.shape if result_state.processed_data is not None else 'None'}")
+        print_to_log(f"  🎯 selected_features: {type(result_state.selected_features)} - {len(result_state.selected_features) if result_state.selected_features is not None else 'None'}")
+        print_to_log(f"  🎯 target_column: {type(result_state.target_column)} - '{result_state.target_column}'")
+        print_to_log(f"  🤖 trained_model: {type(result_state.trained_model)} - {result_state.trained_model.__class__.__name__ if result_state.trained_model is not None else 'None'}")
+        print_to_log(f"  📦 models: {type(result_state.models)} - {f'{len(result_state.models)} models' if result_state.models else 'None models'}")
+        print_to_log(f"  🏆 best_model: {type(result_state.best_model)} - '{result_state.best_model}'")
+        print_to_log(f"  📁 artifacts: {type(result_state.artifacts)} - {list(result_state.artifacts.keys()) if result_state.artifacts else 'None'}")
+        print_to_log(f"  💬 chat_session: {type(result_state.chat_session)} - '{result_state.chat_session}'")
+        print_to_log(f"  📈 progress: {type(result_state.progress)} - '{result_state.progress}'")
+        print_to_log(f"  ❓ user_query: {type(result_state.user_query)} - '{result_state.user_query}'")
+        print_to_log(f"  💻 last_code: {type(result_state.last_code)} - {f'{len(result_state.last_code)} chars' if result_state.last_code else 'None chars'}")
+        print_to_log(f"  ❌ last_error: {type(result_state.last_error)} - '{result_state.last_error}'")
+        print_to_log(f"  💬 last_response: {type(result_state.last_response)} - {f'{len(result_state.last_response)} chars' if result_state.last_response else 'None chars'}")
+        print_to_log(f"  🧹 preprocessing_state: {type(result_state.preprocessing_state)} - {list(result_state.preprocessing_state.keys()) if result_state.preprocessing_state else 'None'}")
+        print_to_log(f"  🔧 preprocessing_strategies: {type(result_state.preprocessing_strategies)} - {result_state.preprocessing_strategies}")
+        print_to_log(f"  🎯 feature_selection_state: {type(result_state.feature_selection_state)} - {result_state.feature_selection_state}")
+        print_to_log(f"  🤖 model_building_state: {type(result_state.model_building_state)} - {result_state.model_building_state}")
+        print_to_log(f"  🔄 interactive_session: {type(result_state.interactive_session)} - {result_state.interactive_session}")
+        print_to_log(f"  💬 slack_session_info: {type(result_state.slack_session_info)} - {result_state.slack_session_info}")
+        print_to_log(f"  📱 pending_slack_message: {type(result_state.pending_slack_message)} - '{result_state.pending_slack_message}'")
+        print_to_log(f"  👤 current_agent: {type(result_state.current_agent)} - '{result_state.current_agent}'")
+        print_to_log(f"  📋 execution_history: {type(result_state.execution_history)} - {len(result_state.execution_history)} records")
+        print_to_log(f"  🆔 session_id: {type(result_state.session_id)} - '{result_state.session_id}'")
+        print_to_log(f"  📅 created_at: {type(result_state.created_at)} - {result_state.created_at}")
+        print_to_log(f"  🔄 updated_at: {type(result_state.updated_at)} - {result_state.updated_at}")
+        print_to_log(f"  📎 pending_file_uploads: {type(result_state.pending_file_uploads)} - {result_state.pending_file_uploads}")
+        print_to_log(f"  📊 predictions_dataset: {type(result_state.predictions_dataset)} - {result_state.predictions_dataset.shape if result_state.predictions_dataset is not None else 'None'}")
+        print_to_log(f"  🚫 non_data_science_context: {type(result_state.non_data_science_context)} - {result_state.non_data_science_context}")
+        
+        print_to_log(f"🔧 END COMPREHENSIVE STATE DEBUG - MODEL BUILDING COMPLETE")
+        
+        return result_state
     
     def _general_response_node(self, state: PipelineState) -> PipelineState:
         """General response node - handles conversational queries using LLM"""
