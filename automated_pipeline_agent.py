@@ -397,56 +397,26 @@ Reply with the target column name (e.g., 'f_segment')"""
                 print_to_log(f"⚠️ Could not update global model states: {e}")
             
             # CRITICAL: Route to model building agent and let it handle ALL outputs
-            # Step 3: Call Model Building Agent DIRECTLY (no wrapper needed)
-            print_to_log("🤖 [Automated Pipeline] Step 3: Model Building")
+            # Step 3: SKIP Model Building - Return to orchestrator for normal LangGraph flow
+            print_to_log("🔄 [Automated Pipeline] Preprocessing and Feature Selection completed")
+            print_to_log("🔄 [Automated Pipeline] Returning to orchestrator for model building through normal LangGraph flow")
             
             # Restore original query for model building
             original_query = state.preprocessing_state.get('original_user_query', state.user_query)
-            print_to_log(f"🔧 [Automated Pipeline] Using original query: '{original_query}'")
+            state.user_query = original_query
+            print_to_log(f"🔧 [Automated Pipeline] Restored original query: '{original_query}'")
             
-            try:
-                # Import model building agent directly (no wrapper)
-                from model_building_agent_impl import LangGraphModelAgent
-                model_agent = LangGraphModelAgent()
-                
-                # Determine which data to use for model building
-                data_to_use = None
-                if state.selected_features is not None and len(state.selected_features) > 0:
-                    # Use selected features if available
-                    if state.cleaned_data is not None and state.target_column:
-                        data_to_use = state.cleaned_data[state.selected_features + [state.target_column]]
-                        print_to_log(f"🎯 [Automated Pipeline] Using selected features: {len(state.selected_features)} features")
-                elif state.cleaned_data is not None:
-                    # Use cleaned data if no feature selection
-                    data_to_use = state.cleaned_data
-                    print_to_log(f"🧹 [Automated Pipeline] Using cleaned data: {state.cleaned_data.shape}")
-                elif state.raw_data is not None:
-                    # Fallback to raw data
-                    data_to_use = state.raw_data
-                    print_to_log(f"📊 [Automated Pipeline] Using raw data: {state.raw_data.shape}")
-                
-                if data_to_use is not None:
-                    # Load data into model agent
-                    model_agent.load_data(data_to_use, user_id=state.chat_session)
-                    
-                    # Process the original query with model building agent
-                    print_to_log(f"🤖 [Automated Pipeline] Processing query with model building agent: '{original_query}'")
-                    result = model_agent.process_query(original_query, user_id=state.chat_session)
-                    
-                    # Use centralized execution result handling for consistency
-                    from agents_wrapper import ModelBuildingAgentWrapper
-                    state = ModelBuildingAgentWrapper.handle_execution_result(state, result, "automated_pipeline", model_agent)
-                    
-                    print_to_log("✅ [Automated Pipeline] Model building completed successfully")
-                else:
-                    print_to_log("❌ [Automated Pipeline] No data available for model building")
-                    state.last_response = "❌ No data available for model building"
-                    
-            except Exception as e:
-                print_to_log(f"❌ [Automated Pipeline] Model building failed: {e}")
-                state.last_response = f"❌ Model building failed: {str(e)}"
-
-            print_to_log("🎉 [Automated Pipeline] Simplified automated ML pipeline completed successfully!")
+            # Set routing decision to model_building so orchestrator routes correctly
+            state.routing_decision = "model_building"
+            
+            # Log final state for model building
+            print_to_log(f"📊 [Automated Pipeline] Final state for model building:")
+            print_to_log(f"  🧹 cleaned_data: {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+            print_to_log(f"  🎯 selected_features: {len(state.selected_features) if state.selected_features is not None else 'None'}")
+            print_to_log(f"  🎯 target_column: '{state.target_column}'")
+            print_to_log(f"  💬 user_query: '{state.user_query}'")
+            
+            print_to_log("🎉 [Automated Pipeline] Preprocessing + Feature Selection completed - ready for model building!")
             return state
             
         except Exception as e:

@@ -316,25 +316,30 @@ Once your data is uploaded, I'll be ready to assist! 🚀"""
             print_to_log(f"⚡ [Mode Selection] Calling automated pipeline with preserved query")
             
             try:
-                # Import and call automated pipeline agent directly
+                # Import and call automated pipeline agent for preprocessing + feature selection only
                 from automated_pipeline_agent import automated_pipeline_agent
                 
-                # Call automated pipeline
+                # Call automated pipeline (now only does preprocessing + feature selection)
                 result_state = automated_pipeline_agent(state)
                 
-                # The automated pipeline agent handles its own response
-                print_to_log(f"✅ [Mode Selection] Automated pipeline completed successfully")
+                print_to_log(f"✅ [Mode Selection] Automated preprocessing + feature selection completed")
                 
-                # Update the current state with results
-                state.last_response = result_state.last_response
-                state.last_error = result_state.last_error
-                state.artifacts = result_state.artifacts
-                state.pending_file_uploads = result_state.pending_file_uploads
+                # Update the current state with preprocessing and feature selection results
+                state.raw_data = result_state.raw_data
+                state.cleaned_data = result_state.cleaned_data
+                state.selected_features = result_state.selected_features
+                state.target_column = result_state.target_column
+                state.preprocessing_state = result_state.preprocessing_state
+                state.feature_selection_state = result_state.feature_selection_state
+                state.user_query = result_state.user_query  # Restored original query
                 
-                # CRITICAL: Don't route to general_response - pipeline is complete
-                # The automated pipeline has already generated the final response
-                print_to_log(f"🎉 [Mode Selection] Fast pipeline completed - no further routing needed")
-                return "END"  # Signal that processing is finished
+                # CRITICAL: Now route to model building through normal LangGraph flow
+                print_to_log(f"🔄 [Mode Selection] Routing to model building with original query: '{state.user_query}'")
+                print_to_log(f"📊 [Mode Selection] Data ready for model building:")
+                print_to_log(f"  🧹 cleaned_data: {state.cleaned_data.shape if state.cleaned_data is not None else 'None'}")
+                print_to_log(f"  🎯 selected_features: {len(state.selected_features) if state.selected_features is not None else 'None'}")
+                
+                return "model_building"  # Route to model building agent through LangGraph
                 
             except Exception as e:
                 print_to_log(f"❌ [Mode Selection] Automated pipeline failed: {e}")
