@@ -160,10 +160,12 @@ Reply with the target column name (e.g., 'f_segment')"""
             print_to_log(f"📊 Dataset: {overview_stats['total_rows']} rows × {overview_stats['total_columns']} columns")
         
             
-            # Phase 2: Intelligent Outlier Analysis
-            send_progress("🚨 Starting outlier phase")
-            print_to_log("🚨 Phase 2: Outliers - Running intelligent LLM + rule-based analysis")
+            # Phase 2: Intelligent Outlier Analysis - COMMENTED OUT FOR DEBUGGING
+            # send_progress("🚨 Starting outlier phase")
+            print_to_log("⏭️ SKIPPING Phase 2: Outliers - Commented out for debugging")
             
+            # TEMPORARILY COMMENTED OUT FOR DEBUGGING - START
+            """
             # Run the same intelligent outlier analysis as manual flow
             try:
                 # CRITICAL: Ensure data is loaded in preprocessing_state BEFORE analysis
@@ -395,6 +397,24 @@ Reply with the target column name (e.g., 'f_segment')"""
                 print_to_log(f"🎯 Updated global model states for model building agent")
             except Exception as e:
                 print_to_log(f"⚠️ Could not update global model states: {e}")
+            
+            """
+            # TEMPORARILY COMMENTED OUT FOR DEBUGGING - END
+            
+            # For debugging: Use raw data as cleaned data and all columns as selected features
+            print_to_log("🔧 DEBUG MODE: Using raw data as cleaned data")
+            state.cleaned_data = state.raw_data.copy()
+            
+            print_to_log("🔧 DEBUG MODE: Using all columns as selected features")
+            # Remove target column from features if it exists
+            all_columns = list(state.raw_data.columns)
+            if state.target_column and state.target_column in all_columns:
+                all_columns.remove(state.target_column)
+            state.selected_features = all_columns
+            
+            print_to_log(f"📊 DEBUG MODE: cleaned_data shape: {state.cleaned_data.shape}")
+            print_to_log(f"🎯 DEBUG MODE: selected_features count: {len(state.selected_features)}")
+            print_to_log(f"🎯 DEBUG MODE: target_column: {state.target_column}")
             
             # CRITICAL: Route to model building agent and let it handle ALL outputs
             # Step 3: SKIP Model Building - Return to orchestrator for normal LangGraph flow
