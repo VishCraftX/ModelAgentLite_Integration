@@ -539,6 +539,19 @@ class PipelineState(BaseModel):
         
         return f"Predictions dataset: {shape[0]} rows × {shape[1]} columns\nColumns: {', '.join(columns)}"
 
+    def __getitem__(self, key):
+        """Enable dictionary-style access for PipelineState."""
+        if key == 'response':
+            return self.last_response
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        """Enable dictionary-style access for PipelineState."""
+        if key == 'response':
+            self.last_response = value
+        else:
+            setattr(self, key, value)
+
 
 class StateManager:
     """
