@@ -426,8 +426,8 @@ Reply with the target column name (e.g., 'f_segment')"""
             state.user_query = original_query
             print_to_log(f"🔧 [Automated Pipeline] Restored original query: '{original_query}'")
             
-            # Remove routing_decision - not needed since orchestrator handles routing
-            # state.routing_decision = "model_building"  # This field doesn't exist in PipelineState
+            # Set routing decision to model_building so orchestrator routes correctly
+            state.routing_decision = "model_building"
             
             # Log final state for model building
             print_to_log(f"📊 [Automated Pipeline] Final state for model building:")
